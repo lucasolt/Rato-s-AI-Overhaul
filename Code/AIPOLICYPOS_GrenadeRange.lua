@@ -69,14 +69,28 @@ function AIPolicyGrenadeRange:EvalDest(context, dest, grid_voxel)
             return 0
         end
     end
+    ---- PERF (C7): resolucao da granada e escala dos ranges saem do laco de
+    ---- inimigos -- eram invariantes recalculados por (destino, inimigo).
+    local base_range, cost_check = self:GetGrenadeMaxRangeAndAPcost(context)
+    if not base_range then
+        return 0
+    end
+
+    if self.SaveAP and cost_check and cost_check >= 0 then
+        local ap = context.dest_ap[dest]
+        if ap < cost_check then
+            return 0
+        end
+    end
+
+    local range_min = self.RangeMin and MulDivRound(self.RangeMin, base_range, 100)
+    local range_max = self.RangeMax and MulDivRound(self.RangeMax, base_range, 100)
+
     local enemy_grid_voxel = context.enemy_grid_voxel
-    local range_type = "Weapon" -- "Absolute" --self.RangeBase
-    local range_min = self.RangeMin
-    local range_max = self.RangeMax
+    local x1, y1, z1 = point_unpack(grid_voxel)
     local weight = 0
     for _, enemy in ipairs(context.enemies) do
-        if self:RangeCheckGrenade(context, grid_voxel, enemy, enemy_grid_voxel[enemy], range_type,
-                                  range_min, range_max, dest) then
+        if RATOAI_GrenadeRangeCheck(x1, y1, z1, enemy_grid_voxel[enemy], range_min, range_max) then
             if enemy:IsIncapacitated() then
                 weight = self.DownedWeightModifier
             else
@@ -87,26 +101,7 @@ function AIPolicyGrenadeRange:EvalDest(context, dest, grid_voxel)
     return weight
 end
 
-function AIPolicyGrenadeRange:RangeCheckGrenade(context, ppt1, target, ppt2, range_type, range_min,
-                                                range_max, dest)
-
-    local base_range, cost_check = self:GetGrenadeMaxRangeAndAPcost(context)
-
-    if not base_range then
-        return false
-    end
-
-    if self.SaveAP and cost_check and cost_check >= 0 then
-        local ap = context.dest_ap[dest]
-        if ap < cost_check then
-            return false
-        end
-    end
-
-    range_min = range_min and MulDivRound(range_min, base_range, 100)
-    range_max = range_max and MulDivRound(range_max, base_range, 100)
-
-    local x1, y1, z1 = point_unpack(ppt1)
+function RATOAI_GrenadeRangeCheck(x1, y1, z1, ppt2, range_min, range_max)
     local x2, y2, z2 = point_unpack(ppt2)
     if (range_min or 0) > 0 and IsCloser(x1, y1, z1, x2, y2, z2, range_min) then
         return false
@@ -117,29 +112,53 @@ function AIPolicyGrenadeRange:RangeCheckGrenade(context, ppt1, target, ppt2, ran
     return true
 end
 
-function AIPolicyGrenadeRange:GetGrenadeMaxRangeAndAPcost(context)
-
-    local function set_to_table(sett)
-        local ttable = {}
-        for k, b in pairs(sett) do
-            if b then
-                table.insert_unique(ttable, k)
-            end
+---- PERF (C7): estas duas closures eram RECRIADAS a cada chamada de
+---- GetGrenadeMaxRangeAndAPcost, que rodava (destinos x inimigos) vezes.
+local function set_to_table(sett)
+    local ttable = {}
+    for k, b in pairs(sett) do
+        if b then
+            table.insert_unique(ttable, k)
         end
-        if not next(ttable) then
-            return false
-        end
-        return ttable
     end
-
-    local function any_value_in_table(table1, table2)
-        for i, v in ipairs(table1) do
-            if table.find(table2, v) then
-                return true
-            end
-        end
+    if not next(ttable) then
         return false
     end
+    return ttable
+end
+
+local function any_value_in_table(table1, table2)
+    for i, v in ipairs(table1) do
+        if table.find(table2, v) then
+            return true
+        end
+    end
+    return false
+end
+
+---- PERF (C7): o resultado e invariante durante todo o turno da unidade, mas era
+---- recalculado por (destino, inimigo) -- alocando 4 tabelas e percorrendo
+---- archetype.SignatureActions + 4 CombatActions a cada vez.
+---- O cache e chaveado por `self` (nao global) porque archetypes diferentes
+---- configuram AllowedAoeTypes / AllowedTriggerTypes diferentes na mesma politica.
+function AIPolicyGrenadeRange:GetGrenadeMaxRangeAndAPcost(context)
+    local cache = context.__grenade_range_cache
+    if not cache then
+        cache = {}
+        context.__grenade_range_cache = cache
+    end
+
+    local hit = cache[self]
+    if hit then
+        return hit.range, hit.cost
+    end
+
+    local range, cost = self:CalcGrenadeMaxRangeAndAPcost(context)
+    cache[self] = {range = range, cost = cost}
+    return range, cost
+end
+
+function AIPolicyGrenadeRange:CalcGrenadeMaxRangeAndAPcost(context)
 
     local archetype = context and context.archetype
     for i, sig in ipairs(archetype.SignatureActions) do

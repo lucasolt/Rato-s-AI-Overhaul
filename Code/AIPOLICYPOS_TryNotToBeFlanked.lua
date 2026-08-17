@@ -11,6 +11,21 @@ DefineClass.AIPolicyTryNotToBeFlanked = {
 function AIPolicyTryNotToBeFlanked:EvalDest(context, dest, grid_voxel)
     local unit = context.unit
 
+    ---- PERF (C6): RATOAI_IsSurrounded so depende da posicao XY -- nao le stance
+    ---- em lugar nenhum. Mas `dest` empacota (x, y, z, stance), entao os 3 stances
+    ---- do mesmo voxel eram 3 destinos distintos pagando o calculo completo cada um.
+    ---- O cache vive no context, que e recriado por turno -- sem risco de dado velho.
+    local cache = context.__surrounded_cache
+    if not cache then
+        cache = {}
+        context.__surrounded_cache = cache
+    end
+
+    local cached = cache[grid_voxel]
+    if cached then
+        return cached
+    end
+
     -- local is_surrounded = unit:IsSurrounded()
     local x, y, z = stance_pos_unpack(dest)
     local pos_table = {}
@@ -18,7 +33,9 @@ function AIPolicyTryNotToBeFlanked:EvalDest(context, dest, grid_voxel)
     pos_table[unit] = new_pos
     local new_surrounded = unit:RATOAI_IsSurrounded(pos_table)
 
-    return not new_surrounded and 100 or 0
+    local score = not new_surrounded and 100 or 0
+    cache[grid_voxel] = score
+    return score
 end
 
 function Unit:RATOAI_IsSurrounded(unitReplace)
@@ -76,6 +93,27 @@ function Unit:RATOAI_CanSurround(other, check_pos, custom_other_pos)
         return false
     end
 
+    ---- PERF (C5): o teste de alcance de arma (so distancia) foi movido para
+    ---- ANTES do CheckLOS (raycast). Os dois sao um AND puro, entao reordenar
+    ---- nao muda o resultado -- mas evita pagar um raycast por (destino, unidade)
+    ---- para unidades que estao longe demais para importar.
+    -- weapon range
+    local adjacent = self:IsAdjacentTo(other, check_pos)
+    local in_range = false
+    local w1, w2, weapons = self:GetActiveWeapons()
+    for _, weapon in ipairs(weapons) do
+        if IsKindOf(weapon, "Firearm") or (IsKindOf(weapon, "MeleeWeapon") and weapon.CanThrow) then
+            -- heavy weapons are Firearms and go here too
+            in_range = in_range or other:GetDist(pos) <= weapon.WeaponRange * const.SlabSizeX
+        elseif IsKindOf(weapon, "MeleeWeapon") then
+            in_range = in_range or adjacent
+        end
+    end
+
+    if not in_range then
+        return false
+    end
+
     -- visibility
     if check_pos then
         -- checking from another position, use CheckLOS
@@ -95,18 +133,5 @@ function Unit:RATOAI_CanSurround(other, check_pos, custom_other_pos)
         end
     end
 
-    -- weapon range
-    local adjacent = self:IsAdjacentTo(other, check_pos)
-    local in_range = false
-    local w1, w2, weapons = self:GetActiveWeapons()
-    for _, weapon in ipairs(weapons) do
-        if IsKindOf(weapon, "Firearm") or (IsKindOf(weapon, "MeleeWeapon") and weapon.CanThrow) then
-            -- heavy weapons are Firearms and go here too
-            in_range = in_range or other:GetDist(pos) <= weapon.WeaponRange * const.SlabSizeX
-        elseif IsKindOf(weapon, "MeleeWeapon") then
-            in_range = in_range or adjacent
-        end
-    end
-
-    return in_range
+    return true
 end

@@ -1,3 +1,10 @@
+---- PERF (C9): flag unica para todo o mod. Quando falsa, os caminhos de debug
+---- nao alocam nada. Mesma condicao que AIPOLICYPOS_CustomSeekCover ja usava.
+---- As tabelas de debug do context continuam sendo criadas (vazias) em
+---- AICreateContext, porque DEBUG.lua as indexa sem checar existencia --
+---- o que custava caro era o PREENCHIMENTO delas, nao a criacao.
+RATOAI_Debug = Platform.developer and Platform.cheats and true or false
+
 function Update_AIPrecalcDamageScore(unit)
     local context = unit.ai_context or {}
     if not context.damage_score_precalced then

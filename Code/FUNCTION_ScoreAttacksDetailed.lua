@@ -1,8 +1,26 @@
+---- PERF (F2.3 parcial): ResolveValue e uma constante de preset, mas era resolvida
+---- dentro de lacos quentes. Resolvida uma vez e cacheada.
+---- Nao da para resolver no escopo do arquivo: os Presets ainda nao existem no
+---- momento em que o mod carrega.
+local max_cover_cth
+function RATOAI_GetMaxCoverCTH()
+    if not max_cover_cth then
+        max_cover_cth =
+            Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue("Cover")
+    end
+    return max_cover_cth
+end
+
+function OnMsg.ModsReloaded()
+    max_cover_cth = nil
+end
+
 function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k, ap, context,
                                      action, weapon, targets_attack_data, target_covers, target_los,
                                      attacker_pos, recoil_cth)
     local unit = context.unit
-    local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
+    ---- PERF (C2): `hit_modifiers` ficou sem uso aqui depois que o CalcValue
+    ---- duplicado de cover saiu. Restam apenas as referencias comentadas abaixo.
     --------------------------
 
     -- 	local MinGroundDifference = hit_modifiers.GroundDifference:ResolveValue("RangeThreshold") *
@@ -27,21 +45,46 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     args.step_pos = context.attacker_pos
     args.prediction = true
 
-    -- context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
-    context.aims_at[upos] = context.aims_at[upos] or {}
-    context.aims_at[upos][target] = aims
-    context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
-    context.cth_attacks_at[upos][target] = context.cth_attacks_at[upos][target] or {}
+    ---- PERF (C9): estas tabelas so sao lidas por IModeAIDebug:GetVoxelRolloverText.
+    ---- Eram criadas por (destino, alvo) -- na casa dos milhares por turno --
+    ---- e retidas ate o turno acabar.
+    local dbg = RATOAI_Debug
+    if dbg then
+        context.aims_at[upos] = context.aims_at[upos] or {}
+        context.aims_at[upos][target] = aims
+        context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
+        context.cth_attacks_at[upos][target] = context.cth_attacks_at[upos][target] or {}
+    end
 
+    ---- PERF (C1): memoizacao do CTH por nivel de mira.
+    ---- Dentro desta funcao `target`, `action` e `args.step_pos` sao fixos: a UNICA
+    ---- entrada que muda entre iteracoes e `args.aim`. Mas CalcChanceToHit reavalia
+    ---- os ~33 presets de ChanceToHitModifier toda vez, e so 4 deles dependem de
+    ---- aim (Aim, ScopePenal, HipshotPenalty e RangeAttackTargetStanceCover quando
+    ---- a arma tem IgnoreCoverCtHWhenFullyAimed).
+    ---- Como todo o resto do input e identico, o resultado memoizado e igual por
+    ---- construcao -- nao e aproximacao.
+    ---- Ganho: AICalcAttacksAndAim costuma devolver todos os `aims` iguais (ramo
+    ---- `not has_stance_ap or to_reach_desired_aim_level <= 0`), entao o caso comum
+    ---- passa de 3-5 CTHs completos para 1.
+    local cth_by_aim = {}
     for i = 1, attacks do
-        args.aim = aims[i]
-        local attack_mod, attack_base = unit:CalcChanceToHit(target, action, args, "chance_only")
-        table.insert(context.cth_attacks_at[upos][target], attack_mod)
+        local aim_i = aims[i]
+        local attack_mod = cth_by_aim[aim_i]
+        if not attack_mod then
+            args.aim = aim_i
+            attack_mod = unit:CalcChanceToHit(target, action, args, "chance_only")
+            cth_by_aim[aim_i] = attack_mod
+        end
+
+        if dbg then
+            table.insert(context.cth_attacks_at[upos][target], attack_mod)
+        end
         mod = mod + attack_mod
 
-        if i > 1 and aims[i] < 3 then
+        if i > 1 and aim_i < 3 then
             -- local recoil_penalty = const.Combat.Recoil.StacksMultiplier * recoil_cth * (i - 1)
-            local recoil_penalty = (aims[i] == 2 and recoil_cth * 0.33 or aims[i] == 1 and
+            local recoil_penalty = (aim_i == 2 and recoil_cth * 0.33 or aim_i == 1 and
                                        recoil_cth * 0.66 or recoil_cth) * (i - 1)
 
             mod = mod + recoil_penalty * const.Combat.Recoil.StacksMultiplier
@@ -49,11 +92,16 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     end
 
     ---------------- For Custom Flanking Policy
-    local use_cover, cover_value, _, _, type_cover =
-        hit_modifiers.RangeAttackTargetStanceCover:CalcValue(unit, target, nil, action, weapon, nil,
-                                                             nil, nil, nil, attacker_pos)
-    if use_cover and type_cover == "Cover" then
-        target_covers[target] = cover_value
+    ---- PERF (C2): o ForEachPreset dentro do CalcChanceToHit acima ja avaliou
+    ---- RangeAttackTargetStanceCover com estes mesmos argumentos -- refaze-lo aqui
+    ---- era trabalho duplicado, e este preset faz raycast de cover.
+    ---- O unico consumidor de target_covers e AIPolicyCustomFlanking:CompareCovers,
+    ---- que usa a RAZAO cover_cth/cover_penalty. O valor de grid serve ao mesmo fim.
+    local cover = GetCoverFrom(tpos, upos)
+    if cover == const.CoverHigh then
+        target_covers[target] = RATOAI_GetMaxCoverCTH()
+    elseif cover == const.CoverLow then
+        target_covers[target] = MulDivRound(RATOAI_GetMaxCoverCTH(), 50, 100)
     end
 
     target_los[target] = targets_attack_data and targets_attack_data[k] and

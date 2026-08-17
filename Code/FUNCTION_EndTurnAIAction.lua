@@ -13,7 +13,8 @@ function OnMsg.CombatEnd()
     for _, unit in ipairs(g_Units) do
         if R_IsAI(unit) and unit.RATOAI_ChangedStance then
             unit.RATOAI_ChangedStance = false
-            if unit.stance ~= "Standing" then
+            if unit.stance ~= "Standing" and not (unit:IsDead() or unit:IsDowned()) then
+                print("RATOAI DEBUG: Resetting stance for unit " .. unit:GetDisplayName())
                 unit:SetActionCommand("ChangeStance", nil, nil, "Standing")
             end
         end
@@ -153,6 +154,7 @@ function RATOAI_TryChangeStance(unit)
             if ap >= crouch_ap then
                 unit:SetActionCommand("ChangeStance", "RATOAI_ChangeStance", crouch_ap, "Crouch")
                 unit.ActionPoints = unit.ActionPoints - crouch_ap
+                unit.RATOAI_ChangedStance = true
                 if angle then
                     -- Sleep(1000)
                     unit:AnimatedRotation(angle)

@@ -13,6 +13,24 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     local archetype = context.archetype
     local behavior = context.behavior
 
+    ---- PERF (C8): Update_AIPrecalcDamageScore e chamado POR DESTINO
+    ---- (AIPolicyCustomFlanking:EvalDest, AIPolicyMGSetupPosScore:EvalDest) e usa
+    ---- `damage_score_precalced` como guard. Mas essa flag so era setada mais
+    ---- abaixo, depois de tres `return` prematuros -- entao unidade queimando, sem
+    ---- arma, em reposicao ou sem alvos validos reexecutava action:GetTargets() +
+    ---- table.ifilter a CADA destino.
+    ---- Flag separada para "ja tentei", que nao pode ser confundida com
+    ---- "tenho dados de dano validos" (o que damage_score_precalced sinaliza para
+    ---- CustomFlanking e para o GetDestArgs de SignaturesCustomScoring).
+    ---- So se aplica quando destinations == nil, que e a forma usada por
+    ---- Update_AIPrecalcDamageScore. Chamadas com destinos explicitos passam direto.
+    if not destinations then
+        if context.damage_score_attempted then
+            return
+        end
+        context.damage_score_attempted = true
+    end
+
     if not weapon or context.reposition or unit:HasStatusEffect("Burning") then
         return
     end
@@ -146,6 +164,10 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     NetUpdateHash("AIPrecalcDamageScore", unit, hashParamTable(destinations),
                   hashParamTable(targets), preferred_target)
 
+    ---- PERF (C4): [alvo] -> { [distancia em slabs] -> recoil }. Vive so nesta
+    ---- chamada, cobrindo todos os destinos do laco abaixo.
+    local recoil_cache = {}
+
     for j, upos in ipairs(destinations) do
         local ux, uy, uz, ustance_idx = stance_pos_unpack(upos)
         local ustance = StancesList[ustance_idx]
@@ -198,22 +220,41 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                 context.dest_target_dist[upos][target] = dist
                 ----
 
-                ------ Recoil CTH Calculation 
-                local recoil_cth = 0
-
-                if IsKindOf(weapon, "Firearm") then
-                    recoil_cth = get_recoil(unit, target, target:GetPos(), context.default_attack,
-                                            weapon, nil,
-                                            weapon:GetAutofireShots(context.default_attack), nil,
-                                            nil, nil, nil, nil, attacker_pos)
-
-                end
-
-                recoil_score[target] = recoil_cth
-                -------------
-
                 if dist <= (max_check_range or dist) and
                     (is_melee or targets_attack_data[k] and not targets_attack_data[k].stuck) then
+
+                    ------ Recoil CTH Calculation
+                    ---- PERF (C3): movido para DENTRO do gate de alcance/LOF.
+                    ---- Antes rodava para todo (destino, alvo), inclusive alvos fora
+                    ---- de alcance ou sem linha de fogo, cujo valor era descartado.
+                    ---- Seguro porque best_target so pode ser um alvo que passou aqui.
+                    ---- PERF (C4): cache por bucket de distancia em slabs. Em
+                    ---- get_recoil a UNICA entrada que varia entre destinos e `dist`;
+                    ---- todo o resto (GetWepRecoil, GetRecoilOther, GetCaliberStrRecoil,
+                    ---- GBO_GetROF, bloco de MG) depende so de arma/atacante/acao.
+                    ---- O `dist` ja entra numa interpolacao linear grosseira, entao
+                    ---- quantizar por slab custa menos de um ponto de CTH.
+                    local recoil_cth = 0
+
+                    if IsKindOf(weapon, "Firearm") then
+                        local by_dist = recoil_cache[target]
+                        if not by_dist then
+                            by_dist = {}
+                            recoil_cache[target] = by_dist
+                        end
+                        local slab = dist / const.SlabSizeX
+                        recoil_cth = by_dist[slab]
+                        if not recoil_cth then
+                            recoil_cth = get_recoil(unit, target, target:GetPos(),
+                                                    context.default_attack, weapon, nil,
+                                                    weapon:GetAutofireShots(context.default_attack),
+                                                    nil, nil, nil, nil, nil, attacker_pos)
+                            by_dist[slab] = recoil_cth
+                        end
+                    end
+
+                    recoil_score[target] = recoil_cth
+                    -------------
 
                     ------------ RATO AI precalc
                     local mod = 0

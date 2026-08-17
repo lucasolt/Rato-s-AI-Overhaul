@@ -173,13 +173,19 @@ function AICreateContext(unit, context)
         context.enemy_visible_by_team[enemy] = HasVisibilityTo(unit.team, enemy)
 
         -----
+        ---- PERF (C2, consistencia): este valor e comparado com
+        ---- context.dest_target_cover_score em AIPolicyCustomFlanking:CompareCovers.
+        ---- Como C2 passou o lado do destino a usar o cover de grid, este lado
+        ---- precisa usar a mesma base -- senao a comparacao mistura cover continuo
+        ---- (aqui) com discreto (la) e enviesa a decisao de flanquear.
         if context.enemy_visible[enemy] then
-            local use_cover, cover_value, _, _, type_cover =
-                Presets["ChanceToHitModifier"]["Default"].RangeAttackTargetStanceCover:CalcValue(
-                    unit, enemy, nil, default_attack, weapon, nil, nil, nil, nil, unit:GetPos())
-
-            if use_cover and type_cover == "Cover" then
-                context.currentpos_target_cover_score[enemy] = cover_value
+            local cover = GetCoverFrom(context.enemy_pack_pos_stance[enemy],
+                                       context.unit_stance_pos)
+            if cover == const.CoverHigh then
+                context.currentpos_target_cover_score[enemy] = RATOAI_GetMaxCoverCTH()
+            elseif cover == const.CoverLow then
+                context.currentpos_target_cover_score[enemy] =
+                    MulDivRound(RATOAI_GetMaxCoverCTH(), 50, 100)
             else
                 context.currentpos_target_cover_score[enemy] = 0
             end

@@ -1,3 +1,7 @@
+---- PERF (C11.1): tabela constante, era realocada a cada GetIdealAimLevels
+---- (ou seja, uma vez por par destino/alvo no laco de AIPrecalcDamageScore)
+local burst_attacks = {"BurstFire", "MGBurstFire", "BuckshotBurst"}
+
 function ShouldMaxAim(context, target_dist) ----- used in AICalcAttacksAndAim
 
     if not target_dist or not IsKindOf(context.weapon, "Firearm") then
@@ -27,8 +31,7 @@ function GetIdealAimLevels(context, target_dist, max_aim, min_aim) ----- used in
     end
 
     local atk = context and context.default_attack.id or ""
-    local burst = {"BurstFire", "MGBurstFire", "BuckshotBurst"}
-    local effective_range_mul = table.find(burst, atk) and 55 or 45
+    local effective_range_mul = table.find(burst_attacks, atk) and 55 or 45
     local effective_range = MulDivRound(context.EffectiveRange, effective_range_mul, 100)
     local point_blank = const.Weapons.PointBlankRange
 

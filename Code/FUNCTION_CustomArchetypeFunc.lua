@@ -1,12 +1,6 @@
-function GetArgsForArchetypeAndWeaponSelection(unit)
-
-    if not unit then
-        return false
-    end
-
-    local role = unit.custom_role or unit.role or ''
-
-    local map = {
+---- PERF (C11.3): tabela constante, era reconstruida inteira (5 sub-tabelas,
+---- ~20 arrays de string) a cada chamada de GetArgsForArchetypeAndWeaponSelection
+local ROLE_ARGS = {
         Marksman = {
             main_w_classes = {"SniperRifle", "AssaultRifle"},
             close_w_classes = {"SubmachineGun", "Revolver", "Pistol"},
@@ -43,9 +37,17 @@ function GetArgsForArchetypeAndWeaponSelection(unit)
             dist = 12
         }
 
-    }
+}
 
-    local args = map[role] or false
+function GetArgsForArchetypeAndWeaponSelection(unit)
+
+    if not unit then
+        return false
+    end
+
+    local role = unit.custom_role or unit.role or ''
+
+    local args = ROLE_ARGS[role] or false
 
     if not args then
         ic()

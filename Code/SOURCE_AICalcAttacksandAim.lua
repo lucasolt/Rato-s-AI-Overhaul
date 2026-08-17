@@ -95,7 +95,8 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     -------
 
     local desired_aim_level = GetIdealAimLevels(context, target_dist, max_aim, min_aim)
-    local aims = {}
+    ---- PERF (C11.2): removido `local aims = {}` morto aqui -- era redeclarado
+    ---- nos dois caminhos de retorno abaixo, entao esta tabela era pura alocacao
 
     local to_reach_desired_aim_level = desired_aim_level - min_aim
 

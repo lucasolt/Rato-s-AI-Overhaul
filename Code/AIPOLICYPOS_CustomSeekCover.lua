@@ -76,8 +76,14 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     local extra_mul = self.ScalePerDistance and extra_score_arg_mul or 100
     ----
 
-    local debugforpos = {}
-    local debugforpos_simple = {}
+    ---- PERF (C9): estas tabelas eram alocadas em TODA avaliacao de destino,
+    ---- mesmo com debug desligado. Esta e uma politica OptLoc (20 usos em
+    ---- items.lua), entao rodava sobre todos os destinos do raio de busca.
+    ---- `debugforpos_simple` nao tinha sequer um uso ativo -- removida.
+    local debugforpos
+    if debug then
+        debugforpos = {}
+    end
 
     for _, enemy in ipairs(tbl) do
         local visible = true
@@ -134,11 +140,6 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         context.unit.ai_context.dest_custom_seek_cover_debug[dest] = dbg_txt
     end
 
-    -- local dbg_txt_simple = ""
-    -- for _, v in ipairs(debugforpos_simple) do
-    --     dbg_txt = dbg_txt .. v[1] .. " = " .. v[2] .. " \n"
-    -- end
-    -- context.unit.ai_context.dest_custom_seek_cover_simple_debug[dest] = dbg_txt_simple
     -----------------------
 
     return MulDivRound(score / Max(1, table_num), extra_mul, 100)

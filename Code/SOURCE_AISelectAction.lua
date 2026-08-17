@@ -12,11 +12,18 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
         local weight_mod, disable, priority = AIGetBias(action.BiasId, context.unit)
 
         --------------------------------------------
+        ---- PERF (C12): CustomScoring rodava para TODA acao, inclusive as que
+        ---- seriam descartadas pelo bias na linha seguinte. Cada uma passa por
+        ---- GetDestArgs -> Update_AIPrecalcDamageScore e varias fazem CalcValue
+        ---- de presets. Agora so roda para acoes que sobreviveram ao gate.
+        disable = disable or context.disable_actions[action.BiasId or false]
 
-        local c_action_weight, custom_disable, action_priority = action:CustomScoring(context)
-
-        -- disable = disable or context.disable_actions[action.BiasId or false] 
-        disable = disable or context.disable_actions[action.BiasId or false] or custom_disable
+        local c_action_weight, action_priority
+        if not disable then
+            local custom_disable
+            c_action_weight, custom_disable, action_priority = action:CustomScoring(context)
+            disable = custom_disable
+        end
         --------------------------------------------
 
         if not disable then
