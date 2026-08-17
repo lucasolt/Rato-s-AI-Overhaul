@@ -15,6 +15,15 @@ function OnMsg.ModsReloaded()
     max_cover_cth = nil
 end
 
+---- BUGFIX (B7): const.Combat.Recoil.StacksMultiplier e um float (0.35). Multiplicacao
+---- de ponto flutuante neste caminho entra no NetUpdateHash de AIPrecalcDamageScore e
+---- e fonte classica de desync. Versao inteira, em percentual.
+---- MANTER EM SINCRONIA com GBO3 Code/__RecoilParams.lua:9
+local RECOIL_STACKS_PCT = 35
+
+---- fracao do recoil que se aplica por nivel de mira (era 0.33 / 0.66 / 1.0)
+local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
+
 function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k, ap, context,
                                      action, weapon, targets_attack_data, target_covers, target_los,
                                      attacker_pos, recoil_cth)
@@ -67,6 +76,13 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- Ganho: AICalcAttacksAndAim costuma devolver todos os `aims` iguais (ramo
     ---- `not has_stance_ap or to_reach_desired_aim_level <= 0`), entao o caso comum
     ---- passa de 3-5 CTHs completos para 1.
+    ---- BUGFIX (B1): a CTH do primeiro disparo precisa ser devolvida para
+    ---- AIPrecalcDamageScore gravar em context.dest_cth. Antes, dest_cth acabava
+    ---- recebendo `unit[weapon.base_skill]` (a Marksmanship crua), porque a linha
+    ---- `local base_mod = mod` do source -- que sombreava a variavel externa com a
+    ---- CTH calculada -- desapareceu quando este bloco substituiu o do vanilla.
+    local first_cth
+
     local cth_by_aim = {}
     for i = 1, attacks do
         local aim_i = aims[i]
@@ -77,17 +93,24 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             cth_by_aim[aim_i] = attack_mod
         end
 
+        if i == 1 then
+            first_cth = attack_mod
+        end
+
         if dbg then
             table.insert(context.cth_attacks_at[upos][target], attack_mod)
         end
         mod = mod + attack_mod
 
         if i > 1 and aim_i < 3 then
-            -- local recoil_penalty = const.Combat.Recoil.StacksMultiplier * recoil_cth * (i - 1)
-            local recoil_penalty = (aim_i == 2 and recoil_cth * 0.33 or aim_i == 1 and
-                                       recoil_cth * 0.66 or recoil_cth) * (i - 1)
+            ---- BUGFIX (B7): era
+            ----   (aim_i == 2 and recoil_cth * 0.33 or aim_i == 1 and recoil_cth * 0.66
+            ----    or recoil_cth) * (i - 1) * const.Combat.Recoil.StacksMultiplier
+            ---- Mesma conta, agora inteira.
+            local aim_pct = recoil_pct_by_aim[aim_i] or 100
+            local recoil_penalty = MulDivRound(recoil_cth or 0, aim_pct * (i - 1), 100)
 
-            mod = mod + recoil_penalty * const.Combat.Recoil.StacksMultiplier
+            mod = mod + MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
         end
     end
 
@@ -107,7 +130,7 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     target_los[target] = targets_attack_data and targets_attack_data[k] and
                              targets_attack_data[k].los
 
-    return mod, target_covers, target_los
+    return mod, target_covers, target_los, first_cth
 end
 
 function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz, k, dist, ap,
@@ -183,6 +206,11 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
     --------------------
 
     mod = Max(0, mod)
+
+    ---- BUGFIX (B1): mesma correcao do caminho "Detailed" -- devolver a CTH do
+    ---- primeiro disparo para que context.dest_cth deixe de receber a Marksmanship.
+    local first_cth
+
     if mod > const.AIShootAboveCTH then
         -- calc base score based on cth/attacks/aiming
         local base_mod = mod
@@ -203,10 +231,15 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
                                                                  nil, context.attacker_pos)
             end
 
-            mod = mod + base_mod + (use and bonus or 0) + (scope_use and scope_penal or 0)
+            local shot_cth = base_mod + (use and bonus or 0) + (scope_use and scope_penal or 0)
+            if i == 1 then
+                first_cth = shot_cth
+            end
+
+            mod = mod + shot_cth
         end
     end
 
     -- ic(mod)
-    return mod, target_covers, target_los
+    return mod, target_covers, target_los, first_cth
 end

@@ -1273,6 +1273,10 @@ return {
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 10,
 			}),
+			PlaceObj('AIPolicyGrenadeRange', {
+				'RangeMin', 50,
+				'RangeMax', 100,
+			}),
 		},
 		OptLocSearchRadius = 100,
 		PrefStance = "Crouch",

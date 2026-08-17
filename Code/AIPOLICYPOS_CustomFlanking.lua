@@ -60,16 +60,24 @@ local function CompareCovers(enemy, current_pos_cover_data, new_pos_cover_data)
 
     local current_cover_cth = current_pos_cover_data[enemy].cover_cth or 0
     local new_cover_cth = new_pos_cover_data[enemy].cover_cth or 0
-    local new_ratio = new_cover_cth * 1.00 / cover_penalty
-    local current_ratio = current_cover_cth * 1.00 / cover_penalty
 
-    local cover_difference = current_ratio - new_ratio
-    return cover_difference
+    ---- BUGFIX (B7): era
+    ----   new_ratio     = new_cover_cth     * 1.00 / cover_penalty
+    ----   current_ratio = current_cover_cth * 1.00 / cover_penalty
+    ----   return current_ratio - new_ratio                 -- float em [-1, 1]
+    ---- Como (a/c - b/c) == (a-b)/c, o resultado e identico, mas agora inteiro e em
+    ---- PERCENTUAL (100 = a diferenca de uma cobertura cheia). Quem chama passou a
+    ---- usar MulDivRound. Aritmetica de ponto flutuante neste caminho entra no
+    ---- NetUpdateHash de AIScoreReachableVoxels.
+    if not cover_penalty or cover_penalty == 0 then
+        return 0
+    end
+    return MulDivRound(current_cover_cth - new_cover_cth, 100, cover_penalty)
 end
 
 ---- Args
-local effective_range_mul = 1.00
-local distance_impact = 0.25
+local effective_range_mul = 100 ---- BUGFIX (B7): era 1.00 (float). Agora percentual.
+local distance_impact = 25 ---- BUGFIX (B7): era 0.25 (float). Agora percentual.
 local extra_target_weight = 100
 local unit_weight = 100
 ----
@@ -80,10 +88,11 @@ function AIPolicyCustomFlanking:GetEnemyWeight(unit, enemy, dist, effective_rang
         weight = weight + extra_target_weight
     end
 
-    if self.ScalePerDistance then
-        weight = MulDivRound(weight, Max(0,
-                                         unit_weight - ((dist * 1.00) / (effective_range * 1.00)) *
-                                             (100 * distance_impact)), 100)
+    if self.ScalePerDistance and (effective_range or 0) > 0 then
+        ---- BUGFIX (B7): era
+        ----   unit_weight - ((dist * 1.00) / (effective_range * 1.00)) * (100 * distance_impact)
+        local falloff = MulDivRound(dist, distance_impact, effective_range)
+        weight = MulDivRound(weight, Max(0, unit_weight - falloff), 100)
     end
     return weight
 end
@@ -116,7 +125,8 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
     local enemies = {}
     local enemies_weight = {}
 
-    local effective_range = context.EffectiveRange * const.SlabSizeX * effective_range_mul
+    local effective_range = MulDivRound(context.EffectiveRange * const.SlabSizeX,
+                                        effective_range_mul, 100)
 
     if self.OnlyTarget then
         if target then
@@ -182,7 +192,9 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
         }
 
         local dif = CompareCovers(enemy, current_pos_cover_data, new_pos_cover_data)
-        delta_weight = delta_weight * dif
+        ---- BUGFIX (B7): CompareCovers agora devolve percentual inteiro (era float
+        ---- em [-1, 1]), entao a escala virou MulDivRound. Resultado equivalente.
+        delta_weight = MulDivRound(delta_weight, dif, 100)
 
         if new_pos_cover_data[enemy].in_cover and not current_pos_cover_data[enemy].in_cover then
             delta = delta + delta_weight

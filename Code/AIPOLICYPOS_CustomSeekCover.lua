@@ -44,7 +44,7 @@ DefineClass.AIPolicyCustomSeekCover = {
 }
 
 ----- Args
-local distance_impact = 1.00
+local distance_impact = 100 ---- BUGFIX (B7): era 1.00 (float). Agora percentual.
 local max_range = 30
 local min_dist = 5 * const.SlabSizeX
 local pb_range = const.Weapons.PointBlankRange * const.SlabSizeX
@@ -162,8 +162,9 @@ function AIPolicyCustomSeekCover:SimpleGetCoverScore(context, cover_score, dest,
         if enemy_pos then
             dist = Max(min_dist, new_pos:Dist(enemy_pos))
             local range = max_range * const.Scale.AP
-            local ratio = 100 - ((Min(range, dist) * 1.00) / (range * 1.00)) *
-                              (100 * distance_impact)
+            ---- BUGFIX (B7): era
+            ----   100 - ((Min(range, dist) * 1.00) / (range * 1.00)) * (100 * distance_impact)
+            local ratio = 100 - MulDivRound(Min(range, dist), distance_impact, range)
 
             cover_score = MulDivRound(cover_score, ratio, 100)
         end
@@ -231,12 +232,13 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     end
 
     if self.ExposedAtCloseRange_Score ~= 0 and score <= 0 and dist then
+        ---- BUGFIX (B7): era `* 0.5` e `* 0.1` (float).
         if dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
             score = self.ExposedAtCloseRange_Score
         elseif dist <= const.Weapons.PointBlankRange * 2 * const.SlabSizeX then
-            score = self.ExposedAtCloseRange_Score * 0.5
+            score = MulDivRound(self.ExposedAtCloseRange_Score, 50, 100)
         elseif dist <= const.Weapons.PointBlankRange * 3 * const.SlabSizeX then
-            score = self.ExposedAtCloseRange_Score * 0.1
+            score = MulDivRound(self.ExposedAtCloseRange_Score, 10, 100)
         end
     end
 

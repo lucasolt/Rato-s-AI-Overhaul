@@ -2,7 +2,7 @@
 local angle_ap_threshold = 2 -- AP
 local closeness_threshold = 6 -- slab
 local distance_to_check_lack_of_cover = 30 -- slab
-local effective_range_mul = 1.5
+local effective_range_mul = 150 ---- BUGFIX (B7): era 1.5 (float). Agora percentual.
 
 ----- Weights
 local weight_close_enemy = -60
@@ -93,7 +93,8 @@ function RATOAI_GetEnemyCoverScore(unit, enemy, context, score, att_pos, target_
         att_pos = IsValidZ(att_pos) and att_pos or att_pos:SetTerrainZ()
         local dist = dist or att_pos:Dist(target_pos)
 
-        local effective_range = context.EffectiveRange * const.SlabSizeX * effective_range_mul
+        local effective_range = MulDivRound(context.EffectiveRange * const.SlabSizeX,
+                                            effective_range_mul, 100)
         if dist <= effective_range then
 
             local angle_ap = angle_override or

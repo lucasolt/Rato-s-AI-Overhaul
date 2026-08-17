@@ -259,20 +259,38 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                     ------------ RATO AI precalc
                     local mod = 0
 
+                    ---- BUGFIX (B1): `shot_cth` e a chance de acerto real do PRIMEIRO
+                    ---- disparo neste par (destino, alvo). Antes, o que era gravado em
+                    ---- context.dest_cth era a variavel externa `base_mod`
+                    ---- (= unit[weapon.base_skill], a Marksmanship crua): a declaracao
+                    ---- interna do source que a sombreava com a CTH calculada
+                    ---- (`local base_mod = mod`) desapareceu quando este bloco
+                    ---- substituiu o do vanilla. Como dest_cth e o DENOMINADOR de todas
+                    ---- as CustomScoring, distancia e cobertura nao chegavam a
+                    ---- influenciar nenhuma escolha de acao especial.
+                    ----
+                    ---- Usar a CTH de UM disparo, e nao a soma dos N ataques: as
+                    ---- penalidades comparadas contra ela (recoil, hipfire, tiro
+                    ---- localizado) sao todas por disparo. Somar N diluiria a razao
+                    ---- pelo numero de ataques que cabem no AP.
+                    local shot_cth
+
                     if CurrentModOptions.UseSimpleAttacksScoring then
                         ------ Old logic
-                        mod, target_covers, target_los =
+                        mod, target_covers, target_los, shot_cth =
                             RATOAI_ScoreAttacks_Simple(mod, target, dist, upos, tpos, uz, k, dist,
                                                        ap, context, action, weapon,
                                                        targets_attack_data, target_covers,
                                                        target_los, attacker_pos)
                     else
-                        mod, target_covers, target_los =
+                        mod, target_covers, target_los, shot_cth =
                             RATOAI_ScoreAttacksDetailed(mod, target, dist, upos, tpos, uz, k, ap,
                                                         context, action, weapon,
                                                         targets_attack_data, target_covers,
                                                         target_los, attacker_pos, recoil_cth)
                     end
+
+                    shot_cth = shot_cth or 0
 
                     if mod > const.AIShootAboveCTH then
                         -------------
@@ -334,7 +352,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                         if mod > 0 and target == preferred_target then
                             best_target = target
                             best_score = mod
-                            best_cth = base_mod
+                            best_cth = shot_cth ---- BUGFIX (B1): era `base_mod` (Marksmanship)
                             potential_targets = {}
                             break
                         end
@@ -343,7 +361,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                         ------------
 
                         best_score = Max(best_score, mod)
-                        target_cth[target] = base_mod
+                        target_cth[target] = shot_cth ---- BUGFIX (B1): era `base_mod`
                         target_score[target] = mod
 
                         local threshold = MulDivRound(best_score or 0, const.AIDecisionThreshold,

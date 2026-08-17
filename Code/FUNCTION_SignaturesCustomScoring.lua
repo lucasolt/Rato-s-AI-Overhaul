@@ -1,5 +1,22 @@
 local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
 
+---- BUGFIX (B6): as cinco copias de
+----     ratio     = MulDivRound(cth + penalty, 100, cth)
+----     score_mod = 100 - (100 - ratio)        -- isto e apenas `ratio`
+----     weight    = MulDivRound(weight, score_mod, 100)
+---- eram algebra identidade escrita de um jeito que escondia a formula, e nenhuma
+---- protegia contra cth nil ou zero (divisao por zero).
+----
+---- O que a conta responde: "que fracao da minha chance de acerto sobra depois desta
+---- penalidade?". 100 = a penalidade nao custa nada; 0 = consome a CTH inteira;
+---- negativo = consome mais do que eu tenho (a acao deve ser descartada).
+local function PenaltyScale(cth, penalty)
+    if not cth or cth <= 0 then
+        return 100 ---- sem CTH conhecida, nao modula
+    end
+    return MulDivRound(cth + (penalty or 0), 100, cth)
+end
+
 local function GetDestArgs(self, context)
 
     local unit = context.unit
@@ -38,18 +55,12 @@ function AutoFire_CustomScoring(self, context)
 
     local upos, unit, action, dist, target, dest_cth, dest_recoil, attacker_pos = GetDestArgs(self,
                                                                                               context)
-    local ratio, score_mod
-
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
-    elseif dest_cth and dest_recoil then
-        ---- revisar esses calculos, feito durante privacao de sono kkkkk
-        ratio = MulDivRound(dest_cth + dest_recoil, 100, dest_cth) -- dest_cth / (dest_cth + dest_recoil)
-        score_mod = 100 - (100 - ratio)
-        weight = MulDivRound(weight, score_mod, 100)
+    elseif dest_recoil then
+        weight = MulDivRound(weight, PenaltyScale(dest_cth, dest_recoil), 100)
     end
 
-    -- ic(priority, ratio, dest_cth, dest_recoil, score_mod)
     return Max(0, weight), weight < 0 and true or disable, priority
 end
 
@@ -60,7 +71,7 @@ function MobileAttack_CustomScoring(self, context)
     local upos, unit, action, dist, target, dest_cth, dest_recoil, attacker_pos = GetDestArgs(self,
                                                                                               context)
 
-    local ratio, score_mod, use, snap_penal
+    local use, snap_penal
 
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
@@ -72,9 +83,7 @@ function MobileAttack_CustomScoring(self, context)
                                                                      unit:GetActiveWeapons(), nil,
                                                                      nil, 1, false, attacker_pos,
                                                                      target:GetPos())
-            ratio = MulDivRound(dest_cth + snap_penal, 100, dest_cth)
-            score_mod = 100 - (100 - ratio)
-            weight = MulDivRound(weight, score_mod, 100)
+            weight = MulDivRound(weight, PenaltyScale(dest_cth, use and snap_penal or 0), 100)
         end
     end
 
@@ -105,7 +114,6 @@ function SingleShotTargeted_CustomScoring(self, context)
 
     local leg_shot = body_part == "Legs"
 
-    local ratio, score_mod
     if upos and target then
         local use, targeted_penal = hit_modifiers.TargetedShot:CalcValue(unit, target,
                                                                          Presets.TargetBodyPart
@@ -115,9 +123,7 @@ function SingleShotTargeted_CustomScoring(self, context)
                                                                          nil, nil, 3, false,
                                                                          attacker_pos,
                                                                          target:GetPos())
-        ratio = MulDivRound(dest_cth + targeted_penal, 100, dest_cth)
-        score_mod = 100 - (100 - ratio)
-        weight = MulDivRound(weight, score_mod, 100)
+        weight = MulDivRound(weight, PenaltyScale(dest_cth, use and targeted_penal or 0), 100)
     end
 
     if target and leg_shot then
@@ -184,13 +190,7 @@ function Overwatch_CustomScoring(self, context)
     interrupt_cth_mod = interrupt_cth_mod + (cover_penal * -1)
 
     ---------
-    local ratio, score_mod
-    if dest_cth then
-        ratio = MulDivRound(dest_cth + interrupt_cth_mod, 100, dest_cth)
-        score_mod = 100 - (100 - ratio)
-
-        weight = MulDivRound(weight, score_mod, 100)
-    end
+    weight = MulDivRound(weight, PenaltyScale(dest_cth, interrupt_cth_mod), 100)
     ---------
 
     if target and (target:IsUnderTimedTrap() or target:IsUnderBombard()) then
@@ -209,9 +209,9 @@ end
 function Pindown_CustomScoring(self, context)
     local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
     local weight, disable, priority = self.Weight, false, self.Priority
-    if true then
-        return weight, disable, priority
-    end
+    -- if true then
+    --    return weight, disable, priority
+    -- end
 
     local upos, unit, action, dist, target, dest_cth, dest_recoil, attacker_pos = GetDestArgs(self,
                                                                                               context)
@@ -224,7 +224,14 @@ function Pindown_CustomScoring(self, context)
     end
     -------------------------------------------------------
     if self.AttackTargeting ~= "Torso" then
-        weight = SingleShotTargeted_CustomScoring(self, context)
+        ---- BUGFIX (B2): a chamada descartava silenciosamente o 2o retorno
+        ---- (`disable`), entao um alvo que o scoring localizado quisesse vetar
+        ---- continuava valendo peso aqui.
+        local targeted_weight, targeted_disable = SingleShotTargeted_CustomScoring(self, context)
+        if targeted_disable then
+            return 0, true, false
+        end
+        weight = targeted_weight
     end
     -------------------------------------------------------
 
@@ -236,31 +243,26 @@ function Pindown_CustomScoring(self, context)
     local pindown_score = 0
     ---------
     local cover_penal = 0
-    local use, cover_type
+    local use, cover_type, _
     if unit and target then -- TODO: Make a special ratio for the cover. The more cover/cth ratio, the more chances to use overwatch
-        use, cover_penal, cover_type = hit_modifiers.RangeAttackTargetStanceCover:CalcValue(unit,
-                                                                                            target,
-                                                                                            nil,
-                                                                                            context.default_attack,
-                                                                                            unit:GetActiveWeapons(),
-                                                                                            nil,
-                                                                                            nil, 1,
-                                                                                            false,
-                                                                                            attacker_pos,
-                                                                                            target:GetPos())
+        ---- BUGFIX (B2): RangeAttackTargetStanceCover:CalcValue devolve
+        ---- (use, value, name, metaText, type) -- o tipo e o 5o retorno, nao o 3o.
+        ---- Como estava, `cover_type` recebia o `name` (um objeto T()), a comparacao
+        ---- com "Cover" nunca dava verdadeira e o bonus por alvo em cobertura era
+        ---- sempre zero. Ver GBO3 Code/CTH_cover_prone.lua:94.
+        use, cover_penal, _, _, cover_type =
+            hit_modifiers.RangeAttackTargetStanceCover:CalcValue(unit, target, nil,
+                                                                 context.default_attack,
+                                                                 unit:GetActiveWeapons(), nil, nil,
+                                                                 1, false, attacker_pos,
+                                                                 target:GetPos())
     end
 
     if use and (cover_type or "") == "Cover" then
         pindown_score = pindown_score + (cover_penal * -1)
     end
 
-    local ratio, score_mod
-    if dest_cth then --------- revisa essass pora kkkk
-        ratio = MulDivRound(dest_cth + pindown_score, 100, dest_cth)
-        score_mod = 100 - (100 - ratio)
-
-        weight = MulDivRound(weight, score_mod, 100)
-    end
+    weight = MulDivRound(weight, PenaltyScale(dest_cth, pindown_score), 100)
 
     -----------------
     if target and IsKindOf(target, "Unit") then
