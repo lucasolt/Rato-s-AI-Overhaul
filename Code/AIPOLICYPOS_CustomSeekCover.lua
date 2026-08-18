@@ -48,8 +48,8 @@ local distance_impact = 100 ---- BUGFIX (B7): era 1.00 (float). Agora percentual
 local max_range = 30
 local min_dist = 5 * const.SlabSizeX
 local pb_range = const.Weapons.PointBlankRange * const.SlabSizeX
-local close_range_mul = 50
-local medium_range_mul = 15
+local close_range_mul_penalty_mul = 75
+local medium_range_penalty_mul = 40
 
 local debug = Platform.developer and Platform.cheats and true
 
@@ -178,9 +178,10 @@ function AIPolicyCustomSeekCover:SimpleGetCoverScore(context, cover_score, dest,
         if IsCloser(x1, y1, z1, x2, y2, z2, pb_range + 1) then
             cover_score = self.ExposedAtCloseRange_Score
         elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 2 + 1) then
-            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul, 100)
+            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul,
+                                      100)
         elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 3 + 1) then
-            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_mul, 100)
+            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
         end
     end
 
@@ -233,12 +234,12 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
 
     if self.ExposedAtCloseRange_Score ~= 0 and score <= 0 and dist then
         ---- BUGFIX (B7): era `* 0.5` e `* 0.1` (float).
-        if dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
+        if dist <= pb_range then
             score = self.ExposedAtCloseRange_Score
-        elseif dist <= const.Weapons.PointBlankRange * 2 * const.SlabSizeX then
-            score = MulDivRound(self.ExposedAtCloseRange_Score, 50, 100)
-        elseif dist <= const.Weapons.PointBlankRange * 3 * const.SlabSizeX then
-            score = MulDivRound(self.ExposedAtCloseRange_Score, 10, 100)
+        elseif dist <= pb_range * 2 then
+            score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul, 100)
+        elseif dist <= pb_range * 3 then
+            score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
         end
     end
 

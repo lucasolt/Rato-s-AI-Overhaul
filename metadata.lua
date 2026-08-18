@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3428,
+	'version', 3460,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -35,6 +35,7 @@ return PlaceObj('ModDef', {
 		"Code/AIPOLICYPOS_CustomFlanking.lua",
 		"Code/AIPOLICYPOS_CustomSeekCover.lua",
 		"Code/AIPOLICYPOS_TryNotToBeFlanked.lua",
+		"Code/AIPOLICYPOS_StayNearAllies.lua",
 		"Code/AIPOLICYPOS_MGSetupPosScore.lua",
 		"Code/AIPOLICYPOS_Attack_StanceAP.lua",
 		"Code/AIPOLICYPOS_MGSetupAP.lua",
@@ -76,6 +77,8 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIActionThrowGrenade_PrecalcAction.lua",
 		"Code/SOURCE_AIActionPinDown_PrecalcAction.lua",
 		"Code/SOURCE_AIScoreDest.lua",
+		"Code/SOURCE_AIPolicyProximity.lua",
+		"Code/SOURCE_AIPolicyHighGround.lua",
 		"Code/SOURCE_AIScoreReachableVoxels.lua",
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
@@ -91,8 +94,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787019680,
-	'code_hash', -2764522728085125488,
+	'saved', 1787070568,
+	'code_hash', 5745796863998465130,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",

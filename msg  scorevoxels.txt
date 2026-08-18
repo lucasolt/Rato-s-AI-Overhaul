@@ -1,0 +1,46 @@
+  AIScoreReachableVoxels: the end-of-turn destination roulette never uses the scores
+
+  Lua/Tactical/CombatAI.lua:1789-1803. This is the function that picks ai_destination — where every AI unit ends its turn.
+
+  if not context.best_end_dest then
+      local total = 0
+      for _, score in ipairs(potential_dests) do   -- (1) iterates DESTINATIONS, not dest_scores
+          total = total + score
+      end
+      local roll = InteractionRand(total, "AIDecision")
+      for i, dest in ipairs(potential_dests) do
+          local score = dest_scores[i]
+          if score <= roll then                    -- (2) comparison is inverted
+              context.best_end_dest = dest
+              break
+          end
+          roll = roll - score
+      end
+      context.best_end_dest = context.best_end_dest or potential_dests[#potential_dests] or curr_dest
+  end
+
+  Bug 1 (line 1791): potential_dests holds packed stance_pos values — integers on the order of 1e10. Summing those gives a total many orders of magnitude larger than any real score (which is in the hundreds).
+  The loop should sum dest_scores.
+
+  Bug 2 (line 1797): for a weighted roulette the test should be roll < score, not score <= roll.
+
+  Combined effect: roll is astronomically larger than dest_scores[1], so score <= roll is true on the first iteration and the loop returns immediately. And potential_dests is seeded at line 1728 with:
+
+  local potential_dests, dest_scores = {curr_dest}, {best_end_score}
+
+  So the result is deterministically curr_dest — the unit's current position — whenever it is still in the list. It only leaves the list when its score drops below const.AIDecisionThreshold (80%) of the best
+  reachable tile, which is the pruning loop just above.
+
+  Practical consequence: the weights of every EndTurnPolicy only decide who gets into the finalist list, never who wins it. The AI's actual movement rule collapses to "stay put unless some reachable tile
+  scores more than ~1.25× the current one". The randomization the code appears to implement does not happen.
+
+  Bug 3 (lines 1781-1785), minor: in the cur_dest_preference == "avoid" branch,
+
+  table.remove_value(potential_dests, curr_dest)
+
+  removes from potential_dests but not from dest_scores, so the two arrays desync from that index on. Nothing in the base game passes "avoid" today, so it is latent.
+
+  Caveat before patching. Fixing 1 and 2 makes AI units substantially more mobile, since the scores start mattering. Vanilla archetype tuning was done on top of this bias, so it is a real balance change, not a
+  transparent fix — probably worth a flag if it goes into a fix library. Two extra things worth handling in any fix: scores can be negative (AIScoreDest can return negative), which corrupts a weighted pick
+  unless clamped at 0; and curr_dest can appear twice in potential_dests — once seeded at line 1728 with a negative -opt_loc_weight base, and again from the main loop with a positive dist_score — which doubles
+  its odds once the weights actually count.

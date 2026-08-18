@@ -36,6 +36,10 @@ return {
 		'CodeFileName', "Code/AIPOLICYPOS_TryNotToBeFlanked.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "AIPOLICYPOS_StayNearAllies",
+		'CodeFileName', "Code/AIPOLICYPOS_StayNearAllies.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "AIPOLICYPOS_MGSetupPosScore",
 		'CodeFileName', "Code/AIPOLICYPOS_MGSetupPosScore.lua",
 	}),
@@ -202,6 +206,14 @@ return {
 		'CodeFileName', "Code/SOURCE_AIScoreDest.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIPolicyProximity",
+		'CodeFileName', "Code/SOURCE_AIPolicyProximity.lua",
+	}),
+	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIPolicyHighGround",
+		'CodeFileName', "Code/SOURCE_AIPolicyHighGround.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIScoreReachableVoxels",
 		'CodeFileName', "Code/SOURCE_AIScoreReachableVoxels.lua",
 	}),
@@ -281,14 +293,21 @@ return {
 						'visibility_mode', "team",
 						'OnlyTarget', true,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', nil),
+					PlaceObj('AIPolicyCustomSeekCover', {
+						'Weight', 125,
+					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 50,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 50,
+						'Weight', 60,
 						'RangeMin', 30,
 						'RangeMax', 60,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 20,
+						'RangeMin', 20,
+						'RangeMax', 80,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -356,12 +375,22 @@ return {
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyCustomSeekCover', nil),
+			PlaceObj('AIPolicyCustomSeekCover', {
+				'Weight', 80,
+			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 150,
-				'RangeMin', 40,
-				'RangeMax', 60,
+				'Weight', 50,
+				'RangeMin', 30,
+				'RangeMax', 50,
+			}),
+			PlaceObj('AIPolicyWeaponRange', {
+				'Weight', 10,
+				'RangeMin', 30,
+				'RangeMax', 80,
+			}),
+			PlaceObj('AIPolicyHighGround', {
+				'Weight', 40,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -561,14 +590,26 @@ return {
 				'BiasId', "Standard",
 				'OptLocWeight', 150,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 200,
+					}),
 					PlaceObj('AIPolicyCustomFlanking', {
-						'Weight', 60,
+						'Weight', 75,
 						'visibility_mode', "team",
 						'OnlyTarget', true,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 50,
+						'ExposedAtCloseRange_Score', -50,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'RangeMin', 35,
+						'RangeMax', 60,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 20,
+						'RangeMin', 20,
+						'RangeMax', 30,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -588,23 +629,21 @@ return {
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyHighGround', {
+				'Weight', 140,
+			}),
+			PlaceObj('AIPolicyLosToEnemy', nil),
+			PlaceObj('AIPolicyWeaponRange', {
 				'Weight', 80,
-			}),
-			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 50,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'RangeMin', 30,
-				'RangeMax', 50,
+				'RangeMin', 35,
+				'RangeMax', 60,
 			}),
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 150,
-				'RangeMin', 51,
-				'RangeMax', 75,
+				'Weight', 40,
+				'RangeMin', 35,
+				'RangeMax', 130,
 			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 50,
-				'RangeMin', 76,
+			PlaceObj('AIPolicyCustomSeekCover', {
+				'Weight', 80,
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -790,7 +829,13 @@ return {
 				end,
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 150,
+						'RangeMin', 40,
+						'RangeMax', 60,
+					}),
+					PlaceObj('AIPolicyMGSetupAP', nil),
+					PlaceObj('AIPolicyLosToEnemy', nil),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGSetup', {
@@ -808,7 +853,7 @@ return {
 						'enemy_score', 110,
 						'team_score', -10,
 						'min_score', 100,
-						'enemy_cover_mod', 30,
+						'enemy_cover_mod', 40,
 						'cur_zone_mod', 140,
 					}),
 					PlaceObj('AIActionMGBurstFire', {
@@ -840,20 +885,17 @@ return {
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 50,
-						'Required', true,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 300,
-						'RangeMin', 30,
-						'RangeMax', 50,
-					}),
-					PlaceObj('AIPolicyWeaponRange', {
-						'RangeMin', 51,
+						'Weight', 150,
+						'RangeMin', 40,
 						'RangeMax', 60,
 					}),
 					PlaceObj('AIPolicyLosToEnemy', {
+						'Weight', 200,
 						'Required', true,
 					}),
+					PlaceObj('AIPolicyMGSetupAP', nil),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGSetup', {
@@ -909,18 +951,16 @@ return {
 		},
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 150,
-				'RangeMin', 30,
-				'RangeMax', 50,
+				'Weight', 90,
+				'RangeMin', 35,
+				'RangeMax', 60,
 			}),
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 50,
-				'RangeMin', 51,
-				'RangeMax', 100,
+				'Weight', 30,
+				'RangeMin', 20,
+				'RangeMax', 80,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 50,
-			}),
+			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
 				'Weight', 50,
 				'Indoors', false,
@@ -948,16 +988,32 @@ return {
 			PlaceObj('StandardAI', {
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 150,
+						'Weight', 200,
 					}),
 					PlaceObj('AIPolicyCustomFlanking', {
-						'Weight', 80,
+						'Weight', 150,
 						'ReserveAttackAP', "Stance",
 						'visibility_mode', "team",
 						'OnlyTarget', true,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'ExposedAtCloseRange_Score', -40,
+						'Weight', 80,
+						'ExposedAtCloseRange_Score', -50,
+					}),
+					PlaceObj('AIPolicyTryNotToBeFlanked', {
+						'Weight', 40,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 20,
+						'RangeBase', "Absolute",
+						'RangeMin', 2,
+						'RangeMax', 16,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 50,
+						'RangeBase', "Absolute",
+						'RangeMin', 8,
+						'RangeMax', 12,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -997,25 +1053,28 @@ return {
 				'OptLocWeight', 20,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyFlanking', {
+						'Weight', 50,
+						'Required', true,
 						'AllyPlannedPosition', true,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 150,
 					}),
 					PlaceObj('AIPolicyCustomFlanking', {
-						'Required', true,
 						'ReserveAttackAP', "AP",
 						'visibility_mode', "team",
 						'ScalePerDistance', true,
 					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
-					PlaceObj('AIPolicyCustomSeekCover', nil),
+					PlaceObj('AIPolicyCustomSeekCover', {
+						'Weight', 80,
+						'ExposedAtCloseRange_Score', -40,
+					}),
 				},
 				'TakeCoverChance', 100,
 				'VoiceResponse', "AIFlanking",
 			}),
 			PlaceObj('HoldPositionAI', {
-				'Weight', 40,
+				'Weight', 30,
 				'Comment', "ShootingStance",
 				'Fallback', false,
 				'Score', function (self, unit, proto_context, debug_data)
@@ -1028,30 +1087,17 @@ return {
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 200,
+				'Weight', 80,
 				'RangeBase', "Absolute",
-				'RangeMin', 5,
+				'RangeMin', 8,
 				'RangeMax', 12,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'RangeBase', "Absolute",
-				'RangeMin', 13,
-				'RangeMax', 20,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 70,
-				'RangeBase', "Absolute",
-				'RangeMin', 1,
-				'RangeMax', 4,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 50,
+				'Weight', 80,
 				'ExposedAtCloseRange_Score', 0,
 			}),
-			PlaceObj('AIPolicyCustomFlanking', {
-				'Weight', 300,
-			}),
+			PlaceObj('AIPolicyCustomFlanking', nil),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -1171,11 +1217,20 @@ return {
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'turn_phase', "Early",
-				'OptLocWeight', 250,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'ExposedAtCloseRange_Score', -50,
+						'Weight', 50,
+						'ExposedAtCloseRange_Score', -40,
+					}),
+					PlaceObj('AIPolicyGrenadeRange', {
+						'Weight', 300,
+						'RangeMin', 40,
+						'RangeMax', 60,
+						'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
+						'SaveAP', true,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 50,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -1190,71 +1245,34 @@ return {
 				end,
 				'TakeCoverChance', 0,
 			}),
-			PlaceObj('PositioningAI', {
-				'BiasId', "GrenadierPositioning",
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "FlareThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'Comment', "Grenadier Positioning",
-				'Fallback', false,
-				'turn_phase', "Early",
-				'OptLocWeight', 200,
-				'EndTurnPolicies', {
-					PlaceObj('AIPolicyGrenadeRange', {
-						'Weight', 200,
-						'Required', true,
-						'RangeMin', 30,
-						'RangeMax', 60,
-						'AllowedTriggerTypes', set( "Contact" ),
-						'SaveAP', true,
-					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 50,
-						'ExposedAtCloseRange_Score', -25,
-					}),
-				},
-				'TakeCoverChance', 100,
-			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 40,
-			}),
+			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 50,
+				'Weight', 200,
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyGrenadeRange', {
-				'Weight', 400,
+				'Weight', 160,
+				'CheckLOS', false,
 				'RangeMin', 30,
-				'RangeMax', 50,
-				'AllowedTriggerTypes', set( "Contact", "Timed" ),
+				'RangeMax', 60,
+				'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
 			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 50,
-				'RangeMin', 30,
-				'RangeMax', 50,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 20,
-				'RangeMin', 51,
+			PlaceObj('AIPolicyGrenadeRange', {
+				'Weight', 40,
+				'CheckLOS', false,
+				'RangeMin', 20,
 				'RangeMax', 100,
+				'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 40,
+				'Weight', 50,
 				'ExposedAtCloseRange_Score', 0,
 			}),
 			PlaceObj('AIPolicyHighGround', {
-				'Weight', 10,
-			}),
-			PlaceObj('AIPolicyGrenadeRange', {
-				'RangeMin', 50,
-				'RangeMax', 100,
+				'Weight', 50,
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -1353,7 +1371,14 @@ return {
 				'turn_phase', "Early",
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 50,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'RangeBase', "Absolute",
+						'RangeMin', 8,
+						'RangeMax', 14,
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
@@ -1371,25 +1396,19 @@ return {
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 300,
 				'RangeBase', "Absolute",
-				'RangeMin', 12,
-				'RangeMax', 18,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 50,
-				'RangeBase', "Absolute",
-				'RangeMin', 19,
-				'RangeMax', 30,
+				'RangeMin', 10,
+				'RangeMax', 16,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 200,
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
+				'Weight', 150,
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyHighGround', {
-				'Weight', 20,
+				'Weight', 40,
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -1450,7 +1469,7 @@ return {
 				'MinDist', 6000,
 				'action_id', "RocketLauncherFire",
 				'LimitRange', true,
-				'MaxTargetRange', 40,
+				'MaxTargetRange', 32,
 			}),
 		},
 		TargetScoreRandomization = 10,
@@ -1469,10 +1488,23 @@ return {
 			PlaceObj('StandardAI', {
 				'turn_phase', "Late",
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 200,
+					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 20,
+						'Weight', 30,
 						'ExposedAtCloseRange_Score', 0,
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'RangeBase', "Melee",
+					}),
+					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 50,
+						'RangeMin', 10,
+						'RangeMax', 40,
+					}),
+					PlaceObj('AIPolicyTryNotToBeFlanked', {
+						'Weight', 30,
 					}),
 				},
 				'TakeCoverChance', 0,
@@ -1491,25 +1523,20 @@ return {
 		Comment = "Keywords: Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 500,
+				'Weight', 300,
 				'RangeBase', "Melee",
 				'RangeMin', 0,
 				'RangeMax', 6,
 			}),
 			PlaceObj('AIPolicyWeaponRange', {
+				'Weight', 80,
 				'RangeBase', "Absolute",
-				'RangeMin', 0,
-				'RangeMax', 10,
+				'RangeMin', 1,
+				'RangeMax', 12,
 			}),
-			PlaceObj('AIPolicyWeaponRange', {
+			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 20,
-				'RangeBase', "Absolute",
-				'RangeMin', 11,
-				'RangeMax', 30,
-			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
-			PlaceObj('AIPolicyTryNotToBeFlanked', {
-				'Weight', 50,
+				'ExposedAtCloseRange_Score', 0,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1629,16 +1656,19 @@ return {
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
+				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 20,
+						'Weight', 80,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
-						'RangeMin', 30,
-						'RangeMax', 50,
+						'Weight', 50,
+						'RangeMin', 40,
+						'RangeMax', 60,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 300,
+					PlaceObj('AIPolicyCustomSeekCover', nil),
+					PlaceObj('AIPolicyTryNotToBeFlanked', {
+						'Weight', 50,
 					}),
 				},
 				'SignatureActions', {
@@ -1727,9 +1757,8 @@ return {
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
-			PlaceObj('AIPolicyProximity', {
-				'Weight', 80,
-				'TargetUnits', "allies",
+			PlaceObj('AIPolicyStayNearAllies', {
+				'TargetDist', "average",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1784,12 +1813,15 @@ return {
 						'Weight', 250,
 						'Required', true,
 						'RangeBase', "Absolute",
-						'RangeMin', 8,
-						'RangeMax', 12,
+						'RangeMin', 9,
+						'RangeMax', 20,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 200,
+					}),
+					PlaceObj('AIPolicyProximity', {
+						'MinScore', 2,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -1808,21 +1840,14 @@ return {
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 200,
+				'Weight', 150,
 				'RangeBase', "Absolute",
 				'RangeMin', 10,
-				'RangeMax', 14,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 20,
-				'RangeBase', "Absolute",
-				'RangeMin', 16,
 				'RangeMax', 20,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
-			PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 150,
+				'ExposedAtCloseRange_Score', 0,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1918,6 +1943,11 @@ return {
 				'action_id', "RunAndGun",
 			}),
 		},
+		TargetingPolicies = {
+			PlaceObj('AITargetingEnemyWeapon', {
+				'EnemyWeapon', "Sniper",
+			}),
+		},
 		group = "System",
 		id = "PinnedDown",
 	}),
@@ -1972,6 +2002,7 @@ return {
 					}),
 					PlaceObj('AIPolicyProximity', {
 						'Weight', 1000,
+						'MinScore', 2,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 300,
@@ -2042,11 +2073,13 @@ return {
 						'RequiredKeywords', {
 							"Soldier",
 						},
-						'Weight', 200,
+						'Weight', 50,
 						'ReserveAttackAP', "Stance",
 						'OnlyTarget', true,
 					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
+					PlaceObj('AIPolicyTryNotToBeFlanked', {
+						'Weight', 50,
+					}),
 					PlaceObj('AIPolicyWeaponRange', {
 						'Weight', 150,
 						'RangeBase', "Absolute",
@@ -2054,14 +2087,13 @@ return {
 						'RangeMax', 10,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 200,
 						'ExposedAtCloseRange_Score', -10,
 					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 			PlaceObj('HoldPositionAI', {
-				'Weight', 50,
+				'Weight', 30,
 				'Comment', "ShootingStance",
 				'Fallback', false,
 				'Score', function (self, unit, proto_context, debug_data)
@@ -2078,9 +2110,6 @@ return {
 				'ExposedAtCloseRange_Score', -10,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
-			PlaceObj('AIPolicyTryNotToBeFlanked', {
-				'Weight', 50,
-			}),
 			PlaceObj('AIPolicyWeaponRange', {
 				'RangeBase', "Melee",
 			}),
