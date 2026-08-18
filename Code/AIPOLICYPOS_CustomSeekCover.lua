@@ -69,6 +69,12 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         return score
     end
 
+    ---- STANCE: a postura empacotada no dest e a que a unidade REALMENTE adota ao
+    ---- chegar -- AIBehavior:EndMovement (AIBehaviors.lua:199) faz
+    ---- unit:DoChangeStance(StancesList[stance_idx]) do proprio ai_destination.
+    ---- Antes isso era ignorado e a cobertura era sempre medida agachado.
+    local ustance = StancesList[ustance_idx]
+
     local tbl = context.enemies or empty_table
 
     ----
@@ -103,8 +109,8 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
                                                        grid_voxel, enemy)
 
             else
-                cover_score =
-                    self:GetCoverScore(context, enemy, context.unit, dest, nil, grid_voxel)
+                cover_score = self:GetCoverScore(context, enemy, context.unit, dest, nil,
+                                                 grid_voxel, ustance)
                 -- table.insert(debugforpos_simple, {enemy.session_id, cover_score})
             end
 
@@ -199,10 +205,14 @@ AIPolicyCustomSeekCover.CoverScores = {
     [const.CoverHigh] = 100
 }
 
-function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, target_pos, grid_voxel)
+---- `stance` e a postura que a unidade tera NESTE dest. Se quem chama nao passar, sai
+---- do proprio dest; so cai no "Crouch" antigo se nao houver dest nenhum.
+function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, target_pos, grid_voxel,
+                                               stance)
     local prone_cover_CTH = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover
     local cover_max_malus = prone_cover_CTH:ResolveValue("Cover")
-    local score = 0
+    local valid_enemy = enemy and not (enemy:IsDead() or enemy:IsDowned())
+    local score = not valid_enemy and self.BaseScore or 0
 
     local target_pos = target_pos or dest and RATOAI_UnpackPos(dest) or unit:GetPos()
     local att_pos = enemy and enemy:GetPos()
@@ -210,7 +220,7 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     att_pos = RATOAI_ValidatePosZ(att_pos)
     local dist = att_pos:Dist(target_pos)
 
-    if not enemy:IsDowned() and IsValidPos(target_pos) and IsValidPos(att_pos) then
+    if valid_enemy and IsValidPos(target_pos) and IsValidPos(att_pos) then
 
         local distance_to_check_lack_of_cover = 30
         local weapon = enemy:GetActiveWeapons()
@@ -223,7 +233,12 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
             score = self.BaseScore
         elseif dist <= distance_to_check_lack_of_cover * const.SlabSizeX then
 
-            local use, value = RATOAI_CoverCTH(att_pos, target_pos)
+            if not stance and dest then
+                local _, _, _, dest_stance_idx = stance_pos_unpack(dest)
+                stance = StancesList[dest_stance_idx]
+            end
+
+            local use, value = RATOAI_CoverCTH(att_pos, target_pos, stance)
             value = value or 0
             if use then
                 local ratio = Clamp(MulDivRound(value, 100, cover_max_malus), 0, 100)
@@ -246,12 +261,19 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     return score
 end
 
-function RATOAI_CoverCTH(attacker_pos, target_pos)
+---- `target_stance` e a postura de QUEM SE PROTEGE (o 3o parametro de
+---- GetCoverPercentage, Cover.lua:281). O unico efeito dele la dentro e:
+----     if cover == coverLow and target_stance == "Standing" then cover = false end
+---- ou seja, Crouch e Prone sao equivalentes; so "Standing" muda alguma coisa, e muda
+---- so em cobertura BAIXA. Default "Crouch" mantem o comportamento antigo para quem
+---- chamar sem informar a postura.
+function RATOAI_CoverCTH(attacker_pos, target_pos, target_stance)
     local prone_cover_CTH = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover
     local exposed_value = prone_cover_CTH:ResolveValue("ExposedCover")
     local full_value = prone_cover_CTH:ResolveValue("Cover")
 
-    local cover, any, coverage = GetCoverPercentage(target_pos, attacker_pos, "Crouch")
+    local cover, any, coverage = GetCoverPercentage(target_pos, attacker_pos, target_stance or
+                                                        "Crouch")
 
     -- if CheckSightCondition(attacker, target, const.usObscured) then
     -- 	exposed_value = exposed_value + const.EnvEffects.DustStormCoverCTHPenalty

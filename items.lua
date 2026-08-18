@@ -598,18 +598,15 @@ return {
 						'visibility_mode', "team",
 						'OnlyTarget', true,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 50,
-						'ExposedAtCloseRange_Score', -50,
-					}),
+					PlaceObj('AIPolicyCustomSeekCover', nil),
 					PlaceObj('AIPolicyWeaponRange', {
+						'Weight', 50,
 						'RangeMin', 35,
 						'RangeMax', 60,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 20,
-						'RangeMin', 20,
-						'RangeMax', 30,
+						'Weight', 10,
+						'RangeMin', 30,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -628,23 +625,16 @@ return {
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyHighGround', {
-				'Weight', 140,
+			PlaceObj('AIPolicyHighGround', nil),
+			PlaceObj('AIPolicyLosToEnemy', {
+				'Weight', 50,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyWeaponRange', {
 				'Weight', 80,
-				'RangeMin', 35,
+				'RangeMin', 40,
 				'RangeMax', 60,
 			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 40,
-				'RangeMin', 35,
-				'RangeMax', 130,
-			}),
-			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 80,
-			}),
+			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
 		OptLocSearchRadius = 100,
 		PrefStance = "Crouch",
@@ -1813,7 +1803,7 @@ return {
 						'Weight', 250,
 						'Required', true,
 						'RangeBase', "Absolute",
-						'RangeMin', 9,
+						'RangeMin', 10,
 						'RangeMax', 20,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
