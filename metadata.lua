@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3390,
+	'version', 3428,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -76,8 +76,10 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIActionThrowGrenade_PrecalcAction.lua",
 		"Code/SOURCE_AIActionPinDown_PrecalcAction.lua",
 		"Code/SOURCE_AIScoreDest.lua",
+		"Code/SOURCE_AIScoreReachableVoxels.lua",
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
+		"Code/SOURCE_AIPolicyDealDamage.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
@@ -89,8 +91,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787003464,
-	'code_hash', 7170095365048514378,
+	'saved', 1787019680,
+	'code_hash', -2764522728085125488,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",

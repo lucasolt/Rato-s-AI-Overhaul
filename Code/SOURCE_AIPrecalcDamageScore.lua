@@ -107,6 +107,12 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     ---
     local dest_cth = {}
     context.dest_cth = dest_cth
+    ---- BUGFIX (B10): score de acerto LIMPO, so a soma de CTH sobre os disparos
+    ---- (ou seja, acertos esperados x100). Serve para o AIPolicyDealDamage, que e
+    ---- uma policy de POSICAO e nao deve carregar Marksmanship, TargetingPolicies
+    ---- nem a randomizacao -- esses pertencem a escolha de ALVO.
+    local dest_hit_score = {}
+    context.dest_hit_score = dest_hit_score
     local lof_params
     local attacker_pos = unit:GetPos()
 
@@ -174,9 +180,10 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         uz = uz or terrain.GetHeight(ux, uy)
 
         local ap = dest_ap[upos] or 0
-        local best_target, best_cth
+        local best_target, best_cth, best_hit
         local best_score = 0
         local potential_targets, target_score, target_cth = {}, {}, {}
+        local target_hit = {} ---- BUGFIX (B10)
 
         ------------------ Recoil storage -- Only best target goes to context
         local recoil_score = {}
@@ -293,6 +300,10 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                     shot_cth = shot_cth or 0
 
                     if mod > const.AIShootAboveCTH then
+                        ---- BUGFIX (B10): neste ponto `mod` ainda e a soma pura de CTH
+                        ---- devolvida por RATOAI_ScoreAttacks*. Tudo abaixo mistura
+                        ---- unidades diferentes no mesmo numero.
+                        local hit_score = mod
                         -------------
                         mod = mod + pos_mod
                         -------------------------------------------------------------------------------------------
@@ -353,6 +364,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                             best_target = target
                             best_score = mod
                             best_cth = shot_cth ---- BUGFIX (B1): era `base_mod` (Marksmanship)
+                            best_hit = hit_score ---- BUGFIX (B10)
                             potential_targets = {}
                             break
                         end
@@ -362,6 +374,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
 
                         best_score = Max(best_score, mod)
                         target_cth[target] = shot_cth ---- BUGFIX (B1): era `base_mod`
+                        target_hit[target] = hit_score ---- BUGFIX (B10)
                         target_score[target] = mod
 
                         local threshold = MulDivRound(best_score or 0, const.AIDecisionThreshold,
@@ -413,6 +426,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
             best_target = best_target or potential_targets[#potential_targets] or false
             best_score = target_score[best_target] or 0
             best_cth = target_cth[best_target] or 0
+            best_hit = target_hit[best_target] or 0 ---- BUGFIX (B10)
 
             --[[print("-------------------")
             ic(best_target.session_id)
@@ -446,6 +460,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         dest_target_score[upos] = best_score ------ This defines DealDamage policy score
         dest_target[upos] = best_target
         dest_cth[upos] = best_cth
+        dest_hit_score[upos] = best_hit or 0 ---- BUGFIX (B10)
 
         ----Debug vectors
         -- local dux, duy, duz, dustance_idx = stance_pos_unpack(upos)
