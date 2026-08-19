@@ -293,19 +293,22 @@ return {
 				'OptLocWeight', 80,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-					}),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'Weight', 30,
-						'ReserveAttackAP', "Stance",
-						'visibility_mode', "team",
-						'OnlyTarget', true,
+						'Weight', 150,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'ThreatRelative', 95,
+						'ThreatRelative', 40,
 					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
-					PlaceObj('AIPolicyThreatExposure', nil),
+					PlaceObj('AIPolicyTryNotToBeFlanked', {
+						'Weight', 50,
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'MeleeRange', 3,
+					}),
+					PlaceObj('AIPolicyDistanceFromStart', {
+						'Weight', 50,
+						'Away', false,
+						'Distance', 10,
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
@@ -319,79 +322,29 @@ return {
 				end,
 				'TakeCoverChance', 0,
 			}),
-			PlaceObj('PositioningAI', {
-				'BiasId', "SoldierFlanking",
-				'Weight', 40,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "SoldierFlanking",
-						'Value', -20,
-						'Period', 0,
-						'ApplyTo', "Team",
-					}),
-				},
-				'Comment', "Soldier Flanking",
-				'Fallback', false,
-				'RequiredKeywords', {
-					"Soldier",
-				},
-				'Score', function (self, unit, proto_context, debug_data)
-					unit.ai_context = unit.ai_context or AICreateContext(unit, proto_context)
-					local dest, score = AIScoreReachableVoxels(unit.ai_context, self.EndTurnPolicies, 0)
-					-----
-					local custom_score = getAISoldierFlankingBehaviorSelectionScore(unit, proto_context)
-					score = MulDivRound(score, custom_score, 100)
-					-----
-					return MulDivRound(score, self.Weight, 100)
-				end,
-				'OptLocWeight', 20,
-				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-					}),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'Required', true,
-						'ReserveAttackAP', "Stance",
-						'visibility_mode', "team",
-						'OnlyTarget', true,
-					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 80,
-						'Required', true,
-						'ThreatRelative', 80,
-					}),
-					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 80,
-					}),
-				},
-				'TakeCoverChance', 100,
-				'VoiceResponse', "AIFlanking",
-			}),
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 50,
+				'Weight', 60,
 			}),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 20,
 				'DownhillMax', 20,
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 50,
 				'RangeMin', 30,
-				'RangeMax', 50,
-				'Falloff', 0,
+				'RangeMax', 60,
+				'Falloff', 6,
 				'WeightFalloff', "linear",
+				'RequireLOS', true,
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 40,
-				'ThreatRelative', 80,
+				'ThreatRelative', 100,
 			}),
 			PlaceObj('AIPolicyThreatExposure', {
 				'Weight', 40,
-				'MeleeRange', 3,
 			}),
 		},
 		OptLocSearchRadius = 80,

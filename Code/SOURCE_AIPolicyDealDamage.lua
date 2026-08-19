@@ -32,7 +32,7 @@
 ---- Abaixo disso o score e proporcional; acima, satura.
 ---- Subir  -> a IA continua distinguindo posicoes muito boas (mais agressiva de perto)
 ---- Descer -> satura antes, a cobertura pesa mais cedo
-local RATOAI_DealDamage_MaxHits = 400
+local RATOAI_DealDamage_MaxHits = 200
 
 function AIPolicyDealDamage:GetEditorView()
     return string.format("Deal Damage (%s, normalizado)", self.CheckLOS and "w/ LOS" or "w/o LOS")
