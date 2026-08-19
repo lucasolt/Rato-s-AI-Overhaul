@@ -16,6 +16,7 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B7 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua`, `AIPOLICYPOS_CustomFlanking.lua`, `AIPOLICYPOS_CustomSeekCover.lua`, os dois `getAI*BehaviorSelectionScore` |
 | B11 | ✅ aplicado | `AIPOLICYPOS_AvoidThreatenedAreas.lua` (o override de `AIFindDestinations`) |
 | B12 | ✅ aplicado | `SOURCE_AITakeCover.lua` |
+| B13 | ✅ aplicado | `SOURCE_AIScoreReachableVoxels.lua` |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -355,6 +356,37 @@ num tile de cobertura por outra policy.
 
 Continua valendo o gate próprio do mod na linha 4 (`shooting_stance`), e o do vanilla:
 `ap_after_signature` só é preenchido quando rodou uma signature action (`CombatAI.lua:256`).
+
+### 🔴 B13 — O `OptLocWeight` some quando a unidade já está no lugar ótimo
+
+`SOURCE_AIScoreReachableVoxels.lua`. Sintoma: a unidade abandona uma boa posição sem motivo,
+frequentemente voltando para um tile pior.
+
+`AIFindOptimalLocation`, ao encontrar um candidato no próprio voxel de partida, preenche
+`context.best_dest` no laço de cima e **pula** o bloco que atribui `context.best_dest_path` — não há
+caminho a percorrer. Com `best_dest_path` nil, `AICalcPathDistances` (`CombatAI.lua:1359-1377`)
+deixa `context.total_dist = nil` e `context.dest_dist = {}`. E as duas fórmulas de OptLoc daqui
+estão atrás do mesmo portão `total_dist > 0`:
+
+- `dist_score = 0` para **todos** os destinos — o `OptLocWeight` inteiro (200 em três archetypes,
+  150 em dois) simplesmente não entra na conta;
+- o seed do `curr_dest` fica com `-opt_loc_weight` **sem escalar**, penalidade cheia.
+
+É vanilla, não regressão do mod — mas ficava mascarado pela roleta quebrada do **B9**, que
+disparava sempre na primeira iteração sobre uma lista semeada com `{curr_dest}`: o resultado era
+"fique onde está" por acidente. Consertar a roleta removeu essa âncora exatamente no caso em que o
+`OptLocWeight` fica mudo, e com `AIDecisionThreshold = 80` dezenas de tiles empatam no sorteio.
+
+Conserto: a fórmula do gradiente está certa — o que falta é o **insumo** dela. Quando `dest_dist`
+vem vazio, preenchemos com a distância direta de cada dest até o `best_dest` e usamos o **maior**
+desses valores como denominador. O gradiente volta a ser o de sempre — `opt_loc_weight` cheio em
+cima do ótimo, decaindo até 0 no limite do alcance de movimento — só que normalizado pelo raio de
+movimento em vez do comprimento do caminho, que aqui é zero. Continua sendo **viés somado** ao
+score das policies, não um veto.
+
+Distância direta como substituta da distância de caminho tem precedente no próprio source:
+`AITacticCalcPathDistances` (`AITactics.lua:8-13`) faz exatamente
+`context.dest_dist[dest] = stance_pos_dist(context.best_dest, dest)`.
 
 ---
 

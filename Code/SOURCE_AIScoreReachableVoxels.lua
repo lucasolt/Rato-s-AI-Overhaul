@@ -54,8 +54,63 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
     local total_dist = context.total_dist
     local dest_dist = context.dest_dist or empty_table
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B13): quando a unidade JA ESTA no optimal location, o OptLocWeight sumia
+    ---- inteiro da decisao -- e o tile atual ainda levava a penalidade cheia.
+    ----
+    ---- Cadeia: AIFindOptimalLocation, ao achar um candidato no proprio voxel de partida,
+    ---- preenche context.best_dest no laco de cima e PULA o bloco que atribui
+    ---- context.best_dest_path (nao ha caminho a percorrer). Com best_dest_path nil,
+    ---- AICalcPathDistances (CombatAI.lua:1359-1377) deixa context.total_dist = nil e
+    ---- context.dest_dist = {}. Aqui embaixo as DUAS formulas de OptLoc estao atras do
+    ---- mesmo portao `total_dist > 0`, entao:
+    ----     - dist_score = 0 para TODOS os destinos (o OptLocWeight inteiro -- 200 em
+    ----       varios archetypes -- some da conta);
+    ----     - o seed do curr_dest fica com -opt_loc_weight SEM escalar, penalidade cheia.
+    ----
+    ---- Isso e vanilla, nao regressao do mod. Ficava mascarado porque a roleta quebrada
+    ---- (ver B9) disparava sempre na primeira iteracao, e a lista e semeada com
+    ---- {curr_dest} -- o resultado era "fique onde esta" por acidente. Consertar a roleta
+    ---- tirou essa ancora exatamente no caso em que o OptLocWeight fica mudo, e com
+    ---- AIDecisionThreshold = 80 dezenas de tiles empatam: a unidade abandona boa posicao.
+    ----
+    ---- Conserto: a fórmula do gradiente esta certa -- o que falta e o insumo dela. Quando
+    ---- dest_dist vem vazio, preenchemos com a distancia direta de cada dest ate o
+    ---- best_dest e usamos o MAIOR desses valores como denominador. Assim:
+    ----     dest em cima do optimal  -> dist 0        -> dist_score = opt_loc_weight
+    ----     dest no limite do alcance -> dist maxima  -> dist_score = 0
+    ---- ou seja, exatamente o mesmo gradiente de sempre, so que normalizado pelo raio de
+    ---- movimento em vez de pelo comprimento do caminho (que aqui e zero). O viés continua
+    ---- sendo viés: soma ao score das policies, nao manda nele.
+    ----
+    ---- Distancia direta como substituto da distancia de caminho tem precedente no proprio
+    ---- source: AITacticCalcPathDistances (AITactics.lua:8-13) faz exatamente
+    ---- `context.dest_dist[dest] = stance_pos_dist(context.best_dest, dest)`.
+    ---------------------------------------------------------------------------------------------
     local curr_dest = context.voxel_to_dest[context.unit_world_voxel] or
                           context.voxel_to_dest[context.closest_free_pos] or context.unit_stance_pos
+
+    if (not total_dist or total_dist <= 0) and context.best_dest then
+        local best_dest = context.best_dest
+        local filled, max_dist = {}, 0
+        for _, dest in ipairs(context.destinations) do
+            local d = stance_pos_dist(best_dest, dest)
+            filled[dest] = d
+            if d > max_dist then
+                max_dist = d
+            end
+        end
+        ---- curr_dest nem sempre esta em context.destinations (fallback do closest_free_pos)
+        if not filled[curr_dest] then
+            filled[curr_dest] = stance_pos_dist(best_dest, curr_dest)
+            max_dist = Max(max_dist, filled[curr_dest])
+        end
+        ---- max_dist == 0 seria divisao por zero: sem alternativa util, segue como antes
+        if max_dist > 0 then
+            dest_dist, total_dist = filled, max_dist
+        end
+    end
+
     local dist = dest_dist[curr_dest] or total_dist
     local score = -opt_loc_weight
 

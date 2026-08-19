@@ -293,7 +293,7 @@ return {
 				'OptLocWeight', 80,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 300,
+						'Weight', 200,
 					}),
 					PlaceObj('AIPolicyCustomFlanking', {
 						'Weight', 30,
@@ -302,15 +302,10 @@ return {
 						'OnlyTarget', true,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'ThreatRelative', 80,
+						'ThreatRelative', 95,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', nil),
-					PlaceObj('AIPolicyCustomWeaponRange', {
-						'Mode', "target",
-						'RangeMin', 40,
-						'RangeMax', 50,
-					}),
 				},
 				'TakeCoverChance', 50,
 			}),
@@ -387,14 +382,15 @@ return {
 				'Weight', 50,
 				'RangeMin', 30,
 				'RangeMax', 50,
+				'Falloff', 0,
 				'WeightFalloff', "linear",
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 40,
+				'ThreatRelative', 80,
 			}),
 			PlaceObj('AIPolicyThreatExposure', {
 				'Weight', 40,
-				'MaxThreat', 5,
 				'MeleeRange', 3,
 			}),
 		},
