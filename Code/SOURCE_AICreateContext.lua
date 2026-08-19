@@ -200,16 +200,6 @@ function AICreateContext(unit, context)
     end
     AIUpdateDestLosCache(unit, context)
 
-    ---- MG: o gunner luta e monta a MG DEITADO, mas o cache do motor mede o LOS
-    ---- na postura do destino (Standing/Crouch). Calcula o LOS deitado dos mesmos
-    ---- destinos, na mesma batelada de raycasts, para as policies de posicao.
-    ---- Ver RATOAI_UpdateProneLosCache em UTIL.lua.
-    context.prone_los_cache = nil
-    if RATOAI_IsProneArchetype(context) and not unit:HasStatusEffect("StationedMachineGun") and
-        not unit:HasStatusEffect("ManningEmplacement") then
-        RATOAI_UpdateProneLosCache(unit, context, "can_yield")
-    end
-
     for i, ally in ipairs(context.allies) do
         local x, y, z = ally:GetGridCoords()
         context.ally_grid_voxel[ally] = point_pack(x, y, z)

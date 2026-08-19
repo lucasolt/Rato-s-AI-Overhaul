@@ -1127,13 +1127,13 @@ return {
 				end,
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 150,
-						'RangeMin', 40,
+					PlaceObj('AIPolicyLosToEnemy', nil),
+					PlaceObj('AIPolicyCustomWeaponRange', {
+						'Mode', "target",
+						'RangeMin', 20,
 						'RangeMax', 60,
 					}),
-					PlaceObj('AIPolicyMGSetupAP', nil),
-					PlaceObj('AIPolicyLosToEnemy', nil),
+					PlaceObj('AIPolicyDealDamage', nil),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGSetup', {
@@ -1181,19 +1181,21 @@ return {
 				end,
 				'OptLocWeight', 20,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyTryNotToBeFlanked', {
-						'Weight', 50,
-					}),
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 150,
-						'RangeMin', 40,
-						'RangeMax', 60,
-					}),
 					PlaceObj('AIPolicyLosToEnemy', {
 						'Weight', 200,
 						'Required', true,
 					}),
 					PlaceObj('AIPolicyMGSetupAP', nil),
+					PlaceObj('AIPolicyCustomWeaponRange', {
+						'Mode', "target",
+						'RangeMin', 30,
+						'RangeMax', 40,
+						'Falloff', 4,
+						'WeightFalloff', "linear",
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 25,
+					}),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGSetup', {
@@ -1248,15 +1250,10 @@ return {
 			}),
 		},
 		OptLocPolicies = {
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 90,
-				'RangeMin', 35,
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'RangeMin', 40,
 				'RangeMax', 60,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 30,
-				'RangeMin', 20,
-				'RangeMax', 80,
+				'Falloff', 4,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyIndoorsOutdoors', {

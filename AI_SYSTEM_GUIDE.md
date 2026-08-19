@@ -677,7 +677,7 @@ alcançável com cobertura baixa adjacente é convertido em Crouch**. Efeitos em
 É um viés pró-cobertura hardcoded, não desligável por configuração, e é **a causa mais direta do
 "ele vai pra trás de cobertura e não consegue ver nada"**.
 
-**(c) O check de disponibilidade do `MGSetup` ignorava a postura prone.** ✅ **CORRIGIDO (B11)**
+**(c) O check de disponibilidade do `MGSetup` ignora a postura prone.**
 `AIActionMGSetup:PrecalcAction` faz:
 
 ```lua
@@ -695,45 +695,23 @@ local los_any, los_targets = CheckLOS(units, unit, unit:GetDist(target_pos), nil
 local targets_attack_data = GetLoFData(unit, targets, { ..., stance = unit.stance, ... })
 ```
 
-Ou seja: **a IA decidia montar a MG com base na linha de tiro que tinha de pé (ou agachada), deitava,
-e podia perder a linha.** O comentário no código promete o contrário.
-
-**Correção aplicada** — `SOURCE_AIEvalZones.lua` sobrescreve `AIPrecalcConeTargetZones` fazendo o
-parâmetro `stance` valer de fato: os dois `CheckLOS` passam a sair de `attack_pos` + a postura
-recebida, e o `GetLoFData` usa `stance = check_stance` em vez de `unit.stance`. Sem `stance`
-(Overwatch, `MGRotate` de quem já está montado) o caminho é idêntico ao source. Efeito: o
-`MGSetup` só fica disponível se houver linha **deitado**, e a zona escolhida só conta alvos que
-ele alcança deitado — o que também conserta o gate (e).
-
-**Correção irmã — LOS dos destinos medido deitado.** O `g_AIDestEnemyLOSCache` continua sendo o do
-motor (postura do destino, ver (b)); para arquétipos com `PrefStance == "Prone"` o mod passa a
-calcular, logo depois do `AIUpdateDestLosCache`, um segundo cache com o LOS **deitado** dos tiles
-(`RATOAI_UpdateProneLosCache`, `UTIL.lua`, chaveado por voxel). Ele cobre só `context.destinations`
-— os tiles alcançáveis, que são justamente os que vêm de `voxel_to_dest` em Standing/Crouch; para
-todo o resto o cache do motor **já** é prone, porque `AIEnumValidDests` (CombatAI.lua:1229) empacota
-os tiles fora de alcance com `StancesList[archetype.PrefStance]`. Fora do conjunto alcançável o
-fallback é o próprio `g_AIDestEnemyLOSCache` — nada de raycast por tile dentro do `AIScoreDest`,
-que com `OptLocSearchRadius = 100` seria proibitivo. Quem consome:
-`AIPolicyLosToEnemy:EvalDest` (override em `AIPOLICYPOS_MGSetupAP.lua` — é a policy `Required` do
-`PositioningAI` "MG Setup") e `AIPolicyMGSetupAP:EvalDest`, ambos via
-`RATOAI_HasLOSToEnemyFromDest`. Para os outros arquétipos nada muda. É a **Peça 2** do §9.3 obtida
-sem reescrever `AIEnumValidDests`/`AIFindDestinations` — a **Peça 1** (conversão forçada em Crouch)
-continua **não aplicada**.
+Ou seja: **a IA decide montar a MG com base na linha de tiro que ela tem de pé (ou agachada), deita,
+e pode perder a linha.** O comentário no código promete o contrário. Você não sobrescreve essa
+função, então o bug está ativo no seu mod. Combinado com (b), é exatamente o cenário que você
+descreveu.
 
 **(d) Não há noção de aglomerado na escolha do tile.**
 `AIPolicyLosToEnemy` é binário: "algum inimigo visível daqui". Um tile com LOF para 4 inimigos
 alinhados e um tile com LOF para 1 inimigo recebem os mesmos 200 pontos. O agrupamento só entra
 depois, na escolha da *direção* do cone. Falta uma policy que responda "quantos inimigos caberiam
 no meu cone se eu deitasse aqui".
-Hoje o `AIPolicyMGSetupAP` já está plugado nos dois behaviors do `HeavyGunner` (e desde o B11 mede
-LOS deitado + custo do `MGSetup`), mas continua binário. O `AIPolicyMGSetupPosScore` **não está
-plugado em nenhum arquétipo**, mede ângulo a partir da unidade e não do tile candidato, e ainda
-chama `Update_AIPrecalcDamageScore` dentro do `EvalDest` (caro por tile) — a Peça 3 do §9.3
-(`AIPolicyMGFiringPosition`) é quem deve substituí-lo.
+As duas que você escreveu para isso (`AIPolicyMGSetupPosScore`, `AIPolicyMGSetupAP`) **não estão
+plugadas em nenhum arquétipo**, e `AIPolicyMGSetupPosScore` mede ângulo a partir da unidade, não do
+tile candidato, além de chamar `Update_AIPrecalcDamageScore` dentro do `EvalDest` (caro por tile).
 
 **(e) O gate é binário e local.** `Get_HeavyGunnerShouldUsePositioningBehavior` pergunta "consigo
-montar **daqui**?", nunca "existe um tile melhor?". A resposta agora ao menos é *verdadeira* (o
-precalc mede prone desde o B11), mas continua sendo uma pergunta local.
+montar **daqui**?", nunca "existe um tile melhor?". Como (c) mede a postura errada, a resposta
+também pode estar errada.
 
 Detalhes menores: `TakeCoverChance = 50` no `PositioningAI` contradiz o intento (na prática é
 inofensivo, porque `AITakeCover` retorna cedo se `HasPreparedAttack()` ou se nenhuma signature
