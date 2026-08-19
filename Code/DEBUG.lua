@@ -80,6 +80,12 @@ function IModeAIDebug:GetVoxelRolloverText()
 
     end
 
+    ---- so existe com RATOAI_ThreatDebug ligado
+    local threat_dbg = self.ai_context.dest_threat_exposure_debug
+    if dest and threat_dbg and threat_dbg[dest] then
+        text = text .. "\n\nThreat Exposure Debug:\n" .. threat_dbg[dest] .. "\n"
+    end
+
     if dest and self.ai_context.aims_at[dest] then
         for enemy, aims in pairs(self.ai_context.aims_at[dest]) do
             local aim_text = ""

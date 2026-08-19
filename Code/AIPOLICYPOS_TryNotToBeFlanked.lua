@@ -4,6 +4,15 @@ DefineClass.AIPolicyTryNotToBeFlanked = {
 
     properties = {
         {id = "end_of_turn", editor = "bool", default = true, read_only = true, no_edit = true},
+        ---- FALSE: esta policy e sobre onde a unidade vai PARAR e receber fogo, nao sobre
+        ---- o objetivo estrategico. As 8 instancias no items.lua ja estao todas em listas
+        ---- de EndTurn -- isto so impede adiciona-la a uma lista de OptLoc por engano.
+        ---- A flag e `class_filter` da lista OptLocPolicies no editor (ClassDef-AI:18),
+        ---- nao um filtro de runtime, entao mudar aqui nao altera comportamento nenhum.
+        ----
+        ---- Importa mais agora que o score e negativo: no OptLoc, tile com total <= 0 nao
+        ---- entra em `best_dests` (AIFindOptimalLocation), e se muitos sairem a lista
+        ---- esvazia e o best_dest cai no fallback "fique parado", sem aviso.
         {id = "optimal_location", editor = "bool", default = true, read_only = true, no_edit = true}
     }
 }
@@ -33,7 +42,25 @@ function AIPolicyTryNotToBeFlanked:EvalDest(context, dest, grid_voxel)
     pos_table[unit] = new_pos
     local new_surrounded = unit:RATOAI_IsSurrounded(pos_table)
 
-    local score = not new_surrounded and 100 or 0
+    ---- PENALIDADE, e nao bonus. Antes era `not new_surrounded and 100 or 0`: a maioria
+    ---- dos tiles ganhava +Weight, o que inflava o melhor score do mapa. Como o corte de
+    ---- finalistas e MULTIPLICATIVO (const.AIDecisionThreshold = 80% do melhor), inflar o
+    ---- melhor score alarga a faixa de corte em termos absolutos e deixa entrar mais tile
+    ---- mediocre -- justamente o contrario do que a policy quer.
+    ----
+    ---- Com penalidade, para o tile flanqueado ser excluido basta
+    ----     base_flanqueado < 0,8*base_melhor + W
+    ---- contra
+    ----     base_flanqueado < 0,8*base_melhor + 0,8W
+    ---- do formato antigo. O limiar de exclusao sobe 0,2W e a faixa de finalistas fica
+    ---- 0,2W mais estreita -- mesmo peso, mais discriminacao.
+    ----
+    ---- Bonus: a roleta de fim de turno pesa por `Max(0, score)`, entao um tile cujo
+    ---- total foi para negativo nao pode ser sorteado nem por acidente.
+    ----
+    ---- ATENCAO: incompativel com `Required`. O check e `Required and pscore <= 0`, e
+    ---- aqui o caso BOM devolve 0 -- marcar Required vetaria todo tile nao flanqueado.
+    local score = new_surrounded and -100 or 0
     cache[grid_voxel] = score
     return score
 end

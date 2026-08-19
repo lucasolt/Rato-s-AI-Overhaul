@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3472,
+	'version', 3577,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -34,6 +34,8 @@ return PlaceObj('ModDef', {
 		"Code/DEBUG.lua",
 		"Code/AIPOLICYPOS_CustomFlanking.lua",
 		"Code/AIPOLICYPOS_CustomSeekCover.lua",
+		"Code/AIPOLICYPOS_ThreatExposure.lua",
+		"Code/AIPOLICYPOS_CustomWeaponRange.lua",
 		"Code/AIPOLICYPOS_TryNotToBeFlanked.lua",
 		"Code/AIPOLICYPOS_StayNearAllies.lua",
 		"Code/AIPOLICYPOS_MGSetupPosScore.lua",
@@ -94,12 +96,17 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787082461,
-	'code_hash', 4258208219732707166,
+	'saved', 1787109628,
+	'code_hash', -2877237701581342205,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
 			'Id', "Soldier",
+			'ClassDisplayName', "AI Archetype",
+		}),
+		PlaceObj('ModResourcePreset', {
+			'Class', "AIArchetype",
+			'Id', "Soldier_copy",
 			'ClassDisplayName', "AI Archetype",
 		}),
 		PlaceObj('ModResourcePreset', {

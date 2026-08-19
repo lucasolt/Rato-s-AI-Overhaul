@@ -13,11 +13,16 @@ DefineClass.AIPolicyCustomSeekCover = {
             items = function(self)
                 return {"self", "team", "all"}
             end
-        },
-        {
+        }, {
+            ---- Reaproveitada: agora significa "ponderar a media pela distancia", com o
+            ---- peso indo tambem para o DENOMINADOR (media ponderada de verdade).
+            ---- Default true -- e o conserto da diluicao, nao um opcional.
             id = "ScalePerDistance",
+            name = "Ponderar por distancia (rampa)",
+            help = "Cada inimigo pesa 100 colado e 0 no limite do alcance da arma dele. " ..
+                "Desligado, todos pesam igual e inimigos fora de alcance diluem a media.",
             editor = "bool",
-            default = false,
+            default = true,
             read_only = false,
             no_edit = false
         }, {
@@ -29,7 +34,7 @@ DefineClass.AIPolicyCustomSeekCover = {
         }, {
             id = "ExposedAtCloseRange_Score",
             editor = "number",
-            default = -100,
+            default = 0,
             read_only = false,
             no_edit = false
         },
@@ -39,7 +44,40 @@ DefineClass.AIPolicyCustomSeekCover = {
             default = false,
             read_only = false,
             no_edit = false
-        }, {id = "BaseScore", editor = "number", default = 100, read_only = false, no_edit = false}
+        }, {id = "BaseScore", editor = "number", default = 100, read_only = false, no_edit = false},
+        {
+            ---- Default FALSE de proposito: ligar isto muda o comportamento das 21
+            ---- instancias de uma vez. Ligue no archetype que voce esta testando e
+            ---- compare, em vez de virar a chave no mod inteiro.
+            id = "RequireLOS",
+            name = "Ignorar tiles que ninguem enxerga",
+            help = "Zera a policy quando o cache de LOS do motor diz que NENHUM inimigo " ..
+                "ve este destino. Sem isto, um tile escondido ganha nota cheia de " ..
+                "cobertura contra inimigos que nem conseguem olhar para ele. " ..
+                "Esconder-se nao perde valor: continua valendo 0 contra o negativo de " ..
+                "estar exposto. Mesmo portao da AIPolicyThreatExposure.",
+            editor = "bool",
+            default = true,
+            read_only = false,
+            no_edit = false
+        }, {
+            ---- Default 0 = comportamento identico ao de hoje. Ligue no archetype que
+            ---- voce esta testando (sugestao: 75) e compare, em vez de mexer nos 21.
+            id = "ThreatRelative",
+            name = "Cobertura relativa a ameaca (%)",
+            help = "0 = cobertura ABSOLUTA: media pura, um tile longe com cobertura total " ..
+                "vale 100 igual a um tile colado com cobertura total.\n" ..
+                "100 = cobertura EXTENSIVA: vale o quanto de ameaca ela de fato neutraliza, " ..
+                "na mesma escala da Threat Exposure -- longe do inimigo tende a zero, e " ..
+                "cobertura total cancela exatamente a exposicao.\n" ..
+                "Valores no meio interpolam entre os dois.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 100,
+            read_only = false,
+            no_edit = false
+        }
     }
 }
 
@@ -53,8 +91,47 @@ local medium_range_penalty_mul = 40
 
 local debug = Platform.developer and Platform.cheats and true
 
-local extra_score_arg_mul = 220
+---- APOSENTADO: existia so para compensar o encolhimento do ScalePerDistance antigo,
+---- que pesava o NUMERADOR e deixava o denominador contando cabecas -- media encolhida,
+---- nao media ponderada. Com o peso tambem no denominador a escala se fecha sozinha e
+---- este fator de correcao perde a razao de ser. Mantido comentado como registro.
+-- local extra_score_arg_mul = 220
 -----
+
+---------------------------------------------------------------------------------------------------
+---- RAMPA DE AMEACA
+----
+---- Peso de um inimigo na media de cobertura: 100 colado nele, caindo linearmente ate
+---- 0 no limite do alcance da arma dele. Fora do alcance devolve 0 -- o inimigo sai da
+---- media em vez de entrar valendo zero e diluir os outros, que era o problema.
+----
+---- Global de proposito: a AIPolicyThreatExposure usa exatamente esta funcao, para as
+---- duas policies nao poderem divergir de rampa.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- SATURACAO DE AMEACA -- COMPARTILHADA
+----
+---- Quantos "inimigos colados" (peso 100 cada) equivalem a ameaca cheia.
+----
+---- ATENCAO: este valor TEM que ser o mesmo que o `MaxThreat` da AIPolicyThreatExposure.
+---- E dele que sai o cancelamento entre as duas policies: com cobertura relativa a 100%,
+----     cobertura + exposicao = SOMA[ w_i * (cobertura_i - 100) ] / saturacao
+---- que da exatamente 0 quando a cobertura e total. Se as duas usarem saturacoes
+---- diferentes, o cancelamento quebra em SILENCIO -- sobra um vies constante que nao
+---- aparece em camada nenhuma do debug. Por isso e uma constante global e nao uma
+---- propriedade duplicada nas duas classes.
+---------------------------------------------------------------------------------------------------
+RATOAI_ThreatSaturation = rawget(_G, "RATOAI_ThreatSaturation") or 3
+
+function RATOAI_ThreatRamp(dist, range)
+    if not dist or not range or range <= 0 or dist >= range then
+        return 0
+    end
+    if dist <= 0 then
+        return 100
+    end
+    return 100 - MulDivRound(dist, 100, range)
+end
 
 function AIPolicyCustomSeekCover:GetEditorView()
     return "Custom Seek Cover"
@@ -69,6 +146,16 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         return score
     end
 
+    ---- Portao de LOS. Zera a policy INTEIRA, positivo e negativo: se ninguem enxerga
+    ---- este tile, nao ha cobertura a creditar nem exposicao a punir -- a policy
+    ---- simplesmente nao tem opiniao. Sem isto, um tile escondido recebia BaseScore
+    ---- cheio por cobertura geometrica contra inimigos que nao conseguem ve-lo.
+    ---- `false` = o motor checou e ninguem ve; `nil` = destino que nunca entrou na
+    ---- batelada do AIUpdateDestLosCache, e nesse caso seguimos avaliando normalmente.
+    if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false then
+        return score
+    end
+
     ---- STANCE: a postura empacotada no dest e a que a unidade REALMENTE adota ao
     ---- chegar -- AIBehavior:EndMovement (AIBehaviors.lua:199) faz
     ---- unit:DoChangeStance(StancesList[stance_idx]) do proprio ai_destination.
@@ -77,9 +164,11 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
 
     local tbl = context.enemies or empty_table
 
-    ----
+    ---- MEDIA PONDERADA: `score` acumula cover_i * w_i e `total_weight` acumula w_i.
+    ---- Com ScalePerDistance desligado todo w_i e 100 e o resultado e identico a media
+    ---- simples antiga -- a ponderacao e uma generalizacao estrita, nao um regime novo.
     local table_num = 0 -- #tbl
-    local extra_mul = self.ScalePerDistance and extra_score_arg_mul or 100
+    local total_weight = 0
     ----
 
     ---- PERF (C9): estas tabelas eram alocadas em TODA avaliacao de destino,
@@ -102,6 +191,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         if visible then
             table_num = table_num + 1
             local cover_score = 0
+            local weight = 100
 
             if self.SimpleGetCover then
                 local cover = GetCoverFrom(dest, context.enemy_pack_pos_stance[enemy])
@@ -109,8 +199,8 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
                                                        grid_voxel, enemy)
 
             else
-                cover_score = self:GetCoverScore(context, enemy, context.unit, dest, nil,
-                                                 grid_voxel, ustance)
+                cover_score, weight = self:GetCoverScore(context, enemy, context.unit, dest, nil,
+                                                         grid_voxel, ustance)
                 -- table.insert(debugforpos_simple, {enemy.session_id, cover_score})
             end
 
@@ -118,7 +208,9 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
                 table.insert(debugforpos, {enemy.session_id, cover_score})
             end
 
-            score = score + cover_score
+            weight = weight or 100
+            score = score + cover_score * weight
+            total_weight = total_weight + weight
         end
     end
 
@@ -132,8 +224,11 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
                                                          dest, last_pos)
             -- table.insert(debugforpos_simple, {"last_pos", cover_score})
 
+            ---- peso cheio: quando nao ha inimigo visivel, esta e a unica informacao
+            ---- que existe -- nao faz sentido descontar nada dela
             table_num = table_num + 1
-            score = score + cover_score
+            total_weight = total_weight + 100
+            score = score + cover_score * 100
         end
     end
 
@@ -148,7 +243,46 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
 
     -----------------------
 
-    return MulDivRound(score / Max(1, table_num), extra_mul, 100)
+    ---- Sigma w == 0: todo mundo visivel esta fora de alcance, ou nao e o tipo de
+    ---- ameaca que cobertura resolve. Neutro -- a policy nao tem opiniao sobre este
+    ---- tile, em vez de fingir que ele e ruim.
+    if total_weight <= 0 then
+        return 0
+    end
+
+    ---- media ponderada: "que fracao da ameaca apontada para mim eu neutralizo"
+    local avg = MulDivRound(score, 1, total_weight)
+
+    ---------------------------------------------------------------------------------------
+    ---- COBERTURA RELATIVA A AMEACA
+    ----
+    ---- A media acima e INTENSIVA: e uma razao, entao a escala dos pesos cancela. Um
+    ---- inimigo sozinho a 99% do alcance dele (peso 12) com cobertura total devolve os
+    ---- mesmos 100 de um inimigo colado (peso 100) com cobertura total. A Threat
+    ---- Exposure, que soma os pesos em vez de fazer media, e EXTENSIVA e devolveria -4
+    ---- e -33 nesses dois casos. Dai um tile distante marcar 100 de cobertura contra
+    ---- -4 de exposicao: a distancia cancela numa policy e nao cancela na outra.
+    ----
+    ---- `presence` recoloca a escala: quanta ameaca existe aqui, 0..100, na MESMA
+    ---- normalizacao da Threat Exposure. Multiplicar a media por ela transforma
+    ----     SOMA(c_i * w_i) / SOMA(w_i)        (intensiva)
+    ---- em
+    ----     SOMA(c_i * w_i) / saturacao        (extensiva)
+    ---- que e literalmente "quanta ameaca eu neutralizei", comparavel ponto a ponto com
+    ---- o que a exposicao subtrai.
+    ----
+    ---- ThreatRelative interpola entre as duas leituras em vez de obrigar a escolher.
+    ---------------------------------------------------------------------------------------
+    local rel = Clamp(self.ThreatRelative or 0, 0, 100)
+    if rel > 0 then
+        local saturation = 100 * Max(1, RATOAI_ThreatSaturation)
+        local presence = Clamp(MulDivRound(total_weight, 100, saturation), 0, 100)
+        ---- rel=0 -> fator 100 (nada muda); rel=100 -> fator = presence
+        local factor = (100 - rel) + MulDivRound(rel, presence, 100)
+        avg = MulDivRound(avg, factor, 100)
+    end
+
+    return avg
 end
 
 --- Not really used right now
@@ -158,24 +292,34 @@ function AIPolicyCustomSeekCover:SimpleGetCoverScore(context, cover_score, dest,
         return cover_score
     end
 
-    local new_pos, dist
-    if self.ScalePerDistance and cover_score > 0 then
-        new_pos = RATOAI_UnpackPos(dest)
-        new_pos = IsValidZ(new_pos) and new_pos or new_pos:SetTerrainZ()
-        local enemy_pos = IsValid(enemy) and enemy:GetPos() or enemy
-        new_pos = IsValidZ(enemy_pos) and enemy_pos or enemy_pos:SetTerrainZ()
-
-        if enemy_pos then
-            dist = Max(min_dist, new_pos:Dist(enemy_pos))
-            local range = max_range * const.Scale.AP
-            ---- BUGFIX (B7): era
-            ----   100 - ((Min(range, dist) * 1.00) / (range * 1.00)) * (100 * distance_impact)
-            local ratio = 100 - MulDivRound(Min(range, dist), distance_impact, range)
-
-            cover_score = MulDivRound(cover_score, ratio, 100)
-        end
-
-    end
+    ---- DESATIVADO. Este era o escalonamento por distancia antigo, e ele nao pode mais
+    ---- rodar atras do `ScalePerDistance` agora que a flag mudou de significado (peso no
+    ---- denominador) e passou a vir ligada por default -- senao a distancia entraria na
+    ---- conta duas vezes. Ficam registrados os dois defeitos dele, para quem for
+    ---- reativar o caminho SimpleGetCover algum dia:
+    ----
+    ----   1. `new_pos` era sobrescrito por `enemy_pos` na linha seguinte, entao o
+    ----      `new_pos:Dist(enemy_pos)` media a distancia do inimigo ate ele mesmo -- 0
+    ----      sempre. O `dist` caia no `min_dist` e o ratio era constante.
+    ----   2. `range = max_range * const.Scale.AP` mistura escala de AP com escala de
+    ----      distancia; o `dist` do outro lado esta em unidades de mundo.
+    ----
+    ---- Este caminho continua sem ponderacao: devolve peso 100 e entra na media como
+    ---- todos os outros. E dormente (0 de 21 instancias ligam SimpleGetCover).
+    ----
+    -- local new_pos, dist
+    -- if self.ScalePerDistance and cover_score > 0 then
+    --     new_pos = RATOAI_UnpackPos(dest)
+    --     new_pos = IsValidZ(new_pos) and new_pos or new_pos:SetTerrainZ()
+    --     local enemy_pos = IsValid(enemy) and enemy:GetPos() or enemy
+    --     new_pos = IsValidZ(enemy_pos) and enemy_pos or enemy_pos:SetTerrainZ()
+    --     if enemy_pos then
+    --         dist = Max(min_dist, new_pos:Dist(enemy_pos))
+    --         local range = max_range * const.Scale.AP
+    --         local ratio = 100 - MulDivRound(Min(range, dist), distance_impact, range)
+    --         cover_score = MulDivRound(cover_score, ratio, 100)
+    --     end
+    -- end
 
     if self.ExposedAtCloseRange_Score ~= 0 and cover_score <= 0 and context.enemy_grid_voxel[enemy] and
         grid_voxel then
@@ -214,6 +358,13 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     local valid_enemy = enemy and not (enemy:IsDead() or enemy:IsDowned())
     local score = not valid_enemy and self.BaseScore or 0
 
+    ---- Peso deste inimigo na media (2o retorno). Com a rampa desligada todo mundo
+    ---- pesa 100 e a media volta a ser a simples de antes.
+    ---- Peso 0 = "cobertura nao responde a esta ameaca", e nao "esta ameaca e boa":
+    ---- ele sai do denominador em vez de puxar a media pra cima.
+    local ramp = self.ScalePerDistance
+    local weight = ramp and 0 or 100
+
     local target_pos = target_pos or dest and RATOAI_UnpackPos(dest) or unit:GetPos()
     local att_pos = enemy and enemy:GetPos()
     target_pos = RATOAI_ValidatePosZ(target_pos)
@@ -229,9 +380,15 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
         distance_to_check_lack_of_cover = weapon and is_firearm and weapon.WeaponRange or
                                               distance_to_check_lack_of_cover
 
+        local range = distance_to_check_lack_of_cover * const.SlabSizeX
+
         if not is_firearm then
+            ---- cobertura nao protege de corpo a corpo: peso 0, fica fora da media
             score = self.BaseScore
-        elseif dist <= distance_to_check_lack_of_cover * const.SlabSizeX then
+        elseif dist <= range then
+            if ramp then
+                weight = RATOAI_ThreatRamp(dist, range)
+            end
 
             if not stance and dest then
                 local _, _, _, dest_stance_idx = stance_pos_unpack(dest)
@@ -258,7 +415,7 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
         end
     end
 
-    return score
+    return score, weight
 end
 
 ---- `target_stance` e a postura de QUEM SE PROTEGE (o 3o parametro de
@@ -272,8 +429,8 @@ function RATOAI_CoverCTH(attacker_pos, target_pos, target_stance)
     local exposed_value = prone_cover_CTH:ResolveValue("ExposedCover")
     local full_value = prone_cover_CTH:ResolveValue("Cover")
 
-    local cover, any, coverage = GetCoverPercentage(target_pos, attacker_pos, target_stance or
-                                                        "Crouch")
+    local cover, any, coverage = GetCoverPercentage(target_pos, attacker_pos,
+                                                    target_stance or "Crouch")
 
     -- if CheckSightCondition(attacker, target, const.usObscured) then
     -- 	exposed_value = exposed_value + const.EnvEffects.DustStormCoverCTHPenalty
