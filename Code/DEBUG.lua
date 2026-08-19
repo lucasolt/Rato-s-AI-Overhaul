@@ -66,18 +66,20 @@ function IModeAIDebug:GetVoxelRolloverText()
 
     end
 
-    if dest and self.ai_context.dest_custom_seek_cover_debug[dest] then
-
-        text = text .. "\n\nCustom Seek Cover Policy Debug:\n"
-        text = text .. "  " .. self.ai_context.dest_custom_seek_cover_debug[dest] .. "\n"
-
+    ---- so existe com RATOAI_SeekCoverDebug ligado
+    local cover_dbg = self.ai_context.dest_custom_seek_cover_debug
+    if dest and cover_dbg and cover_dbg[dest] then
+        text = text .. "\n\nCustom Seek Cover Policy Debug:\n" .. cover_dbg[dest] .. "\n"
     end
 
-    if dest and self.ai_context.dest_custom_seek_cover_simple_debug[dest] then
-
-        text = text .. "\n\nCustom Seek Cover Policy Debug (Simple):\n"
-        text = text .. "  " .. self.ai_context.dest_custom_seek_cover_debug[dest] .. "\n"
-
+    ---- Este bloco imprimia `dest_custom_seek_cover_debug` -- o mesmo texto do
+    ---- bloco de cima, duplicado -- em vez da tabela `_simple_`. Nada escreve na tabela
+    ---- simple hoje (o `table.insert(debugforpos_simple, ...)` da policy esta comentado),
+    ---- entao o bloco fica dormente ate alguem reativar aquele caminho.
+    local cover_simple_dbg = self.ai_context.dest_custom_seek_cover_simple_debug
+    if dest and cover_simple_dbg and cover_simple_dbg[dest] then
+        text = text .. "\n\nCustom Seek Cover Policy Debug (Simple):\n" ..
+                   cover_simple_dbg[dest] .. "\n"
     end
 
     ---- so existe com RATOAI_ThreatDebug ligado

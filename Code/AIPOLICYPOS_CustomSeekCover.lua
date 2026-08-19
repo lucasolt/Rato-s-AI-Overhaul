@@ -89,7 +89,29 @@ local pb_range = const.Weapons.PointBlankRange * const.SlabSizeX
 local close_range_mul_penalty_mul = 75
 local medium_range_penalty_mul = 40
 
-local debug = Platform.developer and Platform.cheats and true
+---------------------------------------------------------------------------------------------------
+---- DIAGNOSTICO
+----
+---- `RATOAI_SeekCoverDebug = true` no console faz cada destino guardar o passo a passo em
+---- context.dest_custom_seek_cover_debug[dest], que o DEBUG.lua mostra no rollover do
+---- voxel. Mesmo idioma do `RATOAI_ThreatDebug` da AIPolicyThreatExposure, de proposito:
+---- as duas policies so se leem juntas -- o que sobra entre elas vive na media ponderada,
+---- e conferir a media exige ver os DOIS lados com os mesmos pesos na mao.
+----
+---- Antes o gate era `Platform.developer and Platform.cheats`, avaliado UMA vez no load:
+---- em build de dev construia string para TODO destino do raio de busca, sem chave para
+---- desligar, e imprimia so `id = cover_score` -- sem o peso, que e justamente o termo
+---- que fecha a conta. Agora e uma global lida por avaliacao, default desligada.
+---- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_SeekCoverDebug") == nil then
+    RATOAI_SeekCoverDebug = false
+end
+
+---- distancia em tiles, para o overlay
+local function dbg_tiles(d)
+    return d and MulDivRound(d, 1, const.SlabSizeX) or "?"
+end
 
 ---- APOSENTADO: existia so para compensar o encolhimento do ScalePerDistance antigo,
 ---- que pesava o NUMERADOR e deixava o denominador contando cabecas -- media encolhida,
@@ -137,6 +159,13 @@ function AIPolicyCustomSeekCover:GetEditorView()
     return "Custom Seek Cover"
 end
 
+---- Ponto unico de escrita do overlay. A tabela ja nasce em AICreateContext; criada aqui
+---- tambem para a policy nao depender da ordem de carga.
+function AIPolicyCustomSeekCover:StoreDebug(context, dest, txt)
+    context.dest_custom_seek_cover_debug = context.dest_custom_seek_cover_debug or {}
+    context.dest_custom_seek_cover_debug[dest] = txt
+end
+
 function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     local score = 0
 
@@ -153,6 +182,9 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- `false` = o motor checou e ninguem ve; `nil` = destino que nunca entrou na
     ---- batelada do AIUpdateDestLosCache, e nesse caso seguimos avaliando normalmente.
     if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false then
+        if RATOAI_SeekCoverDebug then
+            self:StoreDebug(context, dest, "PORTAO LOS: nenhum inimigo enxerga este dest -> 0")
+        end
         return score
     end
 
@@ -175,10 +207,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- mesmo com debug desligado. Esta e uma politica OptLoc (20 usos em
     ---- items.lua), entao rodava sobre todos os destinos do raio de busca.
     ---- `debugforpos_simple` nao tinha sequer um uso ativo -- removida.
-    local debugforpos
-    if debug then
-        debugforpos = {}
-    end
+    local dbg = RATOAI_SeekCoverDebug and {} or nil
 
     for _, enemy in ipairs(tbl) do
         local visible = true
@@ -192,25 +221,39 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
             table_num = table_num + 1
             local cover_score = 0
             local weight = 100
+            local e_dist, e_range, why
 
             if self.SimpleGetCover then
                 local cover = GetCoverFrom(dest, context.enemy_pack_pos_stance[enemy])
                 cover_score = self:SimpleGetCoverScore(context, self.CoverScores[cover] or 0, dest,
                                                        grid_voxel, enemy)
-
+                why = "SimpleGetCover (sem rampa)"
             else
-                cover_score, weight = self:GetCoverScore(context, enemy, context.unit, dest, nil,
-                                                         grid_voxel, ustance)
-                -- table.insert(debugforpos_simple, {enemy.session_id, cover_score})
-            end
-
-            if debug then
-                table.insert(debugforpos, {enemy.session_id, cover_score})
+                cover_score, weight, e_dist, e_range, why =
+                    self:GetCoverScore(context, enemy, context.unit, dest, nil, grid_voxel, ustance)
             end
 
             weight = weight or 100
             score = score + cover_score * weight
             total_weight = total_weight + weight
+
+            if dbg then
+                if weight == 0 then
+                    dbg[#dbg + 1] = string.format(
+                                        "  %s: %st / alcance %st -> peso 0 (%s) -- FORA da media",
+                                        tostring(enemy.session_id), tostring(dbg_tiles(e_dist)),
+                                        tostring(dbg_tiles(e_range)), tostring(why))
+                else
+                    dbg[#dbg + 1] = string.format(
+                                        "  %s: %st / alcance %st -> peso %d | cobertura %d (%s)" ..
+                                            " | c*w %d", tostring(enemy.session_id),
+                                        tostring(dbg_tiles(e_dist)), tostring(dbg_tiles(e_range)),
+                                        weight, cover_score, tostring(why), cover_score * weight)
+                end
+            end
+        elseif dbg then
+            dbg[#dbg + 1] = string.format("  %s: PULADO (nao visivel, modo %s)",
+                                          tostring(enemy.session_id), tostring(self.visibility_mode))
         end
     end
 
@@ -229,29 +272,37 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
             table_num = table_num + 1
             total_weight = total_weight + 100
             score = score + cover_score * 100
+
+            if dbg then
+                dbg[#dbg + 1] = string.format("  last_known_enemy_pos: peso 100 (cheio)" ..
+                                                  " | cobertura %d | c*w %d", cover_score,
+                                              cover_score * 100)
+            end
+        elseif dbg then
+            dbg[#dbg + 1] = "  last_known_enemy_pos: nao ha posicao conhecida"
         end
     end
-
-    ---------------------- Debug
-    if debug then
-        local dbg_txt = ""
-        for _, v in ipairs(debugforpos) do
-            dbg_txt = dbg_txt .. v[1] .. " = " .. v[2] .. " \n"
-        end
-        context.unit.ai_context.dest_custom_seek_cover_debug[dest] = dbg_txt
-    end
-
-    -----------------------
 
     ---- Sigma w == 0: todo mundo visivel esta fora de alcance, ou nao e o tipo de
     ---- ameaca que cobertura resolve. Neutro -- a policy nao tem opiniao sobre este
     ---- tile, em vez de fingir que ele e ruim.
     if total_weight <= 0 then
+        if dbg then
+            dbg[#dbg + 1] = "  SOMA(w) = 0 -> ninguem que cobertura resolva alcanca este tile"
+            dbg[#dbg + 1] = "  EvalDest 0"
+            self:StoreDebug(context, dest, self:FormatDebugHeader(context, ustance) .. "\n" ..
+                                table.concat(dbg, "\n"))
+        end
         return 0
     end
 
     ---- media ponderada: "que fracao da ameaca apontada para mim eu neutralizo"
     local avg = MulDivRound(score, 1, total_weight)
+
+    if dbg then
+        dbg[#dbg + 1] = string.format("  SOMA(c*w) %d / SOMA(w) %d -> media %d", score,
+                                      total_weight, avg)
+    end
 
     ---------------------------------------------------------------------------------------
     ---- COBERTURA RELATIVA A AMEACA
@@ -280,9 +331,38 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         ---- rel=0 -> fator 100 (nada muda); rel=100 -> fator = presence
         local factor = (100 - rel) + MulDivRound(rel, presence, 100)
         avg = MulDivRound(avg, factor, 100)
+
+        if dbg then
+            dbg[#dbg + 1] = string.format("  presence = %d*100/%d = %d%s | ThreatRelative %d" ..
+                                              " -> factor %d", total_weight, saturation, presence,
+                                          (MulDivRound(total_weight, 100, saturation) > 100) and
+                                              " (CLAMPADO)" or "", rel, factor)
+        end
+    elseif dbg then
+        dbg[#dbg + 1] = "  ThreatRelative 0 -> cobertura ABSOLUTA, media entra crua"
+    end
+
+    if dbg then
+        ---- o Weight nao e aplicado aqui: quem multiplica e o AIScoreDest. Mostrado para
+        ---- o numero do overlay bater com a linha "Custom Seek Cover" do Voxel score.
+        dbg[#dbg + 1] = string.format("  EvalDest %d  (x Weight %d%% = %d no AIScoreDest)", avg,
+                                      self.Weight or 100, MulDivRound(avg, self.Weight or 100, 100))
+        self:StoreDebug(context, dest, self:FormatDebugHeader(context, ustance) .. "\n" ..
+                            table.concat(dbg, "\n"))
     end
 
     return avg
+end
+
+---- Cabecalho do overlay: os parametros que decidem como as linhas por inimigo se
+---- combinam. Sem isto nao da para saber se a media veio ponderada ou nao.
+function AIPolicyCustomSeekCover:FormatDebugHeader(context, ustance)
+    return string.format("stance %s | BaseScore %d | ThreatRelative %d | ScalePerDistance %s" ..
+                             " | saturacao %d | Weight %d | %d inimigos em context.enemies",
+                         tostring(ustance), self.BaseScore or 0, self.ThreatRelative or 0,
+                         self.ScalePerDistance and "on" or "OFF (todo peso = 100)",
+                         100 * Max(1, RATOAI_ThreatSaturation), self.Weight or 100,
+                         #(context.enemies or empty_table))
 end
 
 --- Not really used right now
@@ -365,6 +445,11 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     local ramp = self.ScalePerDistance
     local weight = ramp and 0 or 100
 
+    ---- so para o overlay (RATOAI_SeekCoverDebug): alcance considerado e por que este
+    ---- inimigo pesou o que pesou. Nao participa de conta nenhuma.
+    local dbg_range
+    local why = valid_enemy and "sem cobertura" or "abatido/morto"
+
     local target_pos = target_pos or dest and RATOAI_UnpackPos(dest) or unit:GetPos()
     local att_pos = enemy and enemy:GetPos()
     target_pos = RATOAI_ValidatePosZ(target_pos)
@@ -382,9 +467,12 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
 
         local range = distance_to_check_lack_of_cover * const.SlabSizeX
 
+        dbg_range = range
+
         if not is_firearm then
             ---- cobertura nao protege de corpo a corpo: peso 0, fica fora da media
             score = self.BaseScore
+            why = "corpo a corpo -- cobertura nao se aplica"
         elseif dist <= range then
             if ramp then
                 weight = RATOAI_ThreatRamp(dist, range)
@@ -400,7 +488,20 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
             if use then
                 local ratio = Clamp(MulDivRound(value, 100, cover_max_malus), 0, 100)
                 score = MulDivRound(self.BaseScore, ratio, 100)
+                why = string.format("CTH %d/%d", value, cover_max_malus)
+            else
+                ---- InterpolateCoverEffect devolveu `exposed_value`: coberto de menos para
+                ---- registrar. Nao e meia cobertura, e zero.
+                why = "coberto de menos (coverage abaixo do minimo)"
             end
+
+            ---- por ultimo: quem manda na linha do overlay e o motivo do PESO, nao o da
+            ---- cobertura -- peso 0 tira o inimigo da media independente da cobertura
+            if weight == 0 then
+                why = "no limite do alcance (rampa = 0)"
+            end
+        else
+            why = "fora de alcance"
         end
     end
 
@@ -413,9 +514,12 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
         elseif dist <= pb_range * 3 then
             score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
         end
+        if score < 0 then
+            why = "exposto a curta distancia"
+        end
     end
 
-    return score, weight
+    return score, weight, dist, dbg_range, why
 end
 
 ---- `target_stance` e a postura de QUEM SE PROTEGE (o 3o parametro de

@@ -296,18 +296,13 @@ return {
 						'Weight', 150,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
-						'ThreatRelative', 40,
+						'ThreatRelative', 100,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 50,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'MeleeRange', 3,
-					}),
-					PlaceObj('AIPolicyDistanceFromStart', {
-						'Weight', 50,
-						'Away', false,
-						'Distance', 10,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -337,15 +332,9 @@ return {
 				'RangeMax', 60,
 				'Falloff', 6,
 				'WeightFalloff', "linear",
-				'RequireLOS', true,
 			}),
-			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 40,
-				'ThreatRelative', 100,
-			}),
-			PlaceObj('AIPolicyThreatExposure', {
-				'Weight', 40,
-			}),
+			PlaceObj('AIPolicyThreatExposure', nil),
+			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
