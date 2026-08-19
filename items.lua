@@ -287,7 +287,6 @@ return {
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		BaseAttackTargeting = set( "Torso" ),
-		BaseMovementWeight = 50,
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
@@ -438,7 +437,6 @@ return {
 				'action_id', "Overwatch",
 			}),
 			PlaceObj('AIActionMobileShot', {
-				'Weight', 160,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return MobileAttack_CustomScoring(self, context)
@@ -446,7 +444,6 @@ return {
 				'action_id', "RunAndGun",
 			}),
 			PlaceObj('AIActionMobileShot', {
-				'Weight', 160,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return MobileAttack_CustomScoring(self, context)
@@ -454,7 +451,6 @@ return {
 			}),
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "",
-				'Weight', 50,
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
@@ -463,6 +459,7 @@ return {
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow",
+				'Weight', 200,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "AssaultGrenadeThrow",
@@ -476,28 +473,13 @@ return {
 				},
 				'self_score_mod', -1000,
 				'min_score', 100,
-				'EnemyPreparedAttackScore', 100,
-				'MinDist', 6000,
-				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
-			}),
-			PlaceObj('AIActionThrowGrenade', {
-				'BiasId', "AssaultGrenadeThrow200",
-				'Weight', 200,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "AssaultGrenadeThrow200",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'self_score_mod', -1000,
+				'enemy_cover_mod', 50,
 				'EnemyPreparedAttackScore', 100,
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "SmokeGrenade",
-				'Weight', 200,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "SmokeGrenade",
@@ -513,14 +495,13 @@ return {
 				'enemy_score', -50,
 				'team_score', 100,
 				'self_score_mod', 100,
-				'min_score', 100,
+				'min_score', 150,
 				'AllyThreatenedScore', 200,
 				'MinDist', 0,
 				'AllowedAoeTypes', set( "smoke" ),
 			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
-				'Weight', 200,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "FlareThrow",
@@ -567,9 +548,6 @@ return {
 				'MinDist', 7000,
 				'LimitRange', true,
 				'MaxTargetRange', 35,
-			}),
-			PlaceObj('AIActionCharge', {
-				'DestPreference', "nearest",
 			}),
 		},
 		TargetScoreRandomization = 10,
