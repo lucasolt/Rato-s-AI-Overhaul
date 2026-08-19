@@ -453,6 +453,7 @@ return {
 			}),
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "",
+				'Weight', 90,
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
@@ -495,7 +496,7 @@ return {
 					}),
 				},
 				'enemy_score', -50,
-				'team_score', 100,
+				'team_score', 5,
 				'self_score_mod', 100,
 				'min_score', 150,
 				'AllyThreatenedScore', 200,
