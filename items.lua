@@ -290,9 +290,10 @@ return {
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
+				'OptLocWeight', 80,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
+						'Weight', 300,
 					}),
 					PlaceObj('AIPolicyCustomFlanking', {
 						'Weight', 30,
@@ -305,6 +306,11 @@ return {
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', nil),
+					PlaceObj('AIPolicyCustomWeaponRange', {
+						'Mode', "target",
+						'RangeMin', 40,
+						'RangeMax', 50,
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),

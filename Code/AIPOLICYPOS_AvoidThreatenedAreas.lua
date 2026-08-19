@@ -49,22 +49,45 @@ function AIFindDestinations(unit, context)
     local crouch_idx = StancesList.Crouch
     local important_dests = context.important_dests or {}
     context.important_dests = important_dests
-    local change_stance_costs = {}
-    for stance_idx in ipairs(StancesList) do
-        change_stance_costs[stance_idx] = GetStanceToStanceAP(StancesList[stance_idx], "Crouch")
-    end
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B11): o dest so virava Crouch se houvesse cobertura ao NORTE, e ainda pagava
+    ---- 1 AP que nunca e gasto de verdade.
+    ----
+    ---- Original (identico ao vanilla, CombatAI.lua:682-703):
+    ----     if cost and ap and ap >= cost then
+    ----         local up, right, down, left = GetCover(x, y, z)
+    ----         if up then
+    ----             local cover_low = up == low or right == low or down == low or left == low
+    ----
+    ---- (a) `if up then` -- GetCover devolve as 4 direcoes, mas so a norte abria o bloco. Muro
+    ----     baixo a leste/oeste/sul => o dest continuava Standing.
+    ----     Isso nao afeta so a postura: `GetCoverPercentage` (Cover.lua:283-285) ZERA cobertura
+    ----     baixa quando target_stance == "Standing", entao o tile era scorado por
+    ----     AIPolicyCustomSeekCover como campo aberto. A IA nem queria ir pra la.
+    ----
+    ---- (b) custo fantasma -- quem aplica a postura no destino e AIBehavior:EndMovement
+    ----     (AIBehaviors.lua:199-210) via unit:DoChangeStance, que NAO cobra AP (Unit.lua:6435).
+    ----     O `move_args.toDoStance` de BeginMovement (AIBehaviors.lua:177) nao e consumido por
+    ----     nenhuma acao Move -- so UnitActions.lua:707 (attack-move do jogador) o le.
+    ----     Ou seja: o plano descontava 1000 AP que a execucao nunca gasta, e esse AP fantasma
+    ----     piorava o dest agachado em AIPolicyAttack_StanceAP e no damage score, fazendo o tile
+    ----     em pe ganhar a roleta de AIScoreReachableVoxels.
+    ----
+    ---- Com (b), a tabela `change_stance_costs` (3 chamadas a GetStanceToStanceAP por unidade)
+    ---- virou codigo morto e foi removida junto.
+    ---------------------------------------------------------------------------------------------
     -- preprocess destinations to find those where we need to change stance at the dest to take cover
     local low = const.CoverLow
     -- local high = const.CoverHigh
     for i, dest in ipairs(destinations) do
         local x, y, z, stance_idx = stance_pos_unpack(dest)
         if stance_idx ~= crouch_idx then
-            local cost = change_stance_costs[stance_idx]
             local ap = dest_ap[dest]
-            if cost and ap and ap >= cost then
+            if ap then
                 local up, right, down, left = GetCover(x, y, z)
-                if up then
+                ---- BUGFIX (B11a): qualquer direcao, nao so a norte
+                if up or right or down or left then
                     local cover_low = up == low or right == low or down == low or left == low
                     -- local cover_high = up == high or right == high or down == high or left == high
                     if cover_low then -- and not cover_high then
@@ -72,7 +95,8 @@ function AIFindDestinations(unit, context)
                         local new_dest = stance_pos_pack(x, y, z, crouch_idx)
                         destinations[i] = new_dest
                         voxel_to_dest[point_pack(x, y, z)] = new_dest
-                        dest_ap[new_dest] = ap - cost
+                        ---- BUGFIX (B11b): sem debito -- EndMovement aplica de graca
+                        dest_ap[new_dest] = ap
                         dest_path[new_dest] = dest_path[dest]
                         table.insert_unique(important_dests, new_dest)
                     end

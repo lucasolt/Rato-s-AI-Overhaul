@@ -6,7 +6,18 @@ function AITakeCover(unit, context)
     end
     ---------------
 
-    if unit:HasPreparedAttack() or not context or (context.ap_after_signature or 0 <= 0) then
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B12): a funcao inteira era um no-op por precedencia de operador.
+    ----
+    ---- Original:  (context.ap_after_signature or 0 <= 0)
+    ---- Vanilla:   ((context.ap_after_signature or 0) <= 0)   -- CombatAI.lua:511
+    ----
+    ---- Em Lua `<=` liga mais forte que `or`, entao a expressao era
+    ----     context.ap_after_signature or (0 <= 0)  ==  X or true
+    ---- sempre verdadeira -> AITakeCover retornava sempre, e o StanceCrouch gratuito do fim da
+    ---- ativacao (linha final) nunca rodava.
+    ---------------------------------------------------------------------------------------------
+    if unit:HasPreparedAttack() or not context or ((context.ap_after_signature or 0) <= 0) then
         return
     end
     local cover_high, cover_low = GetCoverTypes(unit)

@@ -14,6 +14,8 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B5 | ✅ aplicado | `FUNCTION_getAISoldierFlankingBehaviorSelectionScore.lua` |
 | B6 | ✅ aplicado | `FUNCTION_SignaturesCustomScoring.lua` (`PenaltyScale`) |
 | B7 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua`, `AIPOLICYPOS_CustomFlanking.lua`, `AIPOLICYPOS_CustomSeekCover.lua`, os dois `getAI*BehaviorSelectionScore` |
+| B11 | ✅ aplicado | `AIPOLICYPOS_AvoidThreatenedAreas.lua` (o override de `AIFindDestinations`) |
+| B12 | ✅ aplicado | `SOURCE_AITakeCover.lua` |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -318,6 +320,41 @@ dist * 1.00 / range      ->  MulDivRound(100, dist, range)
 
 Independente de desync, `MulDivRound` também evita que scores fracionários entrem em comparações
 de threshold de forma imprevisível.
+
+---
+
+### 🔴 B11 — A IA não valorizava cobertura baixa (e por isso não se agachava)
+
+`AIPOLICYPOS_AvoidThreatenedAreas.lua` (o override de `AIFindDestinations`). A conversão de dest
+`Standing` → `Crouch` em tile com cobertura baixa é o **único** ponto onde a postura final é
+decidida — todo o scoring depois dela já é stance-aware (`SOURCE_AIScoreDest.lua:3-9`,
+`AIPOLICYPOS_CustomSeekCover.lua:393-399`, `SOURCE_AIPrecalcDamageScore.lua:178-210`).
+
+**(a) `if up then`** — `GetCover` devolve as 4 direções, mas só a norte abria o bloco. Muro baixo
+a leste/oeste/sul e o dest continuava `Standing`. O efeito não é só cosmético: `GetCoverPercentage`
+(`Cover.lua:283-285`) **zera** cobertura baixa quando `target_stance == "Standing"`, então
+`AIPolicyCustomSeekCover` scorava o tile como campo aberto. A IA nem queria ir para lá.
+
+**(b) custo fantasma** — o plano descontava 1000 AP (`dest_ap[new_dest] = ap - cost`), mas quem
+aplica a postura é `AIBehavior:EndMovement` (`AIBehaviors.lua:199-210`) via `unit:DoChangeStance`,
+que **não cobra AP** (`Unit.lua:6435`). O `move_args.toDoStance` de `BeginMovement`
+(`AIBehaviors.lua:177`) não é lido por nenhuma ação `Move`. Esse AP fantasma penalizava o dest
+agachado em `AIPolicyAttack_StanceAP` e no damage score, fazendo o tile em pé ganhar a roleta de
+`AIScoreReachableVoxels`.
+
+Ambos corrigidos. Cobertura **alta** continua sem converter (de propósito: em pé atrás de muro alto
+já se tem cobertura total, e agachar custaria LOF).
+
+### 🔴 B12 — `AITakeCover` era um no-op inteiro
+
+`SOURCE_AITakeCover.lua:9`. `(context.ap_after_signature or 0 <= 0)` — em Lua `<=` liga mais forte
+que `or`, então a expressão é `X or (0 <= 0)` = sempre verdadeira, e a função retornava sempre.
+O vanilla (`CombatAI.lua:511`) tem os parênteses no lugar: `((context.ap_after_signature or 0) <= 0)`.
+Isso matava o `StanceCrouch` gratuito de fim de ativação, que é a rede de segurança para quem chegou
+num tile de cobertura por outra policy.
+
+Continua valendo o gate próprio do mod na linha 4 (`shooting_stance`), e o do vanilla:
+`ap_after_signature` só é preenchido quando rodou uma signature action (`CombatAI.lua:256`).
 
 ---
 
