@@ -17,6 +17,7 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B11 | ✅ aplicado | `AIPOLICYPOS_AvoidThreatenedAreas.lua` (o override de `AIFindDestinations`) |
 | B12 | ✅ aplicado | `SOURCE_AITakeCover.lua` |
 | B13 | ✅ aplicado | `SOURCE_AIScoreReachableVoxels.lua` |
+| B14 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -403,6 +404,55 @@ Distância direta como substituta da distância de caminho tem precedente no pr�
 Nada disso quebra nada; só limpa o mapa mental.
 
 ---
+
+### 🔴 B14 — O ramo antecipado de `AICalcAttacksAndAim` não descontava o custo de stance
+
+`AICalcAttacksAndAim` tem um retorno antecipado para quando não há nível de mira a
+conquistar:
+
+```lua
+if not has_stance_ap or to_reach_desired_aim_level <= 0 then
+    local num_atks = Min(context.max_attacks, (ap / cost))   -- AP CRU
+```
+
+O `stance_cost` (entrar em shooting stance + o nível de mira que vem junto) era cobrado
+no orçamento — `min_aim` subia para 1, e a CTH passava a ser de **snapshot** em vez de
+hipfire — mas **não era subtraído do AP** na hora de contar disparos. O caminho normal
+desconta certinho (`first_atk_cost = stance_cost + rotation_cost + cost`); só este ramo
+não descontava.
+
+**Quando mordia.** Perto, `GetIdealAimLevels` devolve o próprio `min_aim` (point blank →
+mira mínima; até 45% do effective range → nível 1, que já é o mínimo quando há stance).
+Aí `to_reach_desired_aim_level` dá 0 e a execução cai neste ramo. A estimativa saía com a
+**contagem de disparos de quem não preparou** e a **CTH de quem preparou**.
+
+O efeito era concentrado, não difuso: destinos colados e com pouco AP restante — ou seja,
+exatamente as posições de aproximação agressiva.
+
+**Medição** (um turno, 5 unidades, com instrumentação temporária):
+
+| unidade | ocorrências | pior caso | disparos inflados |
+|---|---|---|---|
+| LegionGoon:452 | 12 | 1 | 12 |
+| LegionRaider:457 | 8 | 2 | 11 |
+| LegionRaider:454 | 5 | 1 | 5 |
+| LegionRaidLeader:453 | 3 | 1 | 3 |
+| LegionRaider:462 | 1 | 2 | 2 |
+| **total** | **29** | **2** | **33** |
+
+Distância 1–9 tiles, AP no destino 4–17, custo de stance observado 2 AP (×11), 3 AP
+(×14), 4 AP (×3) — a severidade escala com o peso da arma.
+
+Em score: `conta 2, deveria 1` dobra o `hit_score` do destino. Com CTH ~60 por disparo e
+`AIPolicyDealDamage` no modo `cap` (MaxHits 200, Weight 150), isso é ~90 contra ~45 — um
+swing da ordem de grandeza do peso inteiro da `AIPolicyThreatExposure`.
+
+**Lacuna que permanece.** A IA nunca *escolhe* hipfire: `stance_cost` só é zerado quando
+falta AP, nunca por decisão. Dentro de ~7–8 tiles, largar a preparação e disparar mais
+rende mais acertos esperados (a penalidade de hipfire é linear e só é severa longe:
+−123×d/28 contra −61×d/40 do snapshot). Antes deste conserto os dois erros se cancelavam
+em parte — ela contava como se hipfirasse. Agora a conta está honesta e a lacuna ficou
+visível, que é o estado certo para decidir se vale implementar a escolha.
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

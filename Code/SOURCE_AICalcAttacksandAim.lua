@@ -122,7 +122,27 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     ------
 
     if not has_stance_ap or to_reach_desired_aim_level <= 0 then
-        local num_atks = Min(context.max_attacks, (ap / cost))
+        ---- BUGFIX (B14): era `ap / cost`, o AP CRU. Este ramo nao descontava o
+        ---- `stance_cost` que a unidade vai pagar para entrar em shooting stance -- o
+        ---- caminho normal desconta (`first_atk_cost = stance_cost + rotation_cost +
+        ---- cost`), so este nao.
+        ----
+        ---- Quando mordia: perto, `GetIdealAimLevels` devolve o proprio `min_aim` (o
+        ---- nivel 1 ja veio junto com a stance), entao `to_reach` da 0 e cai aqui. A
+        ---- estimativa saia com a contagem de disparos de quem NAO preparou e a CTH de
+        ---- quem preparou -- os dois melhores lados, inflando justamente os destinos de
+        ---- aproximacao colada.
+        ----
+        ---- Medido em jogo, um turno, 5 unidades: 29 ocorrencias, 33 disparos inflados,
+        ---- pior caso 2. Concentrado em 1-9 tiles e AP baixo no destino, com severidade
+        ---- proporcional ao custo de stance da arma (2 a 4 AP na amostra).
+        ----
+        ---- `Max(0, ...)`: sem AP para o primeiro disparo depois de preparar, o certo e
+        ---- zero disparos, nao um numero negativo virando teto no `Min`.
+        ----
+        ---- Nota: quando nao ha AP para a stance, `stance_cost` ja e 0 mais acima e esta
+        ---- linha nao muda nada -- o caso do hipfire por falta de AP continua correto.
+        local num_atks = Min(context.max_attacks, Max(0, ap - stance_cost) / cost)
         local aims = {}
         for i = 1, num_atks do
             aims[i] = min_aim
