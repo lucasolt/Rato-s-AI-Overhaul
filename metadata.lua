@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3674,
+	'version', 3680,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -96,9 +96,14 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787178871,
-	'code_hash', 7906437610088487333,
+	'saved', 1787183913,
+	'code_hash', 3915295797294060883,
 	'affected_resources', {
+		PlaceObj('ModResourcePreset', {
+			'Class', "ConstDef",
+			'Id', "RATOAI_ThreatSaturation",
+			'ClassDisplayName', "Constant",
+		}),
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
 			'Id', "Soldier",

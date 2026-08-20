@@ -31,13 +31,13 @@ DefineClass.AIPolicyCustomSeekCover = {
             default = false,
             read_only = false,
             no_edit = false
-        }, {
-            id = "ExposedAtCloseRange_Score",
-            editor = "number",
-            default = 0,
-            read_only = false,
-            no_edit = false
-        },
+        }, -- {
+        --    id = "ExposedAtCloseRange_Score",
+        --    editor = "number",
+        --    default = 0,
+        --    read_only = false,
+        --    no_edit = false
+        -- },
         {
             id = "SimpleGetCover",
             editor = "bool",
@@ -143,7 +143,7 @@ end
 ---- aparece em camada nenhuma do debug. Por isso e uma constante global e nao uma
 ---- propriedade duplicada nas duas classes.
 ---------------------------------------------------------------------------------------------------
-RATOAI_ThreatSaturation = rawget(_G, "RATOAI_ThreatSaturation") or 3
+-- RATOAI_ThreatSaturation = rawget(_G, "RATOAI_ThreatSaturation") or 3
 
 function RATOAI_ThreatRamp(dist, range)
     if not dist or not range or range <= 0 or dist >= range then
@@ -347,8 +347,8 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         ---- o numero do overlay bater com a linha "Custom Seek Cover" do Voxel score.
         dbg[#dbg + 1] = string.format("  EvalDest %d  (x Weight %d%% = %d no AIScoreDest)", avg,
                                       self.Weight or 100, MulDivRound(avg, self.Weight or 100, 100))
-        self:StoreDebug(context, dest, self:FormatDebugHeader(context, ustance) .. "\n" ..
-                            table.concat(dbg, "\n"))
+        self:StoreDebug(context, dest,
+                        self:FormatDebugHeader(context, ustance) .. "\n" .. table.concat(dbg, "\n"))
     end
 
     return avg
@@ -401,19 +401,19 @@ function AIPolicyCustomSeekCover:SimpleGetCoverScore(context, cover_score, dest,
     --     end
     -- end
 
-    if self.ExposedAtCloseRange_Score ~= 0 and cover_score <= 0 and context.enemy_grid_voxel[enemy] and
-        grid_voxel then
-        local x1, y1, z1 = point_unpack(context.enemy_grid_voxel[enemy])
-        local x2, y2, z2 = point_unpack(grid_voxel)
-        if IsCloser(x1, y1, z1, x2, y2, z2, pb_range + 1) then
-            cover_score = self.ExposedAtCloseRange_Score
-        elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 2 + 1) then
-            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul,
-                                      100)
-        elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 3 + 1) then
-            cover_score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
-        end
-    end
+    -- if self.ExposedAtCloseRange_Score ~= 0 and cover_score <= 0 and context.enemy_grid_voxel[enemy] and
+    --    grid_voxel then
+    --    local x1, y1, z1 = point_unpack(context.enemy_grid_voxel[enemy])
+    --    local x2, y2, z2 = point_unpack(grid_voxel)
+    --    if IsCloser(x1, y1, z1, x2, y2, z2, pb_range + 1) then
+    --        cover_score = self.ExposedAtCloseRange_Score
+    --    elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 2 + 1) then
+    --        cover_score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul,
+    --                                  100)
+    --    elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 3 + 1) then
+    --        cover_score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
+    --    end
+    -- end
 
     -- if new_pos then
     --     DbgAddText(enemy.session_id .. " " .. cover_score, new_pos)
@@ -505,19 +505,19 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
         end
     end
 
-    if self.ExposedAtCloseRange_Score ~= 0 and score <= 0 and dist then
-        ---- BUGFIX (B7): era `* 0.5` e `* 0.1` (float).
-        if dist <= pb_range then
-            score = self.ExposedAtCloseRange_Score
-        elseif dist <= pb_range * 2 then
-            score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul, 100)
-        elseif dist <= pb_range * 3 then
-            score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
-        end
-        if score < 0 then
-            why = "exposto a curta distancia"
-        end
-    end
+    -- if self.ExposedAtCloseRange_Score ~= 0 and score <= 0 and dist then
+    --    ---- BUGFIX (B7): era `* 0.5` e `* 0.1` (float).
+    --    if dist <= pb_range then
+    --        score = self.ExposedAtCloseRange_Score
+    --    elseif dist <= pb_range * 2 then
+    --        score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul, 100)
+    --    elseif dist <= pb_range * 3 then
+    --        score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
+    --    end
+    --    if score < 0 then
+    --        why = "exposto a curta distancia"
+    --    end
+    -- end
 
     return score, weight, dist, dbg_range, why
 end

@@ -285,6 +285,11 @@ return {
 		'DisplayName', "Disable Stats Boost for Militia",
 		'Help', "If checked, Militia units will not receive Stats Boost. Restart after applying.",
 	}),
+	PlaceObj('ModItemConstDef', {
+		group = "Default",
+		id = "RATOAI_ThreatSaturation",
+		value = 6,
+	}),
 	PlaceObj('ModItemAIArchetype', {
 		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
@@ -296,12 +301,14 @@ return {
 						'Weight', 150,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
+						'Weight', 300,
 						'ThreatRelative', 100,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 50,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 300,
 						'MeleeRange', 3,
 					}),
 				},
@@ -333,7 +340,6 @@ return {
 				'Falloff', 6,
 				'WeightFalloff', "linear",
 			}),
-			PlaceObj('AIPolicyThreatExposure', nil),
 			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
 		OptLocSearchRadius = 80,
@@ -1216,7 +1222,6 @@ return {
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 80,
-						'ExposedAtCloseRange_Score', -50,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 40,
@@ -1285,7 +1290,6 @@ return {
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 80,
-						'ExposedAtCloseRange_Score', -40,
 					}),
 				},
 				'TakeCoverChance', 100,
@@ -1437,7 +1441,6 @@ return {
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 50,
-						'ExposedAtCloseRange_Score', -40,
 					}),
 					PlaceObj('AIPolicyGrenadeRange', {
 						'Weight', 300,
@@ -2219,7 +2222,6 @@ return {
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'Weight', 300,
-						'ExposedAtCloseRange_Score', -200,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -2299,9 +2301,7 @@ return {
 						'RangeMin', 6,
 						'RangeMax', 10,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'ExposedAtCloseRange_Score', -10,
-					}),
+					PlaceObj('AIPolicyCustomSeekCover', nil),
 				},
 				'TakeCoverChance', 50,
 			}),
@@ -2320,7 +2320,6 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 50,
-				'ExposedAtCloseRange_Score', -10,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyWeaponRange', {
