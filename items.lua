@@ -297,12 +297,14 @@ return {
 				'BiasId', "Standard",
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 150,
-						'Normalization', "tokill",
+						'Weight', 200,
+						'Normalization', "soft",
+						'SkillNormalize', 50,
+						'SkillRefScore', 665,
 					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 200,
+						'Weight', 150,
 						'CoverTrust', 90,
 					}),
 				},
@@ -2580,5 +2582,142 @@ return {
 		comment = "not changed",
 		group = "Lieutenants",
 		id = "TheMajor",
+	}),
+	PlaceObj('ModItemUnitDataCompositeDef', {
+		'Group', "Adonis",
+		'Id', "AdonisStormer_Elite_copy",
+		'object_class', "UnitData",
+		'Health', 80,
+		'Agility', 90,
+		'Dexterity', 75,
+		'Strength', 85,
+		'Wisdom', 80,
+		'Leadership', 20,
+		'Marksmanship', 95,
+		'Mechanical', 50,
+		'Explosives', 38,
+		'Medical', 47,
+		'Portrait', "UI/EnemiesPortraits/AdonisStormer",
+		'Name', T(518513923372, --[[ModItemUnitDataCompositeDef AdonisStormer_Elite_copy Name]] "Shock Assault Elite"),
+		'Randomization', true,
+		'elite', true,
+		'eliteCategory', "Foreigners",
+		'Affiliation', "Adonis",
+		'StartingLevel', 7,
+		'neutral_retaliate', true,
+		'role', "Stormer",
+		'AlwaysUseOpeningAttack', true,
+		'OpeningAttackType', "Overwatch",
+		'PinnedDownChance', 100,
+		'MaxAttacks', 2,
+		'PickCustomArchetype', function (self, proto_context)
+			local enemy, dist = GetNearestEnemy(self)
+			local archetype = self.archetype
+			local weapon_class = "Firearm"
+			
+			if enemy and dist < 8*const.SlabSizeX then
+				weapon_class = "Shotgun"
+				PlayVoiceResponse(self, "AIArchetypeAngry")
+			end
+			
+			if not self:GetActiveWeapons(weapon_class) then
+				AIPlayCombatAction("ChangeWeapon", self, 0)
+			end
+			
+			return archetype
+		end,
+		'CustomEquipGear', function (self, items)
+			self:TryEquip(items, "Handheld A", "Firearm")
+			self:TryEquip(items, "Handheld B", "MeleeWeapon")
+		end,
+		'MaxHitPoints', 50,
+		'StartingPerks', {
+			"InstantAutopsy",
+			"CQCTraining",
+			"Shatterhand",
+		},
+		'AppearancesList', {
+			PlaceObj('AppearanceWeight', {
+				'Preset', "Adonis_Stormer",
+			}),
+		},
+		'Equipment', {
+			"AdonisStormer",
+		},
+		'AdditionalGroups', {
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_1",
+			}),
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_2",
+			}),
+		},
+		'Tier', "Elite",
+		'pollyvoice', "Joey",
+		'gender', "Male",
+		'VoiceResponseId', "AdonisAssault",
+	}),
+	PlaceObj('ModItemUnitDataCompositeDef', {
+		'Group', "Adonis",
+		'Id', "AdonisSquadLeader_copy",
+		'object_class', "UnitData",
+		'Health', 80,
+		'Agility', 90,
+		'Dexterity', 75,
+		'Strength', 85,
+		'Wisdom', 80,
+		'Leadership', 20,
+		'Marksmanship', 95,
+		'Mechanical', 0,
+		'Explosives', 0,
+		'Medical', 25,
+		'Portrait', "UI/EnemiesPortraits/AdonisOfficer",
+		'Name', T(983041429865, --[[ModItemUnitDataCompositeDef AdonisSquadLeader_copy Name]] "Leader"),
+		'Randomization', true,
+		'Affiliation', "Adonis",
+		'StartingLevel', 7,
+		'neutral_retaliate', true,
+		'AIKeywords', {
+			"Control",
+			"Explosives",
+		},
+		'role', "Commander",
+		'AlwaysUseOpeningAttack', true,
+		'OpeningAttackType', "Overwatch",
+		'MaxAttacks', 2,
+		'unitPowerModifier', 75,
+		'MaxHitPoints', 80,
+		'StartingPerks', {
+			"OpportunisticKiller",
+			"AutoWeapons",
+		},
+		'AppearancesList', {
+			PlaceObj('AppearanceWeight', {
+				'Preset', "Adonis_Officer",
+			}),
+		},
+		'Equipment', {
+			"AdonisSquadLeader",
+		},
+		'AdditionalGroups', {
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_1",
+			}),
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_2",
+			}),
+		},
+		'Tier', "Elite",
+		'pollyvoice', "Joey",
+		'gender', "Male",
+		'VoiceResponseId', "AdonisAssault",
 	}),
 }

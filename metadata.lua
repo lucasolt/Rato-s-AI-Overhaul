@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3718,
+	'version', 3752,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -85,6 +85,8 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
 		"Code/SOURCE_AIPolicyDealDamage.lua",
+		"UnitData/AdonisStormer_Elite_copy.lua",
+		"UnitData/AdonisSquadLeader_copy.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
@@ -96,8 +98,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787194477,
-	'code_hash', 9047186030263327306,
+	'saved', 1787199703,
+	'code_hash', 4033735932470682806,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",
@@ -188,6 +190,16 @@ return PlaceObj('ModDef', {
 			'Class', "AIArchetype",
 			'Id', "TheMajor",
 			'ClassDisplayName', "AI Archetype",
+		}),
+		PlaceObj('ModResourcePreset', {
+			'Class', "UnitDataCompositeDef",
+			'Id', "AdonisStormer_Elite_copy",
+			'ClassDisplayName', "Unit",
+		}),
+		PlaceObj('ModResourcePreset', {
+			'Class', "UnitDataCompositeDef",
+			'Id', "AdonisSquadLeader_copy",
+			'ClassDisplayName', "Unit",
 		}),
 	},
 	'steam_id', "3411008594",

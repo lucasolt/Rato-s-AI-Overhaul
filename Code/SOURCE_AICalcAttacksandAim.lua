@@ -1,4 +1,30 @@
 local debug = false
+
+---------------------------------------------------------------------------------------------------
+---- ESCOLHA DE HIPFIRE
+----
+---- Ate aqui a IA nunca ESCOLHIA disparar do quadril: `stance_cost` so era zerado quando
+---- faltava AP. Preparar a arma era automatico sempre que desse, mesmo colado -- e colado
+---- e justamente onde nao compensa, porque a penalidade de hipfire e linear na distancia
+---- (-123 x d/28) e perto ela e quase nula, enquanto o custo de preparar (2 a 4 AP,
+---- medido em jogo) vale 1 a 2 disparos inteiros.
+----
+---- O criterio e por DISTANCIA e nao por comparacao de CTH de proposito: comparar CTH
+---- exigiria uma chamada extra de CalcChanceToHit por (destino, alvo), que e o gargalo
+---- conhecido deste mod. A distancia sai de graca, e a penalidade sendo linear faz o
+---- limiar ser uma aproximacao honesta do ponto de virada (calculado em ~7-8 tiles para
+---- as armas da amostra).
+----
+---- `RATOAI_HipfireMaxDist = 0` desliga e volta ao comportamento antigo (sempre preparar).
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_HipfireMaxDist") == nil then
+    RATOAI_HipfireMaxDist = const.Weapons.PointBlankRange
+end
+
+---- numero de disparos que o laco `for i = 1, n` de fato executa
+local function RATOAI_ShotsOf(n)
+    return n - n % 1
+end
 ---TODO: Consider leaving this function as "pre-planning" and moving the more complex logic to when the positions are defined?
 function AICalcAttacksAndAim(context, ap, target_dist)
 
@@ -85,6 +111,31 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     ----
 
     local has_stance_ap = ap >= total_stance_cost
+
+    -----------------------------------------------------------------------------------
+    ---- Perto o bastante e o AP de preparar custa disparo? Entao dispara do quadril.
+    ----
+    ---- As DUAS condicoes importam. Se preparar nao custa disparo nenhum -- porque o
+    ---- `max_attacks` ja e o teto, ou porque sobra AP -- entao a stance e CTH melhor de
+    ---- graca e seria burrice abrir mao dela. Sem esse segundo teste a regra viraria
+    ---- "colado nunca prepara", que troca um vies por outro.
+    ----
+    ---- Desligar `has_stance_ap` e o suficiente: o bloco abaixo zera o `stance_cost` e
+    ---- nao sobe o `min_aim`, entao os disparos saem em aim 0 (= hipfire) e a contagem
+    ---- volta a ser `ap / cost`. E o mesmo caminho que ja existia para falta de AP.
+    ----
+    ---- Vale para a EXECUCAO tambem, nao so para o score: o vanilla AIPlayAttacks usa
+    ---- esta mesma funcao (`args.aim = aim[i]`), e com aim 0 fora de stance o custo real
+    ---- cai em `GetHipfire_StanceAP`, que devolve 0. A conta fecha dos dois lados.
+    -----------------------------------------------------------------------------------
+    if has_stance_ap and stance_cost > 0 and target_dist and (RATOAI_HipfireMaxDist or 0) > 0 and
+        target_dist <= RATOAI_HipfireMaxDist * const.SlabSizeX then
+        local n_prep = RATOAI_ShotsOf(Min(context.max_attacks, Max(0, ap - stance_cost) / cost))
+        local n_hip = RATOAI_ShotsOf(Min(context.max_attacks, ap / cost))
+        if n_hip > n_prep then
+            has_stance_ap = false
+        end
+    end
 
     if not has_stance_ap then ------- Verify if has AP to enter Stance
         stance_cost = 0

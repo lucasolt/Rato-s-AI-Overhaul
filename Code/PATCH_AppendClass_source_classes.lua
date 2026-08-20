@@ -59,6 +59,56 @@ function OnMsg.ClassesGenerate(classdefs)
                 min = 1,
                 max = 2000
             }, {
+                ---------------------------------------------------------------------
+                ---- Marksmanship e AP total sao constantes DA UNIDADE: valem o mesmo
+                ---- em todo destino, entao nao dizem nada sobre posicao -- so deslocam
+                ---- a escala inteira daquela unidade contra as outras policies. Medido
+                ---- nos inimigos: Marksmanship de 56 (LegionScout) a 100
+                ---- (AdonisSquadLeader), e o hit_score chega a 3x por causa disso
+                ---- multiplicado por mais AP. Resultado: mob ruim medroso, mob bom
+                ---- temerario, sem que nenhum dos dois tenha achado posicao melhor.
+                ----
+                ---- Aqui o divisor e interpolado entre o fixo (MaxHits/SoftK) e um
+                ---- referencial INTRINSECO da unidade -- `max_attacks x Marksmanship`,
+                ---- ou seja "todos os meus disparos acertando no meu nivel".
+                ----
+                ---- Intrinseco, e nao "o melhor tile do turno", de proposito: um
+                ---- referencial situacional daria 100 ao melhor tile mesmo num turno
+                ---- sem tiro nenhum, e quebraria a comparacao com a ameaca, que esta em
+                ---- unidade absoluta.
+                ----
+                ---- Nao se aplica ao modo `tokill`: la o divisor e o HP do alvo e o
+                ---- ponto do modo e letalidade absoluta -- atirador ruim genuinamente
+                ---- nao mata, e cancelar habilidade contradiria o modo.
+                ---------------------------------------------------------------------
+                id = "SkillNormalize",
+                name = "Cancelar habilidade da unidade (%)  [cap/soft]",
+                help = "0 = comportamento atual: unidade boa pontua mais so por ser boa.\n" ..
+                    "100 = a capacidade cancela por completo -- mesma posicao, mesma " ..
+                    "nota, seja Goon ou SquadLeader.\n" ..
+                    "Quem esta em SkillRefScore nao muda de nota; quem esta abaixo SOBE. " ..
+                    "Ancore no seu mob mais capaz para o efeito ser elevar os fracos.\n" ..
+                    "Nao tem efeito no modo `tokill`.",
+                editor = "number",
+                default = 0,
+                min = 0,
+                max = 100
+            }, {
+                ---- Ancora da normalizacao, em "disparos x Marksmanship". 400 = uma
+                ---- unidade que consegue 4 disparos com Marksmanship 100. A unidade que
+                ---- bate exatamente esta marca mantem o divisor intacto; as abaixo dela
+                ---- sobem de nota, as acima descem.
+                id = "SkillRefScore",
+                name = "Ancora da normalizacao (disparos x Mark)",
+                help = "Capacidade da unidade de REFERENCIA: disparos que ela consegue " ..
+                    "vezes a Marksmanship dela. 400 = 4 disparos com Mark 100.\n" ..
+                    "Quem bate esta marca nao muda de nota -- entao ancore no seu mob " ..
+                    "mais capaz e os fracos e que sobem.",
+                editor = "number",
+                default = 400,
+                min = 1,
+                max = 4000
+            }, {
                 id = "KillIsEnough",
                 name = "Derrubar ja vale 100  [tokill]",
                 help = "So no modo `tokill`. Ligado, o score satura quando os acertos " ..
