@@ -288,31 +288,27 @@ return {
 	PlaceObj('ModItemConstDef', {
 		group = "Default",
 		id = "RATOAI_ThreatSaturation",
-		value = 2,
+		value = 3,
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
-				'OptLocWeight', 80,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 150,
+						'Normalization', "tokill",
 					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', {
-						'Weight', 50,
-					}),
+					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', {
-						'CoverCancels', true,
-						'PlateauTiles', 6,
-						'MeleeRange', 3,
+						'Weight', 200,
+						'CoverTrust', 90,
 					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 			PlaceObj('HoldPositionAI', {
-				'Weight', 90,
 				'Comment', "ShootingStance",
 				'Fallback', false,
 				'Score', function (self, unit, proto_context, debug_data)
@@ -327,14 +323,8 @@ return {
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 50,
-				'DownhillMax', 50,
 			}),
-			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMin', 30,
-				'RangeMax', 60,
-				'Falloff', 6,
-				'WeightFalloff', "linear",
-			}),
+			PlaceObj('AIPolicyCustomWeaponRange', nil),
 			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
 		OptLocSearchRadius = 80,
@@ -530,7 +520,6 @@ return {
 						'Weight', 40,
 						'Mode', "target",
 						'RangeMin', 20,
-						'RangeMax', 60,
 						'Falloff', 4,
 					}),
 				},
@@ -611,7 +600,6 @@ return {
 				'RangeMin', 40,
 				'RangeMax', 50,
 				'Falloff', 10,
-				'WeightFalloff', "linear",
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 40,
@@ -1055,7 +1043,6 @@ return {
 					PlaceObj('AIPolicyCustomWeaponRange', {
 						'Mode', "target",
 						'RangeMin', 20,
-						'RangeMax', 60,
 					}),
 					PlaceObj('AIPolicyDealDamage', nil),
 				},
@@ -1112,10 +1099,8 @@ return {
 					PlaceObj('AIPolicyMGSetupAP', nil),
 					PlaceObj('AIPolicyCustomWeaponRange', {
 						'Mode', "target",
-						'RangeMin', 30,
 						'RangeMax', 40,
 						'Falloff', 4,
-						'WeightFalloff', "linear",
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 25,
@@ -1176,7 +1161,6 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeMin', 40,
-				'RangeMax', 60,
 				'Falloff', 4,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),

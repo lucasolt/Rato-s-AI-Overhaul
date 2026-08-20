@@ -51,7 +51,6 @@
 ---- implicita de "use o grupo mais proximo". Quem esta perto domina o peso, e como quem
 ---- esta perto demais pontua 0 pelo RangeMin, o tile no meio da pinca cai sozinho.
 ---------------------------------------------------------------------------------------------------
-
 DefineClass.AIPolicyCustomWeaponRange = {
     __parents = {"AIPositioningPolicy"},
     __generated_by_class = "ClassDef",
@@ -95,14 +94,14 @@ DefineClass.AIPolicyCustomWeaponRange = {
             id = "RangeMin",
             name = "Faixa preferida (min)",
             editor = "number",
-            default = 80,
+            default = 30,
             min = 0,
             max = 1000
         }, {
             id = "RangeMax",
             name = "Faixa preferida (max)",
             editor = "number",
-            default = 120,
+            default = 60,
             min = 0,
             max = 1000
         }, {
@@ -114,7 +113,7 @@ DefineClass.AIPolicyCustomWeaponRange = {
                 "tiles empatados, e como o OptLoc descarta diferencas dentro do corte de " ..
                 "80% e deixa o pathfinder escolher, o platodecide no lugar das policies.",
             editor = "number",
-            default = 8,
+            default = 6,
             min = 0,
             max = 100
         }, {
@@ -124,7 +123,7 @@ DefineClass.AIPolicyCustomWeaponRange = {
                 "linear = um inimigo colado entre tres na faixa ideal ainda deixa o tile " ..
                 "em ~55.\nquadratica = o colado domina bem mais e o tile despenca.",
             editor = "choice",
-            default = "quadratica",
+            default = "linear",
             items = function(self)
                 return {"linear", "quadratica"}
             end
@@ -259,8 +258,7 @@ function AIPolicyCustomWeaponRange:EvalDest(context, dest, grid_voxel)
     local total, total_weight = 0, 0
 
     for _, enemy in ipairs(context.enemies or empty_table) do
-        if self:IsVisible(context, enemy) and enemy and
-            not (enemy:IsDead() or enemy:IsDowned()) then
+        if self:IsVisible(context, enemy) and enemy and not (enemy:IsDead() or enemy:IsDowned()) then
             local epos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(epos) then
                 local dist = self_pos:Dist(epos)

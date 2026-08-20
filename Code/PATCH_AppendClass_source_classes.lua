@@ -14,6 +14,63 @@ function OnMsg.ClassesGenerate(classdefs)
         }
     }
 
+    -----------------------------------------------------------------------------------
+    ---- Normalizacao da AIPolicyDealDamage (ver SOURCE_AIPolicyDealDamage.lua)
+    ----
+    ---- A policy converte "acertos esperados" num score 0..100. Como converter e a
+    ---- pergunta, e as tres respostas tem defeitos diferentes -- por isso e uma escolha
+    ---- por instancia, e nao uma constante no arquivo.
+    -----------------------------------------------------------------------------------
+    AppendClass.AIPolicyDealDamage = {
+        properties = {
+            {
+                id = "Normalization",
+                name = "Normalizacao dos acertos",
+                help = "cap    = linear ate MaxHits e PLANO depois (comportamento atual).\n" ..
+                    "soft   = saturacao suave, nunca fica plana: 6 acertos sempre valem " ..
+                    "mais que 3. Corrige o ponto cego do cap, que e justamente entre as " ..
+                    "melhores posicoes de tiro.\n" ..
+                    "tokill = 100 significa \"daqui eu derrubo o alvo\". O teto passa a " ..
+                    "ser o HP dele em vez de uma constante escolhida a dedo.",
+                editor = "choice",
+                default = "cap",
+                items = function(self)
+                    return {"cap", "soft", "tokill"}
+                end
+            }, {
+                id = "MaxHits",
+                name = "Acertos (x100) que valem 100  [cap]",
+                help = "So no modo `cap`. 200 = dois acertos esperados atingem o teto. " ..
+                    "Subir -> continua distinguindo posicoes muito boas (mais agressiva de " ..
+                    "perto). Descer -> satura antes, a cobertura pesa mais cedo.",
+                editor = "number",
+                default = 200,
+                min = 1,
+                max = 2000
+            }, {
+                id = "SoftK",
+                name = "Meia-escala  [soft]",
+                help = "So no modo `soft`. Score = 100 x acertos / (acertos + K), entao K " ..
+                    "e onde o score passa por 50. Com K=200: 1 acerto->33, 2->50, 4->67, " ..
+                    "10->83. Nunca chega a 100, entao o Weight efetivo encolhe -- suba o " ..
+                    "Weight ao ligar este modo.",
+                editor = "number",
+                default = 200,
+                min = 1,
+                max = 2000
+            }, {
+                id = "KillIsEnough",
+                name = "Derrubar ja vale 100  [tokill]",
+                help = "So no modo `tokill`. Ligado, o score satura quando os acertos " ..
+                    "esperados bastam para derrubar o alvo -- overkill nao vale nada. " ..
+                    "Desligado, continua crescendo (util se voce quiser que ela prefira " ..
+                    "margem de seguranca sobre o minimo necessario).",
+                editor = "bool",
+                default = true
+            }
+        }
+    }
+
     ---- propriedades da AIPolicyHighGround normalizada (ver SOURCE_AIPolicyHighGround.lua)
     AppendClass.AIPolicyHighGround = {
         properties = {

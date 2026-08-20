@@ -90,7 +90,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "LIGANDO ISTO, remova a AIPolicyCustomSeekCover desta mesma lista -- " ..
                 "senao a cobertura conta duas vezes.",
             editor = "bool",
-            default = false
+            default = true
         }, {
             ---- Vies de risco. Diferente do `Penalty` e do `Weight`, que escalam o sinal
             ---- inteiro e nao mudam onde ele cruza o zero: com 100 aqui, cobertura total
@@ -119,7 +119,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "Cuidado: plato maior infla o SOMA(w) e satura mais cedo; se subir muito " ..
                 "aqui, suba a saturacao junto.",
             editor = "number",
-            default = 0,
+            default = 6,
             min = 0,
             max = 30
         }, {
@@ -296,7 +296,8 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         elseif dbg then
             dbg[#dbg + 1] = string.format("  %s: PULADO (%s)", tostring(enemy.session_id),
                                           not alive and "abatido/morto" or
-                                              ("nao visivel, modo " .. tostring(self.visibility_mode)))
+                                              ("nao visivel, modo " ..
+                                                  tostring(self.visibility_mode)))
         end
     end
 
@@ -318,8 +319,8 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                        MulDivRound(self.Penalty, Min(threat, saturation), saturation) or
                                        0)
         context.dest_threat_exposure_debug = context.dest_threat_exposure_debug or {}
-        context.dest_threat_exposure_debug[dest] = head .. "\n" .. table.concat(dbg, "\n") .. "\n" ..
-                                                       tail
+        context.dest_threat_exposure_debug[dest] =
+            head .. "\n" .. table.concat(dbg, "\n") .. "\n" .. tail
     end
 
     if threat <= 0 then
