@@ -818,7 +818,6 @@ return {
 						'Weight', 200,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 150,
 						'CoverNearTiles', 12,
 						'MeleeRange', 8,
 					}),

@@ -55,6 +55,44 @@ DefineClass.AIPolicyCustomSeekCover = {
             read_only = false,
             no_edit = false
         }, {
+            ---------------------------------------------------------------------------
+            ---- POSTURA HIPOTETICA
+            ----
+            ---- Mede a cobertura como se a unidade estivesse AGACHADA no destino, em vez
+            ---- da postura empacotada nele.
+            ----
+            ---- A stance entra numa unica conta, em Cover.lua:281:
+            ----     if cover == coverLow and target_stance == "Standing" then
+            ----         cover, coverage = false, 0
+            ----     end
+            ---- Ou seja: Crouch e Prone sao EQUIVALENTES, e so `Standing` muda alguma
+            ---- coisa -- cancelando cobertura BAIXA. Entao este botao significa
+            ---- exatamente "nao deixe Standing anular a cobertura baixa deste tile".
+            ----
+            ---- Para OptLoc isto e o certo: `best_dest` e um atrator de navegacao, e a
+            ---- postura que a unidade vai adotar la e decidida depois -- o proprio
+            ---- AIFindDestinations pre-processa os destinos marcando onde vale agachar
+            ---- para pegar cobertura, e o AIBehavior:EndMovement executa isso. Julgar o
+            ---- tile pela cobertura POTENCIAL e mais honesto do que pela postura que por
+            ---- acaso veio empacotada.
+            ----
+            ---- Para End Turn deixe DESLIGADO: la a postura e a real e a cobertura tem
+            ---- que ser a que ela vai de fato ter.
+            ----
+            ---- Default false = comportamento atual intacto nas 21 instancias.
+            ---------------------------------------------------------------------------
+            id = "AssumeCrouch",
+            name = "Medir cobertura como se agachado",
+            help = "Ignora a postura do destino e mede a cobertura como Crouch. " ..
+                "Na pratica: impede que 'Standing' anule cobertura BAIXA -- Crouch e " ..
+                "Prone ja sao equivalentes para o jogo.\n" ..
+                "Use em instancias de Optimal Location, onde a postura final ainda nao " ..
+                "foi decidida. NAO use em End Turn.",
+            editor = "bool",
+            default = false,
+            read_only = false,
+            no_edit = false
+        }, {
             ---- Default 0 = comportamento identico ao de hoje. Ligue no archetype que
             ---- voce esta testando (sugestao: 75) e compare, em vez de mexer nos 21.
             id = "ThreatRelative",
@@ -170,8 +208,25 @@ function RATOAI_ThreatRamp(dist, range, plateau)
     return 100 - MulDivRound(dist, 100, range)
 end
 
+---- O rotulo NAO e cosmetico: `AIScoreDest` grava `policy:GetEditorView()` no
+---- `score_details`, e a camada por policy do painel de debug SOMA entradas com o mesmo
+---- rotulo. Duas instancias com configuracoes diferentes precisam de rotulos diferentes,
+---- senao viram uma linha so no overlay e ficam indistinguiveis.
 function AIPolicyCustomSeekCover:GetEditorView()
-    return "Custom Seek Cover"
+    local partes = {}
+    if self.AssumeCrouch then
+        partes[#partes + 1] = "agachado"
+    end
+    if (self.ThreatRelative or 0) > 0 then
+        partes[#partes + 1] = string.format("rel %d%%", self.ThreatRelative)
+    end
+    if not self.RequireLOS then
+        partes[#partes + 1] = "sem LOS"
+    end
+    if #partes == 0 then
+        return "Custom Seek Cover"
+    end
+    return "Custom Seek Cover (" .. table.concat(partes, ", ") .. ")"
 end
 
 ---- Ponto unico de escrita do overlay. A tabela ja nasce em AICreateContext; criada aqui
@@ -207,7 +262,18 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- chegar -- AIBehavior:EndMovement (AIBehaviors.lua:199) faz
     ---- unit:DoChangeStance(StancesList[stance_idx]) do proprio ai_destination.
     ---- Antes isso era ignorado e a cobertura era sempre medida agachado.
-    local ustance = StancesList[ustance_idx]
+    ----
+    ---- `AssumeCrouch` volta a medir agachado DE PROPOSITO, por instancia: em OptLoc a
+    ---- postura final ainda nao foi decidida, entao o que interessa e a cobertura
+    ---- POTENCIAL do tile. Ver o cabecalho da property.
+    local ustance = self.AssumeCrouch and "Crouch" or StancesList[ustance_idx]
+
+    ---- o dest repackado com Crouch, para o ramo de last_known_enemy_pos abaixo, que
+    ---- passa a postura embutida no proprio pacote em vez de por argumento
+    local cover_dest = dest
+    if self.AssumeCrouch and ustance_idx ~= StancesList.Crouch then
+        cover_dest = stance_pos_pack(ux, uy, uz, StancesList.Crouch)
+    end
 
     local tbl = context.enemies or empty_table
 
@@ -272,7 +338,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         if last_pos then
             ---- `SimpleGetCoverScore` era a identidade (todo o corpo dela estava
             ---- comentado) -- a tabela CoverScores entra direto.
-            local cover = GetCoverFrom(dest, stance_pos_pack(last_pos))
+            local cover = GetCoverFrom(cover_dest, stance_pos_pack(last_pos))
             local cover_score = self.CoverScores[cover] or 0
 
             ---- peso cheio: quando nao ha inimigo visivel, esta e a unica informacao
@@ -365,9 +431,10 @@ end
 ---- Cabecalho do overlay: os parametros que decidem como as linhas por inimigo se
 ---- combinam. Sem isto nao da para saber se a media veio ponderada ou nao.
 function AIPolicyCustomSeekCover:FormatDebugHeader(context, ustance)
-    return string.format("stance %s | BaseScore %d | ThreatRelative %d | ScalePerDistance %s" ..
+    return string.format("stance %s%s | BaseScore %d | ThreatRelative %d | ScalePerDistance %s" ..
                              " | saturacao %d | Weight %d | %d inimigos em context.enemies",
-                         tostring(ustance), self.BaseScore or 0, self.ThreatRelative or 0,
+                         tostring(ustance), self.AssumeCrouch and " (AssumeCrouch)" or "",
+                         self.BaseScore or 0, self.ThreatRelative or 0,
                          self.ScalePerDistance and "on" or "OFF (todo peso = 100)",
                          100 * Max(1, RATOAI_ThreatSaturation), self.Weight or 100,
                          #(context.enemies or empty_table))

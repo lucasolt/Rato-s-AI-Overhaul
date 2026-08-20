@@ -10,7 +10,8 @@ function AICreateContext(unit, context)
     local weapon_can_unbolt = rat_canBolt(weapon) and IsKindOf(weapon, "SniperRifle")
     local RPG = IsKindOfClasses(weapon, "RocketLauncher")
 
-    local extra_max_attacks = (weapon_can_unbolt or RPG) and 0 or extra_max_attacks_arg
+    -- local extra_max_attacks = (weapon_can_unbolt or RPG) and 0 or extra_max_attacks_arg
+    local extra_max_attacks = (RPG) and 0 or extra_max_attacks_arg
     if IsKindOf(weapon, "Firearm") and not IsKindOf(weapon, "HeavyWeapon") and
         not unit:HasStatusEffect("shooting_stance") then
 
@@ -200,8 +201,8 @@ function AICreateContext(unit, context)
         ---- precisa usar a mesma base -- senao a comparacao mistura cover continuo
         ---- (aqui) com discreto (la) e enviesa a decisao de flanquear.
         if context.enemy_visible[enemy] then
-            local cover = GetCoverFrom(context.enemy_pack_pos_stance[enemy],
-                                       context.unit_stance_pos)
+            local cover =
+                GetCoverFrom(context.enemy_pack_pos_stance[enemy], context.unit_stance_pos)
             if cover == const.CoverHigh then
                 context.currentpos_target_cover_score[enemy] = RATOAI_GetMaxCoverCTH()
             elseif cover == const.CoverLow then
@@ -231,7 +232,6 @@ function AICreateContext(unit, context)
     unit.ai_context = context
     return context
 end
-
 
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B17): `AIUpdateContext` mora ao lado de `AICreateContext` no source
