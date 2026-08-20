@@ -288,7 +288,7 @@ return {
 	PlaceObj('ModItemConstDef', {
 		group = "Default",
 		id = "RATOAI_ThreatSaturation",
-		value = 6,
+		value = 2,
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		BaseAttackTargeting = set( "Torso" ),
@@ -300,15 +300,12 @@ return {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 150,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 300,
-						'ThreatRelative', 100,
-					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', {
 						'Weight', 50,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 300,
+						'CoverCancels', true,
+						'PlateauTiles', 6,
 						'MeleeRange', 3,
 					}),
 				},
@@ -327,12 +324,10 @@ return {
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 60,
-			}),
+			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyHighGround', {
-				'Weight', 20,
-				'DownhillMax', 20,
+				'Weight', 50,
+				'DownhillMax', 50,
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeMin', 30,

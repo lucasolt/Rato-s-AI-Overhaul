@@ -57,6 +57,72 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 20
         }, {
+            ---------------------------------------------------------------------------
+            ---- O CANCELADOR
+            ----
+            ---- Liga o modo em que a cobertura cancela a ameaca DENTRO desta policy, em
+            ---- vez de a AIPolicyCustomSeekCover creditar cobertura por fora.
+            ----
+            ---- Existe porque as duas policies separadas se DESSINCRONIZAM no clamp. Com
+            ---- a soma acima da saturacao, a ameaca trava em `Penalty` e a cobertura NAO
+            ---- trava junto: o inimigo extra nao consegue mais aumentar a punicao (ja
+            ---- esta no teto) mas continua entrando no numerador da media de cobertura.
+            ---- Resultado medido: um tile exposto ao IMP marcava -100, e o MESMO tile
+            ---- exposto ao IMP com um Igor coberto por perto marcava -51. Um inimigo a
+            ---- mais apontando uma arma MELHORAVA a nota do tile em 49 pontos.
+            ----
+            ---- Aqui cada inimigo entra com `rampa x (100 - cobertura)`, que e sempre
+            ---- >= 0, e o clamp cai sobre a SOMA. Com isso:
+            ----   * monotonico -- inimigo do qual estou coberto contribui exatamente 0,
+            ----     nunca credito; nao existe mais o caso perverso;
+            ----   * "1 ou 1000 da no mesmo" sai de graca, porque o clamp agora esta em
+            ----     cima de uma soma monotona: 3 colados expostos saturam igual a 1;
+            ----   * o gradiente de distancia continua, porque a rampa continua.
+            ----
+            ---- ATENCAO: ligando isto, a AIPolicyCustomSeekCover do MESMO grupo de
+            ---- policies vira contagem dobrada. Tire ela da lista (ou zere o Weight).
+            ---- A Seek Cover continua util sozinha em listas sem esta policy.
+            ---------------------------------------------------------------------------
+            id = "CoverCancels",
+            name = "Cobertura cancela a ameaca (aqui dentro)",
+            help = "Cada inimigo entra com rampa x (100 - cobertura). Cobertura total " ..
+                "contra ele zera a contribuicao dele.\n" ..
+                "LIGANDO ISTO, remova a AIPolicyCustomSeekCover desta mesma lista -- " ..
+                "senao a cobertura conta duas vezes.",
+            editor = "bool",
+            default = false
+        }, {
+            ---- Vies de risco. Diferente do `Penalty` e do `Weight`, que escalam o sinal
+            ---- inteiro e nao mudam onde ele cruza o zero: com 100 aqui, cobertura total
+            ---- zera a ameaca exatamente; com 70, cobertura total ainda deixa 30% da
+            ---- ameaca de pe. E o botao de "quanto eu confio em cobertura", que e o mesmo
+            ---- que "quanto eu prefiro sobreviver a avancar".
+            id = "CoverTrust",
+            name = "Confianca na cobertura (%)",
+            help = "So com `CoverCancels` ligado. 100 = cobertura total cancela a ameaca " ..
+                "por inteiro (agressiva). Abaixo disso sobra ameaca mesmo coberta, e a " ..
+                "IA fica mais cautelosa. 0 = cobertura nao vale nada.",
+            editor = "number",
+            default = 100,
+            min = 0,
+            max = 100
+        }, {
+            ---- Ver o cabecalho de RATOAI_ThreatRamp em AIPOLICYPOS_CustomSeekCover.lua
+            ---- para o porque. Resumo: a rampa linear a partir do zero contradiz a curva
+            ---- de precisao do jogo em toda a primeira metade do alcance.
+            id = "PlateauTiles",
+            name = "Plato da rampa (tiles)",
+            help = "Distancia ate onde o inimigo pesa 100 antes de a rampa comecar a " ..
+                "cair. 0 = rampa linear desde o tile colado (comportamento antigo).\n" ..
+                "const.Weapons.PointBlankRange = 6 tiles -- e a faixa onde automatica e " ..
+                "letal por recoil e proximidade, independente de precisao.\n" ..
+                "Cuidado: plato maior infla o SOMA(w) e satura mais cedo; se subir muito " ..
+                "aqui, suba a saturacao junto.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 30
+        }, {
             id = "MeleeRange",
             name = "Alcance corpo a corpo (tiles)",
             help = "Alcance usado para inimigos sem arma de fogo.",
@@ -97,14 +163,41 @@ end
 ---- Referencia: AK47 = 24 tiles, rifles 30, snipers 36-45, SMG 14-18, escopeta 8.
 ---- O `or 0` ingenuo aqui era uma armadilha: WeaponRange nulo ou zero viraria alcance 0,
 ---- a rampa devolveria 0 e o inimigo sumiria da conta de ameaca sem aviso nenhum.
+---- 2o retorno: se e arma de fogo. Quem cancela ameaca com cobertura precisa saber --
+---- cobertura nao protege de corpo a corpo, entao o cancelamento nao pode valer para
+---- quem vem no facao. Mesmo criterio que a AIPolicyCustomSeekCover usa para tirar
+---- melee da media dela.
 function AIPolicyThreatExposure:GetEnemyRange(enemy)
     local melee = self.MeleeRange * const.SlabSizeX
     local weapon = enemy:GetActiveWeapons()
     if weapon and IsKindOf(weapon, "Firearm") then
         local range = (weapon.WeaponRange or 0) * const.SlabSizeX
-        return range > 0 and range or melee
+        return range > 0 and range or melee, true
     end
-    return melee
+    return melee, false
+end
+
+---- Fracao da ameaca deste inimigo que a cobertura NAO neutraliza, 0..100.
+---- Usa RATOAI_CoverCTH -- a mesma funcao da AIPolicyCustomSeekCover, de proposito: as
+---- duas nao podem divergir na leitura de cobertura, e esta e a unica forma de garantir
+---- isso sem duplicar a conta.
+function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm)
+    ---- cobertura nao para corpo a corpo: ameaca inteira, sem desconto
+    if not is_firearm then
+        return 100
+    end
+    local use, value = RATOAI_CoverCTH(att_pos, target_pos, stance)
+    if not use then
+        return 100
+    end
+    local full = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue(
+                     "Cover")
+    if not full or full == 0 then
+        return 100
+    end
+    local cover = Clamp(MulDivRound(value or 0, 100, full), 0, 100)
+    cover = MulDivRound(cover, Clamp(self.CoverTrust or 100, 0, 100), 100)
+    return 100 - cover
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -143,6 +236,17 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         return 0
     end
 
+    ---- STANCE do proprio dest: e a que a unidade adota ao chegar (AIBehavior:EndMovement).
+    ---- So importa quando a cobertura entra na conta -- GetCoverPercentage zera cobertura
+    ---- BAIXA para quem esta de pe (Cover.lua:283).
+    local cancels = self.CoverCancels
+    local stance
+    if cancels then
+        local _, _, _, stance_idx = stance_pos_unpack(dest)
+        stance = StancesList[stance_idx]
+    end
+    local plateau = (self.PlateauTiles or 0) * const.SlabSizeX
+
     local threat = 0
 
     for _, enemy in ipairs(context.enemies or empty_table) do
@@ -159,14 +263,31 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(att_pos) then
                 local d = att_pos:Dist(target_pos)
-                local range = self:GetEnemyRange(enemy)
-                local ramp = RATOAI_ThreatRamp(d, range)
-                threat = threat + ramp
+                local range, is_firearm = self:GetEnemyRange(enemy)
+                local ramp = RATOAI_ThreatRamp(d, range, plateau)
+
+                ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
+                ---- contribuicao e a rampa crua, exatamente como antes.
+                local uncovered = 100
+                if cancels and ramp > 0 then
+                    uncovered = self:GetUncovered(att_pos, target_pos, stance, is_firearm)
+                end
+                local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
+                threat = threat + contrib
 
                 if dbg then
-                    dbg[#dbg + 1] = string.format("  %s: %st / alcance %st -> peso %d",
-                                                  tostring(enemy.session_id), tostring(tiles(d)),
-                                                  tostring(tiles(range)), ramp)
+                    if cancels then
+                        dbg[#dbg + 1] = string.format(
+                                            "  %s: %st / alcance %st -> peso %d" ..
+                                                " | exposto %d%% -> contribui %d",
+                                            tostring(enemy.session_id), tostring(tiles(d)),
+                                            tostring(tiles(range)), ramp, uncovered, contrib)
+                    else
+                        dbg[#dbg + 1] = string.format("  %s: %st / alcance %st -> peso %d",
+                                                      tostring(enemy.session_id),
+                                                      tostring(tiles(d)), tostring(tiles(range)),
+                                                      ramp)
+                    end
                 end
             elseif dbg then
                 dbg[#dbg + 1] = string.format("  %s: PULADO (posicao invalida)",
@@ -182,10 +303,16 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     if dbg then
         local saturation = self:GetSaturation()
         local head = string.format("inimigos em context.enemies: %d | saturacao %d %s " ..
-                                       "| Penalty %d | Weight %d",
+                                       "| Penalty %d | Weight %d\n" ..
+                                       "modo: %s | plato %st | stance %s",
                                    #(context.enemies or empty_table), saturation,
                                    (not self.MaxThreat or self.MaxThreat <= 0) and "(compartilhada)" or
-                                       "(MaxThreat proprio)", self.Penalty, self.Weight or 100)
+                                       "(MaxThreat proprio)", self.Penalty, self.Weight or 100,
+                                   cancels and
+                                       string.format("cobertura CANCELA (confianca %d%%)",
+                                                     Clamp(self.CoverTrust or 100, 0, 100)) or
+                                       "classico (so ameaca)", tostring(tiles(plateau)),
+                                   tostring(stance or "-"))
         local tail = string.format("  SOMA %d / %d -> EvalDest %d", threat, saturation,
                                    threat > 0 and
                                        MulDivRound(self.Penalty, Min(threat, saturation), saturation) or

@@ -145,12 +145,33 @@ end
 ---------------------------------------------------------------------------------------------------
 -- RATOAI_ThreatSaturation = rawget(_G, "RATOAI_ThreatSaturation") or 3
 
-function RATOAI_ThreatRamp(dist, range)
+---- `plateau` (opcional, unidades de mundo): distancia ate onde o peso fica em 100
+---- antes de comecar a cair. Nil ou 0 = rampa linear pura, identica a de sempre.
+----
+---- Existe porque a rampa linear a partir do zero contradiz a mecanica do jogo em toda
+---- a primeira metade do alcance: `GetRangeAccuracy` devolve precisao CHEIA ate
+---- WeaponRange/2, entao um fuzileiro a meio alcance acerta igualzinho a um colado, e a
+---- rampa dava 50 para ele. Medido em jogo: AUG de 38 tiles a 8 tiles de distancia, a
+---- rampa dava 79 e a precisao real era 100.
+----
+---- O plato NAO precisa ir ate o effective range para consertar isso. Um plato curto --
+---- point blank, 6 tiles -- ja cobre a faixa onde arma automatica e letal por recoil e
+---- proximidade, sem comprar o efeito colateral do plato longo: plato ate effective
+---- range apaga o gradiente de distancia em metade do alcance e infla o SOMA(w) em
+---- ~1.67x, o que joga quase todo tile para cima da saturacao.
+function RATOAI_ThreatRamp(dist, range, plateau)
     if not dist or not range or range <= 0 or dist >= range then
         return 0
     end
-    if dist <= 0 then
+    plateau = plateau or 0
+    if dist <= plateau then
+        ---- cobre tambem o caso dist <= 0 quando nao ha plato
         return 100
+    end
+    if plateau > 0 then
+        ---- `plateau >= range` nao chega aqui: dist < range <= plateau cairia no ramo
+        ---- acima. A subtracao no denominador e sempre positiva.
+        return 100 - MulDivRound(dist - plateau, 100, range - plateau)
     end
     return 100 - MulDivRound(dist, 100, range)
 end
