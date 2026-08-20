@@ -21,6 +21,7 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B15 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua` (só afeta o modo de debug) |
 | B16 | ✅ aplicado | `UTIL.lua` — `RATOAI_Debug` congelava em `false` no load |
 | B17 | ✅ aplicado | `UTIL.lua`, `SOURCE_AICreateContext.lua`, `SOURCE_AIScoreReachableVoxels.lua` — âncora de peek (oscilação do shooting stance) |
+| B18 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` — laço de mira comprava nível e perdia o disparo |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -611,6 +612,52 @@ archetype de posicionamento, é ali que falta.
   verdade é as policies usarem o mesmo teste
   `GetCoverPercentage(attacker_pos, return_pos)` do CTH do GBO3 — parte do problema maior
   de "o modelo de cobertura da IA ≠ o modelo do jogo".
+
+---
+
+### 🔴 B18 — O laço de mira comprava nível e depois perdia o disparo
+
+No laço de disparos **subsequentes** de `AICalcAttacksAndAim`, a mira era comprada
+gulosamente até `desired_aim_level` e só **depois** se perguntava se o disparo ainda
+cabia. Se não coubesse, `break` — sem nunca recuar um nível para o tiro caber.
+
+```lua
+while remaining_ap >= aim_cost and (current_aim < desired_aim_level or max_attacks_reached) do
+    current_aim = current_aim + 1
+    remaining_ap = remaining_ap - aim_cost
+    ...
+end
+if remaining_ap >= atk_cost and not max_attacks_reached then   -- tarde demais
+```
+
+**Correção:** o nível só é comprado se o disparo continuar cabendo depois dele.
+
+```lua
+while remaining_ap - aim_cost >= atk_cost and current_aim < desired_aim_level do
+```
+
+E o teste de teto de ataques subiu para o topo do laço (`if index > max_attacks then
+break`), porque no arranjo antigo, com o teto atingido, ele comprava um nível, gravava em
+`current_aim`, o `if` falhava e o valor era descartado — queimava AP e não produzia nada.
+
+**Efeito, simulado com a aritmética inteira da engine:**
+
+| caso (AP sobrando, custo tiro, custo mira, desired) | antes | depois |
+|---|---|---|
+| 3, 2, 1, 3 | `[]` — **zero disparos** | `[1]` |
+| 9, 2, 1, 3 | `[3]` | **`[3, 2]`** |
+| 5, 5, 1, 3 | `[]` | `[0]` |
+| teto de ataques atingido | `[]`, queima 1 AP | `[]`, sem queimar |
+
+A linha `9, 2, 1, 3` é o comportamento que se esperava o tempo todo: um disparo com mira
+cheia e, com o que sobrar, outro com mira menor. Antes o segundo disparo simplesmente não
+existia.
+
+**O que NÃO foi consertado.** O `or max_attacks_reached` que existia na condição parecia
+querer dizer "sem mais disparos, despeje o AP que sobrou em mira do último tiro". Nunca
+fez isso — o nível ia para uma variável local que morria no `break`. Continua não
+implementado; ver **7.0b** em `AIM_AND_STANCE.md`. É o motivo de a unidade acabar o turno
+com AP sobrando e mira 0.
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

@@ -91,6 +91,15 @@ end)()
   `InteractionRand`) e mexe no `ai_context` da unidade. Em partida valendo isso altera o
   estado. Use `context.dbg_freeze_target_rand = true` antes, que é o que a própria
   `IModeAIDebug:PrecalcForDebug` faz.
+- **Regra dura, aprendida quebrando: a sonda é para LER.** Ler campo (`unit.ActionPoints`,
+  `context.dbg_targets[dest]`, `pol.Weight`) é seguro. Chamar função de engine com
+  posição/voxel **construído na mão** não é: `point_pack(WorldToVoxel(...))` montado na
+  query, ou `policy:EvalDest(context, dest, grid_voxel)` invocado fora do fluxo normal,
+  dispara `assert` de point inválido (`IsValidPos`, `RATOAI_ValidatePosZ`) e polui a
+  sessão de quem está jogando. Se precisar de um valor derivado, prefira ler o que o
+  próprio turno já gravou — é para isso que o `DEBUG (D1)` existe.
+- Benchmark é a exceção tolerável, mas use posições que vieram do jogo
+  (`GetPassSlab(unit)`, `unit:GetPos()`), nunca coordenadas remontadas.
 - Timeout de 5s por requisição, sem bloqueio infinito.
 
 ## Exemplo real: como isto achou o B16

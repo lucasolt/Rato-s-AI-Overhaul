@@ -226,19 +226,37 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     while remaining_ap > 0 do
         local current_aim = min_aim
         local atk_cost = cost
-        local max_attacks_reached = index > context.max_attacks
 
-        -- Increase aim level if possible or max attacks reached
-        while remaining_ap >= aim_cost and (current_aim < desired_aim_level or max_attacks_reached) do
-            current_aim = current_aim + 1
-            remaining_ap = remaining_ap - aim_cost
-            if max_attacks_reached then
-                break
-            end
+        ---- BUGFIX (B18): antes isto era `local max_attacks_reached = index > max_attacks`
+        ---- testado LA EMBAIXO, no `if` do disparo. Quando o teto era atingido, o laco de
+        ---- mira abaixo ainda comprava um nivel, gravava em `current_aim`, e entao o `if`
+        ---- falhava e dava break -- descartando `current_aim`. Ou seja: queimava AP e nao
+        ---- produzia nada. Sair aqui e equivalente na saida e nao gasta o AP a toa.
+        ----
+        ---- O `or max_attacks_reached` que existia na condicao do laco de mira parecia
+        ---- querer dizer "sem mais disparos, despeje o AP que sobrou em mira". Nunca fez
+        ---- isso: o nivel ia para uma variavel local que morria no break. Continua NAO
+        ---- implementado -- ver 7.0b em AIM_AND_STANCE.md.
+        if index > context.max_attacks then
+            break
         end
 
-        -- Perform attack if enough AP remains and max attacks not reached
-        if remaining_ap >= atk_cost and not max_attacks_reached then
+        ---- BUGFIX (B18): a condicao era `remaining_ap >= aim_cost`, ou seja comprava
+        ---- mira ate `desired_aim_level` e SO ENTAO perguntava se o disparo ainda cabia.
+        ---- Se nao coubesse, dava break sem nunca recuar um nivel -- e o disparo se
+        ---- perdia inteiro.
+        ----
+        ---- Exemplo com remaining_ap 3, aim_cost 1, cost 2, desired 3: comprava mira
+        ---- 1, 2, 3 (sobrando 0), o `3 >= 2` falhava e devolvia ZERO disparos. O otimo
+        ---- era mira 1 + disparo = 3 AP, um disparo.
+        ----
+        ---- Agora o nivel so e comprado se o disparo continuar cabendo depois dele.
+        while remaining_ap - aim_cost >= atk_cost and current_aim < desired_aim_level do
+            current_aim = current_aim + 1
+            remaining_ap = remaining_ap - aim_cost
+        end
+
+        if remaining_ap >= atk_cost then
             aims[index] = current_aim
             index = index + 1
             remaining_ap = remaining_ap - atk_cost

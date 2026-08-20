@@ -33,6 +33,7 @@ Integração opcional com CUAE (loot/armas dos inimigos).
 | `SIGNATURE_POSITIONING_GAP.md` | Investigação: o scoring de posição é cego às signature actions. |
 | `PERF_PLAN.md` / `PERF_CHANGES.md` | Gargalos de performance e os patches C1–C12 (C10 e Fase 2 não aplicados). |
 | `DEBUG SERVER.md` | Console Lua no jogo rodando via DAP (`tools/dap_probe.py`, porta 8165, só `JA3Debug.exe`). |
+| `AIM_AND_STANCE.md` | Mira, nº de ataques e Shooting Stance: as três moedas de AP, a árvore do `AICalcAttacksAndAim`, ciclo de vida da stance, o recoil que encarece mira. |
 
 ## Estrutura do `Code/` — prefixo = tipo de override
 | Prefixo | Papel |
@@ -66,6 +67,15 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
 - `metadata.lua` — não editar sem instrução explícita; a lista `code` define a **ordem de
   carregamento** e está espelhada no `items.lua` (editar um dessincroniza o outro).
 - Lógica nova vai em `Code/*.lua`; presets e números vão pelo editor.
+- **Aritmética: sempre `MulDivRound`, nunca float.** Esta engine roda Lua 5.3 com o
+  operador `/` **substituído por divisão inteira truncada** — medido no processo vivo:
+  `9900/5000 = 1`, `4999/5000 = 0`, `11/4 = 2`, e `math.type(9100/5000) == "integer"`.
+  Literais decimais (`1.82`) continuam sendo float. Qualquer float que entre num caminho
+  de decisão sincronizada vaza para o `NetUpdateHash` e é fonte clássica de desync — é o
+  que o `BUGFIX (B7)` do `WEIGHTS_AUDIT.md` conserta em vários arquivos. Percentuais são
+  inteiros: `MulDivRound(valor, pct, 100)`.
+  Corolário: guardas do tipo `x = x - x % 1` ("tira a parte fracionária") são no-op depois
+  de uma divisão inteira — não escreva, e desconfie das que encontrar.
 - Marcadores de rastreio no código: `---- PERF (Cx)`, `BUGFIX (Bn)` e `DEBUG (Dn)` —
   referenciam `PERF_CHANGES.md`, `WEIGHTS_AUDIT.md` e a seção 10 do `AI_SYSTEM_GUIDE.md`.
   Manter o padrão ao aplicar novas mudanças; conferir o maior número já usado antes de
