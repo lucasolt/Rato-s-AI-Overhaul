@@ -4,7 +4,6 @@ DefineClass.AdonisStormer_Elite_copy = {
 	__generated_by_class = "ModItemUnitDataCompositeDef",
 
 
-	__copy_group = "Adonis",
 	object_class = "UnitData",
 	Health = 80,
 	Agility = 90,

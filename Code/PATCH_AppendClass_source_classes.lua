@@ -26,7 +26,10 @@ function OnMsg.ClassesGenerate(classdefs)
             {
                 id = "Normalization",
                 name = "Normalizacao dos acertos",
-                help = "cap    = linear ate MaxHits e PLANO depois (comportamento atual).\n" ..
+                help = "relative = 100 significa: extraio daqui tudo que sou capaz. " ..
+                    "Divide pela capacidade da propria unidade, entao a escala fica " ..
+                    "igual para todos e nao ha o que calibrar -- so o Weight. Recomendado.\n" ..
+                    "cap    = linear ate MaxHits e PLANO depois (comportamento antigo).\n" ..
                     "soft   = saturacao suave, nunca fica plana: 6 acertos sempre valem " ..
                     "mais que 3. Corrige o ponto cego do cap, que e justamente entre as " ..
                     "melhores posicoes de tiro.\n" ..
@@ -35,7 +38,7 @@ function OnMsg.ClassesGenerate(classdefs)
                 editor = "choice",
                 default = "cap",
                 items = function(self)
-                    return {"cap", "soft", "tokill"}
+                    return {"relative", "cap", "soft", "tokill"}
                 end
             }, {
                 id = "MaxHits",
@@ -105,7 +108,7 @@ function OnMsg.ClassesGenerate(classdefs)
                     "Quem bate esta marca nao muda de nota -- entao ancore no seu mob " ..
                     "mais capaz e os fracos e que sobem.",
                 editor = "number",
-                default = 400,
+                default = 655,
                 min = 1,
                 max = 4000
             }, {

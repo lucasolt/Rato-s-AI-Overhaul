@@ -28,8 +28,28 @@
 ---- esperados este tile rende", convertido para 0..100 pela normalizacao escolhida.
 ---- 100 significa "atingiu o teto da normalizacao", nao "100% de acerto".
 ---------------------------------------------------------------------------------------------------
----- TRES NORMALIZACOES, escolhidas por instancia na property `Normalization`
+---- QUATRO NORMALIZACOES, escolhidas por instancia na property `Normalization`
 ---- (definida em PATCH_AppendClass_source_classes.lua):
+----
+----   relative -- 100 = "estou extraindo tudo que sou capaz de extrair daqui". Divide
+----             pela CAPACIDADE da propria unidade (disparos que ela consegue x a
+----             Marksmanship dela), entao a escala fica IGUAL para todo mundo: o melhor
+----             tile do Goon vale 100 e o melhor tile do SquadLeader tambem.
+----
+----             E o unico modo sem parametro de calibragem nenhum -- so o Weight. Os
+----             outros tres precisam de um numero escolhido a dedo (MaxHits, SoftK) ou
+----             de uma ancora; aqui a referencia e a propria unidade.
+----
+----             Resolve de uma vez os dois problemas dos outros: (a) unidade boa nao
+----             pontua mais so por ser boa, porque a capacidade dela esta no divisor;
+----             (b) o plato some, porque o teto passa a ser "eu no meu maximo teorico"
+----             em vez de um numero fixo que todo tile bom ultrapassa.
+----
+----             CONTRAPARTIDA, e e uma escolha e nao um bug: o Goon arrisca a vida por
+----             um tiro de Goon com o mesmo entusiasmo que o SquadLeader por um tiro de
+----             SquadLeader. Quem devolve o juizo de "meu melhor nao mata ninguem" e uma
+----             SEGUNDA instancia desta policy em modo `tokill`, com Weight baixo -- e o
+----             unico lugar onde a forca absoluta da unidade deve aparecer.
 ----
 ----   cap    -- linear ate MaxHits, PLANO depois. Comportamento historico e o default.
 ----             Defeito: acima do teto todo tile marca 100, entao a policy fica MUDA
@@ -59,7 +79,9 @@
 function AIPolicyDealDamage:GetEditorView()
     local modo = self.Normalization or "cap"
     local detalhe
-    if modo == "soft" then
+    if modo == "relative" then
+        detalhe = "relativo a capacidade"
+    elseif modo == "soft" then
         detalhe = string.format("suave K=%d", self.SoftK or 200)
     elseif modo == "tokill" then
         detalhe = self.KillIsEnough and "para derrubar" or "para derrubar, sem teto"
@@ -107,6 +129,13 @@ end
 ---- dentro do ActionPoints (Unit.lua:2266). Sem subtrair, uma unidade com bonus de
 ---- movimento apareceria como capaz de disparar mais do que consegue, e o referencial
 ---- dela ficaria inflado -- justamente o erro que este referencial existe para corrigir.
+---- O cache NAO e so performance: `unit.ActionPoints` cai conforme a unidade age, e a
+---- primeira chamada acontece no Think, com AP cheio. Recalcular depois (o AIPlayAttacks
+---- reusa este context) daria um `ref` menor e inflaria a nota. O referencial tem que ser
+---- a capacidade de INICIO DE TURNO, senao ele deixa de ser constante da unidade -- e um
+---- referencial que varia por destino cancelaria o proprio sinal que queremos medir:
+---- destino longe gastaria mais AP, baixando `hits` E `ref` juntos, e andar longe sairia
+---- de graca.
 local function RATOAI_SkillRef(context)
     local cached = context.__ratoai_skill_ref
     if cached ~= nil then
@@ -183,6 +212,18 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
     end
 
     local modo = self.Normalization or "cap"
+
+    ---- fracao da PROPRIA capacidade que este tile entrega
+    if modo == "relative" then
+        local ref = RATOAI_SkillRef(context)
+        if ref then
+            ---- o Min existe porque a CTH real pode passar da Marksmanship base (point
+            ---- blank, elevacao, mesmo alvo, mira). Nao e regua de calibragem: e "fiz
+            ---- melhor que o meu nominal", que e raro -- por isso nao cria plato.
+            return Min(100, MulDivRound(hits, 100, ref))
+        end
+        ---- sem capacidade legivel: cai no `cap` em vez de zerar a policy
+    end
 
     ---- saturacao suave: sem teto duro, sem trecho plano
     if modo == "soft" then

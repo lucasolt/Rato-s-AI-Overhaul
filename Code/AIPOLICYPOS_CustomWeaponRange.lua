@@ -94,7 +94,7 @@ DefineClass.AIPolicyCustomWeaponRange = {
             id = "RangeMin",
             name = "Faixa preferida (min)",
             editor = "number",
-            default = 30,
+            default = 40,
             min = 0,
             max = 1000
         }, {
@@ -113,7 +113,7 @@ DefineClass.AIPolicyCustomWeaponRange = {
                 "tiles empatados, e como o OptLoc descarta diferencas dentro do corte de " ..
                 "80% e deixa o pathfinder escolher, o platodecide no lugar das policies.",
             editor = "number",
-            default = 6,
+            default = 8,
             min = 0,
             max = 100
         }, {

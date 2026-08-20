@@ -296,16 +296,17 @@ return {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-						'Normalization', "soft",
-						'SkillNormalize', 50,
-						'SkillRefScore', 665,
-					}),
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
 						'CoverTrust', 90,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Normalization', "relative",
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 25,
+						'Normalization', "tokill",
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -326,7 +327,11 @@ return {
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 50,
 			}),
-			PlaceObj('AIPolicyCustomWeaponRange', nil),
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 110,
+				'RangeMin', 40,
+				'Falloff', 8,
+			}),
 			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
 		OptLocSearchRadius = 80,
