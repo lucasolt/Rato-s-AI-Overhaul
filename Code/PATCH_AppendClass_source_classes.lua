@@ -36,7 +36,7 @@ function OnMsg.ClassesGenerate(classdefs)
                     "tokill = 100 significa \"daqui eu derrubo o alvo\". O teto passa a " ..
                     "ser o HP dele em vez de uma constante escolhida a dedo.",
                 editor = "choice",
-                default = "cap",
+                default = "relative",
                 items = function(self)
                     return {"relative", "cap", "soft", "tokill"}
                 end

@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 3767,
+	'version', 3843,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -85,6 +85,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
 		"Code/SOURCE_AIPolicyDealDamage.lua",
+		"Code/SOURCE_AIFindDestinations.lua",
 		"UnitData/AdonisStormer_Elite_copy.lua",
 		"UnitData/AdonisSquadLeader_copy.lua",
 	},
@@ -98,8 +99,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787202323,
-	'code_hash', 7656719962835155635,
+	'saved', 1787259931,
+	'code_hash', -5825549853690834475,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",

@@ -237,6 +237,10 @@ return {
 		'name', "SOURCE_AIPolicyDealDamage",
 		'CodeFileName', "Code/SOURCE_AIPolicyDealDamage.lua",
 	}),
+	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIFindDestinations",
+		'CodeFileName', "Code/SOURCE_AIFindDestinations.lua",
+	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
@@ -291,7 +295,6 @@ return {
 		value = 3,
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
@@ -301,8 +304,12 @@ return {
 						'Weight', 150,
 						'CoverTrust', 90,
 					}),
+					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyDealDamage', {
-						'Normalization', "relative",
+						'Normalization', "cap",
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Normalization', "soft",
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 25,
@@ -329,8 +336,7 @@ return {
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 110,
-				'RangeMin', 40,
-				'Falloff', 8,
+				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', nil),
 		},
@@ -604,8 +610,6 @@ return {
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 50,
-				'RangeMin', 40,
-				'RangeMax', 50,
 				'Falloff', 10,
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
@@ -804,37 +808,34 @@ return {
 		id = "Soldier_copy",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		BaseAttackWeight = 150,
 		BaseMovementWeight = 50,
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
-				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
 					}),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'Weight', 75,
-						'visibility_mode', "team",
-						'OnlyTarget', true,
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 150,
+						'CoverNearTiles', 12,
+						'MeleeRange', 8,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', nil),
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 50,
-						'RangeMin', 35,
-						'RangeMax', 60,
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 25,
+						'Normalization', "tokill",
 					}),
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 10,
-						'RangeMin', 30,
+					PlaceObj('AIPolicyEvadeEnemies', {
+						'Weight', 1,
+						'Required', true,
+						'RangeBase', "Absolute",
+						'Range', 8,
 					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 			PlaceObj('HoldPositionAI', {
-				'Weight', 150,
 				'Comment', "ShootingStance",
 				'Fallback', false,
 				'Score', function (self, unit, proto_context, debug_data)
@@ -847,20 +848,17 @@ return {
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyHighGround', nil),
+			PlaceObj('AIPolicyHighGround', {
+				'DownhillMax', 80,
+			}),
 			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 50,
+				'Weight', 150,
 			}),
-			PlaceObj('AIPolicyThreatExposure', {
-				'Weight', 50,
-			}),
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 80,
-				'RangeMin', 40,
-				'RangeMax', 60,
-			}),
-			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 50,
+			PlaceObj('AIPolicyCustomSeekCover', nil),
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 200,
+				'Falloff', 4,
+				'WeightFalloff', "quadratica",
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -980,8 +978,9 @@ return {
 					}),
 				},
 				'enemy_score', -50,
-				'team_score', 100,
+				'team_score', 5,
 				'self_score_mod', 100,
+				'min_score', 150,
 				'AllyThreatenedScore', 200,
 				'MinDist', 0,
 				'AllowedAoeTypes', set( "smoke" ),
@@ -1010,19 +1009,6 @@ return {
 				'min_score', 100,
 				'MinDist', 5000,
 			}),
-			PlaceObj('AIActionMobileShot', {
-				'NotificationText', "",
-				'CustomScoring', function (self, context)
-					return MobileAttack_CustomScoring(self, context)
-				end,
-				'action_id', "RunAndGun",
-			}),
-			PlaceObj('AIActionMobileShot', {
-				'NotificationText', "",
-				'CustomScoring', function (self, context)
-					return MobileAttack_CustomScoring(self, context)
-				end,
-			}),
 		},
 		TargetScoreRandomization = 10,
 		TargetingPolicies = {
@@ -1037,7 +1023,6 @@ return {
 		id = "RATOAI_Sniper",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'Score', function (self, unit, proto_context, debug_data)
@@ -1046,12 +1031,13 @@ return {
 				end,
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyLosToEnemy', nil),
 					PlaceObj('AIPolicyCustomWeaponRange', {
 						'Mode', "target",
-						'RangeMin', 20,
 					}),
 					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 70,
+					}),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGSetup', {
@@ -1167,10 +1153,12 @@ return {
 		},
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMin', 40,
+				'Weight', 200,
 				'Falloff', 4,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
+			PlaceObj('AIPolicyLosToEnemy', {
+				'Weight', 150,
+			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
 				'Weight', 50,
 				'Indoors', false,
@@ -1193,7 +1181,6 @@ return {
 		id = "HeavyGunner",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'EndTurnPolicies', {
@@ -1420,7 +1407,6 @@ return {
 		id = "Skirmisher",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'turn_phase', "Early",
@@ -1569,7 +1555,6 @@ return {
 		id = "RATOAI_Demolition",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'Weight', 75,
@@ -1853,7 +1838,6 @@ return {
 		id = "Brute",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Arms", "Torso" ),
 		BaseAttackWeight = 80,
 		BaseMovementWeight = 10,
 		Behaviors = {
@@ -1995,7 +1979,7 @@ return {
 		id = "Scout_LastLocation",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
+		BaseMovementWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'Weight', 50,
@@ -2262,7 +2246,6 @@ return {
 		id = "Beserk",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackTargeting = set( "Torso" ),
 		BaseAttackWeight = 150,
 		BaseMovementWeight = 10,
 		Behaviors = {

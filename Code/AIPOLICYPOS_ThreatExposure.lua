@@ -107,6 +107,56 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 100
         }, {
+            ---------------------------------------------------------------------------
+            ---- RAIO DE EXCLUSAO DA COBERTURA
+            ----
+            ---- A cobertura e medida contra a posicao ATUAL do inimigo: RATOAI_CoverCTH
+            ---- chama GetCoverPercentage(target_pos, attacker_pos, ...). Quanto mais
+            ---- perto ele esta, mais barato e para ele mudar essa posicao -- 2 ou 3
+            ---- tiles custam 1-2 AP, e a cobertura que estamos creditando deixa de
+            ---- existir ANTES do tiro. A 20 tiles ele nao contorna nada no mesmo turno.
+            ---- Ou seja: nao e a cobertura que vale menos de perto, e a MEDICAO que e
+            ---- volatil de perto. Este parametro cobra esse risco.
+            ----
+            ---- ATENCAO -- isto NAO espelha a mecanica do jogo, ao contrario do
+            ---- PlateauTiles. O RangeAttackTargetStanceCover
+            ---- (Data/ChanceToHitModifier.lua:580-606) nao tem termo de distancia
+            ---- nenhum: cobertura vale os mesmos -20 de CTH a 1 tile e a 30. Isto e
+            ---- vies de risco da IA, deliberado, nao correcao de conta. Deixe em 0 se
+            ---- quiser a leitura crua do jogo.
+            ----
+            ---- 0 = desligado (default -- nao mexe em nenhum archetype ja calibrado).
+            ---- Referencia natural: const.Weapons.PointBlankRange, que o GBO3 sobe de 4
+            ---- para 6 tiles (Rato-s-Gameplay-Balance-and-Overhaul-3/Code/__MainParams.lua:62).
+            ---- 2-3 tiles e o ajuste conservador: pega so quem contorna a cobertura com 1 AP.
+            ---------------------------------------------------------------------------
+            id = "CoverNearTiles",
+            name = "Raio de exclusao da cobertura (tiles)",
+            help = "Abaixo desta distancia a confianca na cobertura cai de CoverTrust " ..
+                "ate CoverTrustNear, linearmente, chegando em CoverTrustNear com o " ..
+                "inimigo colado.\n" ..
+                "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
+                "So tem efeito com `CoverCancels` ligado.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 30
+        }, {
+            ---- O piso da rampa acima. Separado do CoverTrust de proposito: um controla
+            ---- "quanto eu confio em cobertura", o outro "quanto eu desconfio dela com
+            ---- o cara no meu colo". Sao dois botoes independentes.
+            id = "CoverTrustNear",
+            name = "Confianca na cobertura colado (%)",
+            help = "Confianca aplicada com o inimigo a distancia 0. Interpola " ..
+                "linearmente ate CoverTrust em CoverNearTiles tiles.\n" ..
+                "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
+                "cheia, como se fosse corpo a corpo.\n" ..
+                "So tem efeito com CoverNearTiles > 0.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 100
+        }, {
             ---- Ver o cabecalho de RATOAI_ThreatRamp em AIPOLICYPOS_CustomSeekCover.lua
             ---- para o porque. Resumo: a rampa linear a partir do zero contradiz a curva
             ---- de precisao do jogo em toda a primeira metade do alcance.
@@ -177,11 +227,31 @@ function AIPolicyThreatExposure:GetEnemyRange(enemy)
     return melee, false
 end
 
+---- Confianca efetiva na cobertura contra UM inimigo, 0..100.
+---- Sem CoverNearTiles e o CoverTrust cru, exatamente como sempre foi -- por isso o
+---- default 0 nao muda nenhum preset existente. Com ele, interpola linearmente de
+---- CoverTrustNear (colado) ate CoverTrust (em CoverNearTiles ou mais longe).
+---- Ver o cabecalho da property CoverNearTiles para o porque.
+function AIPolicyThreatExposure:GetCoverTrust(dist)
+    local trust = Clamp(self.CoverTrust or 100, 0, 100)
+    local near = (self.CoverNearTiles or 0) * const.SlabSizeX
+    if near <= 0 or not dist or dist >= near then
+        return trust
+    end
+    local near_trust = Clamp(self.CoverTrustNear or 0, 0, 100)
+    ---- (trust - near_trust) pode ser negativo se alguem inverter os dois no editor;
+    ---- o Clamp final segura isso sem virar buraco silencioso.
+    return Clamp(near_trust + MulDivRound(trust - near_trust, dist, near), 0, 100)
+end
+
 ---- Fracao da ameaca deste inimigo que a cobertura NAO neutraliza, 0..100.
 ---- Usa RATOAI_CoverCTH -- a mesma funcao da AIPolicyCustomSeekCover, de proposito: as
 ---- duas nao podem divergir na leitura de cobertura, e esta e a unica forma de garantir
 ---- isso sem duplicar a conta.
-function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm)
+---- 2o retorno: a confianca efetiva usada. So serve ao overlay -- sem ela nao da para
+---- distinguir "nao ha cobertura neste tile" de "ha, mas o cara esta colado". Vem nil
+---- nos casos em que cobertura nem chegou a ser consultada.
+function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm, dist)
     ---- cobertura nao para corpo a corpo: ameaca inteira, sem desconto
     if not is_firearm then
         return 100
@@ -195,9 +265,12 @@ function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_fir
     if not full or full == 0 then
         return 100
     end
+    ---- `dist` chega pronto do EvalDest (ja calculado la); o fallback existe so para
+    ---- quem chamar este metodo de fora, e nao paga Dist() no caminho quente.
+    local trust = self:GetCoverTrust(dist or att_pos:Dist(target_pos))
     local cover = Clamp(MulDivRound(value or 0, 100, full), 0, 100)
-    cover = MulDivRound(cover, Clamp(self.CoverTrust or 100, 0, 100), 100)
-    return 100 - cover
+    cover = MulDivRound(cover, trust, 100)
+    return 100 - cover, trust
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -246,6 +319,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         stance = StancesList[stance_idx]
     end
     local plateau = (self.PlateauTiles or 0) * const.SlabSizeX
+    local near = (self.CoverNearTiles or 0) * const.SlabSizeX
 
     local threat = 0
 
@@ -268,20 +342,28 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
 
                 ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
                 ---- contribuicao e a rampa crua, exatamente como antes.
-                local uncovered = 100
+                local uncovered, trust = 100, nil
                 if cancels and ramp > 0 then
-                    uncovered = self:GetUncovered(att_pos, target_pos, stance, is_firearm)
+                    uncovered, trust =
+                        self:GetUncovered(att_pos, target_pos, stance, is_firearm, d)
                 end
                 local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
                 threat = threat + contrib
 
                 if dbg then
                     if cancels then
+                        ---- so anota quando o raio realmente mordeu -- senao poluiria
+                        ---- toda linha do overlay com um numero que nunca muda
+                        local near_note = ""
+                        if trust and near > 0 and d < near then
+                            near_note = string.format(" | COLADO: confianca %d%%", trust)
+                        end
                         dbg[#dbg + 1] = string.format(
                                             "  %s: %st / alcance %st -> peso %d" ..
-                                                " | exposto %d%% -> contribui %d",
+                                                " | exposto %d%% -> contribui %d%s",
                                             tostring(enemy.session_id), tostring(tiles(d)),
-                                            tostring(tiles(range)), ramp, uncovered, contrib)
+                                            tostring(tiles(range)), ramp, uncovered, contrib,
+                                            near_note)
                     else
                         dbg[#dbg + 1] = string.format("  %s: %st / alcance %st -> peso %d",
                                                       tostring(enemy.session_id),
@@ -310,8 +392,14 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                    (not self.MaxThreat or self.MaxThreat <= 0) and "(compartilhada)" or
                                        "(MaxThreat proprio)", self.Penalty, self.Weight or 100,
                                    cancels and
-                                       string.format("cobertura CANCELA (confianca %d%%)",
-                                                     Clamp(self.CoverTrust or 100, 0, 100)) or
+                                       string.format("cobertura CANCELA (confianca %d%%%s)",
+                                                     Clamp(self.CoverTrust or 100, 0, 100),
+                                                     (near > 0) and
+                                                         string.format(
+                                                             ", caindo a %d%% dentro de %st",
+                                                             Clamp(self.CoverTrustNear or 0, 0,
+                                                                   100), tostring(tiles(near))) or
+                                                         "") or
                                        "classico (so ameaca)", tostring(tiles(plateau)),
                                    tostring(stance or "-"))
         local tail = string.format("  SOMA %d / %d -> EvalDest %d", threat, saturation,

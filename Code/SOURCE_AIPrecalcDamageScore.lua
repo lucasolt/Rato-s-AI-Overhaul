@@ -5,6 +5,18 @@
 -- function clr_n()
 --     number_of_precalcs = {}
 -- end
+---- DEBUG (D1): linha por alvo dentro de um destino. Funcao de arquivo e nao closure
+---- dentro do laco -- o laco de destinos e quente e nao vale alocar uma closure por
+---- destino so para o modo de debug.
+local function DbgRow(dbg_dest, target)
+    local row = dbg_dest.by_target[target]
+    if not row then
+        row = {}
+        dbg_dest.by_target[target] = row
+    end
+    return row
+end
+
 function AIPrecalcDamageScore(context, destinations, preferred_target, debug_data)
     local unit = context.unit
 
@@ -57,12 +69,42 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     -- end
     ----
 
+    ---- DEBUG (D1): tabelas por (destino, ALVO). Ate aqui so o alvo VENCEDOR sobrevivia
+    ---- desta funcao -- dest_cth/dest_hit_score/dest_target_score guardam best_*, e as
+    ---- tabelas target_cth/target_hit/target_score sao locais do laco de destinos. Sem
+    ---- isto nao ha como perguntar "e contra o alvo #3, quanto seria o CTH".
+    ---- Mesmo criterio de custo do PERF (C9): so existe com RATOAI_Debug.
+    local dbg = RATOAI_Debug
+    if dbg then
+        ---- zerado a cada chamada: e sempre o ultimo precalc que a UI esta olhando.
+        ---- `dbg_target_list` NAO e gravado aqui -- `targets` ainda vai ser reatribuido
+        ---- pelo filtro de StationedMachineGun/ManningEmplacement mais abaixo, e guardar
+        ---- a referencia antiga faria a UI listar alvos que a IA nem chegou a percorrer.
+        context.dbg_targets = {}
+        context.dbg_target_list = nil
+    end
+
     local target_score_mod = {}
     local tsr = archetype.TargetScoreRandomization
+    ---- DEBUG (D1): com `dbg_freeze_target_rand` (setada so pela IModeAIDebug antes de
+    ---- reexecutar o precalc) a randomizacao por alvo e reaproveitada em vez de
+    ---- re-sorteada -- senao o numero que se esta investigando muda so por ter sido
+    ---- observado. O RandRange e SEMPRE consumido, mesmo congelado: pular a chamada
+    ---- dessincronizaria o fluxo de RNG da unidade.
+    local frozen = context.dbg_freeze_target_rand and context.dbg_target_score_mod_frozen
     for i, target in ipairs(targets) do
-        target_score_mod[i] = 100 + ((tsr > 0) and unit:RandRange(-tsr, tsr) or 0)
+        local roll = 100 + ((tsr > 0) and unit:RandRange(-tsr, tsr) or 0)
+        target_score_mod[i] = frozen and frozen[target] or roll
     end
     context.target_score_mod = target_score_mod
+
+    if context.dbg_freeze_target_rand then
+        local by_target = {}
+        for i, target in ipairs(targets) do
+            by_target[target] = target_score_mod[i]
+        end
+        context.dbg_target_score_mod_frozen = by_target
+    end
 
     local base_mod = unit[weapon.base_skill]
     local cost_ap = context.override_attack_cost or context.default_attack_cost
@@ -170,6 +212,14 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     NetUpdateHash("AIPrecalcDamageScore", unit, hashParamTable(destinations),
                   hashParamTable(targets), preferred_target)
 
+    ---- DEBUG (D1): aqui `targets` ja passou por todas as reatribuicoes (alvos de grupo
+    ---- injetados, filtro de emplacement) -- e exatamente a lista que o laco abaixo vai
+    ---- percorrer. Ela pode divergir de context.enemies, que era o que a pagina Alvo
+    ---- iterava antes.
+    if dbg then
+        context.dbg_target_list = targets
+    end
+
     ---- PERF (C4): [alvo] -> { [distancia em slabs] -> recoil }. Vive so nesta
     ---- chamada, cobrindo todos os destinos do laco abaixo.
     local recoil_cache = {}
@@ -199,6 +249,16 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         local old_scores_dbg, old_cth_debug = {}, {}
         ------------------
 
+        ---- DEBUG (D1)
+        local dbg_dest
+        if dbg then
+            dbg_dest = {ap = ap, cost_ap = cost_ap, by_target = {}}
+            context.dbg_targets[upos] = dbg_dest
+            if not (weapon and ap >= cost_ap) then
+                dbg_dest.no_ap = true
+            end
+        end
+
         if weapon and ap >= cost_ap then
             local pos_mod = base_mod
             pos_mod = pos_mod +
@@ -227,8 +287,31 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                 context.dest_target_dist[upos][target] = dist
                 ----
 
-                if dist <= (max_check_range or dist) and
-                    (is_melee or targets_attack_data[k] and not targets_attack_data[k].stuck) then
+                ---- DEBUG (D1): o gate abaixo era uma expressao unica; quebrado em duas
+                ---- para poder registrar QUAL das condicoes descartou o alvo. Antes,
+                ---- "fora de alcance", "sem linha de fogo" e "CTH zero" eram todos o
+                ---- mesmo `-` na tabela de candidatos.
+                ---- `lof_ok` so avalia targets_attack_data quando `in_range` -- mesma
+                ---- ordem de curto-circuito da expressao original.
+                local in_range = dist <= (max_check_range or dist)
+                local lof_ok = in_range and
+                                   (is_melee or
+                                       (targets_attack_data[k] and
+                                           not targets_attack_data[k].stuck)) and true or false
+
+                if dbg_dest then
+                    local row = DbgRow(dbg_dest, target)
+                    row.dist = dist
+                    if not in_range then
+                        row.reject = "fora de alcance"
+                    elseif not lof_ok then
+                        local ad = targets_attack_data and targets_attack_data[k]
+                        row.reject = (ad and ad.stuck) and "linha de fogo bloqueada" or
+                                         "sem linha de fogo"
+                    end
+                end
+
+                if lof_ok then
 
                     ------ Recoil CTH Calculation
                     ---- PERF (C3): movido para DENTRO do gate de alcance/LOF.
@@ -299,26 +382,70 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
 
                     shot_cth = shot_cth or 0
 
+                    ---- DEBUG (D1)
+                    if dbg_dest then
+                        local row = DbgRow(dbg_dest, target)
+                        row.recoil = recoil_cth
+                        row.cth1 = shot_cth
+                        row.cover = target_covers[target]
+                        row.los = target_los[target]
+                        ---- o proprio comprimento da lista de CTH por disparo e a
+                        ---- contagem de tiros que AICalcAttacksAndAim devolveu para
+                        ---- ESTE alvo -- ela varia com a distancia, entao dois alvos
+                        ---- nao sao comparaveis so pela soma de CTH
+                        local shots = context.cth_attacks_at[upos] and
+                                          context.cth_attacks_at[upos][target]
+                        row.shots = shots and #shots or nil
+                        if not (mod > const.AIShootAboveCTH) then
+                            row.reject = string.format("soma de CTH %d <= %d", mod,
+                                                       const.AIShootAboveCTH)
+                        end
+                    end
+
                     if mod > const.AIShootAboveCTH then
                         ---- BUGFIX (B10): neste ponto `mod` ainda e a soma pura de CTH
                         ---- devolvida por RATOAI_ScoreAttacks*. Tudo abaixo mistura
                         ---- unidades diferentes no mesmo numero.
                         local hit_score = mod
                         -------------
+                        ---- DEBUG (D1): instantaneo de `mod` depois de cada etapa. A
+                        ---- pergunta "por que este alvo" quase sempre e "qual destas
+                        ---- etapas dominou", e nenhuma delas era observavel.
+                        local dbg_chain = dbg_dest and {hit = hit_score}
+                        -------------
                         mod = mod + pos_mod
+                        if dbg_chain then
+                            dbg_chain.pos = mod
+                        end
                         -------------------------------------------------------------------------------------------
                         -- Vanilla
-                        --------------------------------------- 
+                        ---------------------------------------
                         -- modify score by archetype-specific weight and (optional) targeting policies
                         mod = MulDivRound(mod, archetype.TargetBaseScore, 100)
+                        if dbg_chain then
+                            dbg_chain.base = mod
+                        end
                         for _, policy in ipairs(target_policies) do
                             local peval = policy:EvalTarget(unit, target)
                             mod = mod + MulDivRound(peval or 0, policy.Weight, 100)
+                            if dbg_chain then
+                                dbg_chain.pol_parts = dbg_chain.pol_parts or {}
+                                table.insert(dbg_chain.pol_parts, {
+                                    name = policy.class,
+                                    value = MulDivRound(peval or 0, policy.Weight, 100),
+                                })
+                            end
+                        end
+                        if dbg_chain then
+                            dbg_chain.pol = mod
                         end
 
                         if IsKindOf(target, "Unit") and
                             (target:IsDowned() or target:IsGettingDowned()) then
                             mod = MulDivRound(mod, 5, 100)
+                            if dbg_chain then
+                                dbg_chain.downed = mod
+                            end
                         end
 
                         local attack_data = targets_attack_data and targets_attack_data[k]
@@ -340,9 +467,16 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                         end
                         if ally_in_danger then
                             mod = MulDivRound(mod, const.AIFriendlyFire_ScoreMod, 100)
+                            if dbg_chain then
+                                dbg_chain.ff = mod
+                            end
                         end
 
                         mod = MulDivRound(mod, target_score_mod[k], 100)
+                        if dbg_chain then
+                            dbg_chain.rnd = mod
+                            dbg_chain.rnd_pct = target_score_mod[k]
+                        end
 
                         -- apply group-based modifiers
                         if target_modifiers and IsKindOf(target, "Unit") then
@@ -352,7 +486,21 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                             end
                             if group_mod > 0 then
                                 mod = MulDivRound(mod, group_mod, 100)
+                                if dbg_chain then
+                                    dbg_chain.group = mod
+                                    dbg_chain.group_pct = group_mod
+                                end
                             end
+                        end
+
+                        ---- DEBUG (D1): gravado ANTES do desvio de preferred_target, que
+                        ---- da `break` e sairia sem registrar a linha deste alvo
+                        if dbg_dest then
+                            local row = DbgRow(dbg_dest, target)
+                            dbg_chain.final = mod
+                            row.chain = dbg_chain
+                            row.hit = hit_score
+                            row.score = mod
                         end
 
                         --[[table.insert(logdata, {
@@ -366,6 +514,9 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                             best_cth = shot_cth ---- BUGFIX (B1): era `base_mod` (Marksmanship)
                             best_hit = hit_score ---- BUGFIX (B10)
                             potential_targets = {}
+                            if dbg_dest then
+                                dbg_dest.preferred = target
+                            end
                             break
                         end
 
@@ -405,6 +556,15 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         context.dest_target_los[upos] = target_los
         -------
 
+        ---- DEBUG (D1): o corte dos 80% e o sorteio. `best_target` NAO e o de maior
+        ---- score -- e um sorteio ponderado entre os finalistas -- entao sem `roll` e
+        ---- `total` nao ha como separar "o scoring escolheu mal" de "o dado caiu assim".
+        if dbg_dest then
+            dbg_dest.best_score = best_score
+            dbg_dest.threshold = MulDivRound(best_score or 0, const.AIDecisionThreshold, 100)
+            dbg_dest.finalists = potential_targets
+        end
+
         if #potential_targets > 0 then
             local total = 0
             for _, target in ipairs(potential_targets) do
@@ -415,6 +575,10 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                 end
             end
             local roll = InteractionRand(total, "AIDecision")
+            if dbg_dest then
+                dbg_dest.total = total
+                dbg_dest.roll = roll
+            end
             for _, target in ipairs(potential_targets) do
                 local score = target_score[target]
                 if roll < score then
@@ -461,6 +625,11 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         dest_target[upos] = best_target
         dest_cth[upos] = best_cth
         dest_hit_score[upos] = best_hit or 0 ---- BUGFIX (B10)
+
+        ---- DEBUG (D1)
+        if dbg_dest then
+            dbg_dest.chosen = best_target or nil
+        end
 
         ----Debug vectors
         -- local dux, duy, duz, dustance_idx = stance_pos_unpack(upos)

@@ -62,7 +62,12 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         context.aims_at[upos] = context.aims_at[upos] or {}
         context.aims_at[upos][target] = aims
         context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
-        context.cth_attacks_at[upos][target] = context.cth_attacks_at[upos][target] or {}
+        ---- BUGFIX (B15): era `or {}`. Dentro de UMA chamada de AIPrecalcDamageScore o
+        ---- par (upos, target) e visitado uma vez so, mas o precalc roda mais de uma vez
+        ---- por turno (e a UI de debug o reexecuta de proposito na camada
+        ---- "target_recalc") -- e o `table.insert` abaixo entao APENDAVA na lista da
+        ---- passada anterior, dobrando a contagem de disparos. Zerar e o correto.
+        context.cth_attacks_at[upos][target] = {}
     end
 
     ---- PERF (C1): memoizacao do CTH por nivel de mira.
@@ -216,6 +221,17 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
         local base_mod = mod
         local attacks, aims = AICalcAttacksAndAim(context, ap, target_dist)
 
+        ---- DEBUG (D1): paridade com o caminho "Detailed". Sem isto a tabela de
+        ---- candidatos e o detalhe tiro a tiro ficavam vazios com
+        ---- UseSimpleAttacksScoring ligado.
+        local dbg = RATOAI_Debug
+        if dbg then
+            context.aims_at[upos] = context.aims_at[upos] or {}
+            context.aims_at[upos][target] = aims
+            context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
+            context.cth_attacks_at[upos][target] = {}
+        end
+
         mod = 0
         for i = 1, attacks do
             local use, bonus, scope_use, scope_penal
@@ -234,6 +250,10 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
             local shot_cth = base_mod + (use and bonus or 0) + (scope_use and scope_penal or 0)
             if i == 1 then
                 first_cth = shot_cth
+            end
+
+            if dbg then
+                table.insert(context.cth_attacks_at[upos][target], shot_cth)
             end
 
             mod = mod + shot_cth

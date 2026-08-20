@@ -73,8 +73,17 @@ function AICreateContext(unit, context)
 
     table.sortby_field(enemies, "handle")
 
-    local pos = GetPassSlab(unit)
-    if not pos then -- can happen if the unit is on impassable for some reason	
+    ---- BUGFIX (B17): quando a unidade esta peekada (shooting stance do GBO3), a posicao
+    ---- canonica para POSICIONAMENTO e a de cobertura, nao o voxel exposto -- ver
+    ---- RATOAI_GetPeekAnchor em UTIL.lua. Sem isto, P (cobertura) e P' (peek) sao dois
+    ---- destinos distintos com scores distintos, e a IA oscila entre eles: peeka, ve que
+    ---- P pontua melhor, volta, ataca, peeka de novo.
+    ---- O ataque continua sendo avaliado do voxel LITERAL: CombatAI.lua:211 monta o dest
+    ---- do AIPrecalcDamageScore com GetPackedPosAndStance(unit). Cobertura de P, tiro de
+    ---- P' -- que e exatamente o que o jogo faz.
+    local peek_anchor = RATOAI_GetPeekAnchor(unit)
+    local pos = peek_anchor or GetPassSlab(unit)
+    if not pos then -- can happen if the unit is on impassable for some reason
         -- assert(false, "GetPassSlab failed for unit " .. unit.session_id)		
         local x, y, z = unit:GetPosXYZ()
         local gx, gy, gz = WorldToVoxel(x, y, z)
@@ -84,6 +93,13 @@ function AICreateContext(unit, context)
         pos = point(VoxelToWorld(gx, gy, (gz)))
     end
     local wx, wy, wz = pos:xyz()
+
+    ---- BUGFIX (B17): `gx, gy, gz` vem de unit:GetGridCoords() la em cima (linha 4) e
+    ---- so alimenta o context.unit_grid_voxel abaixo. Ancorado, tem que descrever a
+    ---- ancora tambem, senao o voxel de grid contradiz o unit_pos.
+    if peek_anchor then
+        gx, gy, gz = WorldToVoxel(wx, wy, wz)
+    end
 
     context = context or {}
 
@@ -106,6 +122,11 @@ function AICreateContext(unit, context)
     -- not used yet
     context.cth_attacks_at = {}
     context.aims_at = {}
+    ---- DEBUG (D1): [dest] -> { by_target = {[alvo] = linha}, roll, total, threshold, ... }
+    ---- Preenchido por AIPrecalcDamageScore so com RATOAI_Debug; inicializado aqui para
+    ---- que a UI possa indexar sem checar nil quando o precalc sai cedo (sem arma,
+    ---- unidade queimando, reposicao).
+    context.dbg_targets = {}
     --
     context.dest_flanking_pol_debug = {} ------------- DEBUGGER
     context.dest_custom_seek_cover_debug = {}
@@ -211,3 +232,39 @@ function AICreateContext(unit, context)
     return context
 end
 
+
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B17): `AIUpdateContext` mora ao lado de `AICreateContext` no source
+---- (CombatAI.lua:138-144) e vive aqui pela mesma razao -- o mod nao ganha arquivo novo
+---- sem passar pelo editor do jogo, que regeraria items.lua e metadata.lua.
+----
+---- Sem este override o conserto do AICreateContext seria inutil: AIExecuteUnitBehavior
+---- chama AIUpdateContext (CombatAI.lua:204) ANTES de cada acao, e ele reescreve
+---- unit_pos / unit_stance_pos / unit_grid_voxel a partir da posicao LITERAL da unidade.
+---- A ancora seria desfeita a cada acao.
+----
+---- Quem consome: AIBehaviors.lua:83-85 decide se ha movimento comparando
+---- `context.unit_stance_pos` com `ai_destination` -- com a ancora, escolher a propria
+---- posicao de cobertura cai em `stance_pos_dist == 0` e nenhum comando de movimento e
+---- emitido. E o que quebra a oscilacao.
+----
+---- Sem peek o caminho e byte a byte o vanilla.
+---------------------------------------------------------------------------------------------------
+function AIUpdateContext(context, unit)
+    unit = unit or context.unit
+
+    local peek_anchor = RATOAI_GetPeekAnchor(unit)
+    if peek_anchor then
+        local ax, ay, az = peek_anchor:xyz()
+        az = az or terrain.GetHeight(ax, ay)
+        context.unit_pos = peek_anchor
+        context.unit_stance_pos = stance_pos_pack(ax, ay, az, StancesList[unit.stance])
+        context.unit_grid_voxel = point_pack(WorldToVoxel(ax, ay, az))
+        return
+    end
+
+    ---- vanilla, CombatAI.lua:141-143
+    context.unit_pos = GetPassSlab(unit) or context.unit_pos
+    context.unit_stance_pos = GetPackedPosAndStance(unit) or context.unit_stance_pos
+    context.unit_grid_voxel = point_pack(unit:GetGridCoords())
+end

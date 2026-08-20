@@ -38,13 +38,7 @@ DefineClass.AIPolicyCustomSeekCover = {
         --    read_only = false,
         --    no_edit = false
         -- },
-        {
-            id = "SimpleGetCover",
-            editor = "bool",
-            default = false,
-            read_only = false,
-            no_edit = false
-        }, {id = "BaseScore", editor = "number", default = 100, read_only = false, no_edit = false},
+        {id = "BaseScore", editor = "number", default = 100, read_only = false, no_edit = false},
         {
             ---- Default FALSE de proposito: ligar isto muda o comportamento das 21
             ---- instancias de uma vez. Ligue no archetype que voce esta testando e
@@ -244,15 +238,8 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
             local weight = 100
             local e_dist, e_range, why
 
-            if self.SimpleGetCover then
-                local cover = GetCoverFrom(dest, context.enemy_pack_pos_stance[enemy])
-                cover_score = self:SimpleGetCoverScore(context, self.CoverScores[cover] or 0, dest,
-                                                       grid_voxel, enemy)
-                why = "SimpleGetCover (sem rampa)"
-            else
-                cover_score, weight, e_dist, e_range, why =
-                    self:GetCoverScore(context, enemy, context.unit, dest, nil, grid_voxel, ustance)
-            end
+            cover_score, weight, e_dist, e_range, why =
+                self:GetCoverScore(context, enemy, context.unit, dest, nil, grid_voxel, ustance)
 
             weight = weight or 100
             score = score + cover_score * weight
@@ -283,10 +270,10 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         local last_pos = context.unit.last_known_enemy_pos
         -- DbgAddCircle(last_pos)
         if last_pos then
+            ---- `SimpleGetCoverScore` era a identidade (todo o corpo dela estava
+            ---- comentado) -- a tabela CoverScores entra direto.
             local cover = GetCoverFrom(dest, stance_pos_pack(last_pos))
-            local cover_score = self:SimpleGetCoverScore(context, self.CoverScores[cover] or 0,
-                                                         dest, last_pos)
-            -- table.insert(debugforpos_simple, {"last_pos", cover_score})
+            local cover_score = self.CoverScores[cover] or 0
 
             ---- peso cheio: quando nao ha inimigo visivel, esta e a unica informacao
             ---- que existe -- nao faz sentido descontar nada dela
@@ -386,63 +373,6 @@ function AIPolicyCustomSeekCover:FormatDebugHeader(context, ustance)
                          #(context.enemies or empty_table))
 end
 
---- Not really used right now
-function AIPolicyCustomSeekCover:SimpleGetCoverScore(context, cover_score, dest, grid_voxel, enemy)
-
-    if not dest then
-        return cover_score
-    end
-
-    ---- DESATIVADO. Este era o escalonamento por distancia antigo, e ele nao pode mais
-    ---- rodar atras do `ScalePerDistance` agora que a flag mudou de significado (peso no
-    ---- denominador) e passou a vir ligada por default -- senao a distancia entraria na
-    ---- conta duas vezes. Ficam registrados os dois defeitos dele, para quem for
-    ---- reativar o caminho SimpleGetCover algum dia:
-    ----
-    ----   1. `new_pos` era sobrescrito por `enemy_pos` na linha seguinte, entao o
-    ----      `new_pos:Dist(enemy_pos)` media a distancia do inimigo ate ele mesmo -- 0
-    ----      sempre. O `dist` caia no `min_dist` e o ratio era constante.
-    ----   2. `range = max_range * const.Scale.AP` mistura escala de AP com escala de
-    ----      distancia; o `dist` do outro lado esta em unidades de mundo.
-    ----
-    ---- Este caminho continua sem ponderacao: devolve peso 100 e entra na media como
-    ---- todos os outros. E dormente (0 de 21 instancias ligam SimpleGetCover).
-    ----
-    -- local new_pos, dist
-    -- if self.ScalePerDistance and cover_score > 0 then
-    --     new_pos = RATOAI_UnpackPos(dest)
-    --     new_pos = IsValidZ(new_pos) and new_pos or new_pos:SetTerrainZ()
-    --     local enemy_pos = IsValid(enemy) and enemy:GetPos() or enemy
-    --     new_pos = IsValidZ(enemy_pos) and enemy_pos or enemy_pos:SetTerrainZ()
-    --     if enemy_pos then
-    --         dist = Max(min_dist, new_pos:Dist(enemy_pos))
-    --         local range = max_range * const.Scale.AP
-    --         local ratio = 100 - MulDivRound(Min(range, dist), distance_impact, range)
-    --         cover_score = MulDivRound(cover_score, ratio, 100)
-    --     end
-    -- end
-
-    -- if self.ExposedAtCloseRange_Score ~= 0 and cover_score <= 0 and context.enemy_grid_voxel[enemy] and
-    --    grid_voxel then
-    --    local x1, y1, z1 = point_unpack(context.enemy_grid_voxel[enemy])
-    --    local x2, y2, z2 = point_unpack(grid_voxel)
-    --    if IsCloser(x1, y1, z1, x2, y2, z2, pb_range + 1) then
-    --        cover_score = self.ExposedAtCloseRange_Score
-    --    elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 2 + 1) then
-    --        cover_score = MulDivRound(self.ExposedAtCloseRange_Score, close_range_mul_penalty_mul,
-    --                                  100)
-    --    elseif IsCloser(x1, y1, z1, x2, y2, z2, pb_range * 3 + 1) then
-    --        cover_score = MulDivRound(self.ExposedAtCloseRange_Score, medium_range_penalty_mul, 100)
-    --    end
-    -- end
-
-    -- if new_pos then
-    --     DbgAddText(enemy.session_id .. " " .. cover_score, new_pos)
-    -- end
-
-    return cover_score
-end
-
 AIPolicyCustomSeekCover.CoverScores = {
     [const.CoverPass] = 0,
     [const.CoverNone] = 0,
@@ -454,8 +384,9 @@ AIPolicyCustomSeekCover.CoverScores = {
 ---- do proprio dest; so cai no "Crouch" antigo se nao houver dest nenhum.
 function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, target_pos, grid_voxel,
                                                stance)
-    local prone_cover_CTH = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover
-    local cover_max_malus = prone_cover_CTH:ResolveValue("Cover")
+    ---- PERF (F2.3): era um terceiro `ResolveValue` por par (destino, inimigo), da mesma
+    ---- constante que o RATOAI_CoverCTH logo abaixo ja resolvia duas vezes.
+    local cover_max_malus = RATOAI_GetMaxCoverCTH()
     local valid_enemy = enemy and not (enemy:IsDead() or enemy:IsDowned())
     local score = not valid_enemy and self.BaseScore or 0
 
@@ -549,10 +480,47 @@ end
 ---- ou seja, Crouch e Prone sao equivalentes; so "Standing" muda alguma coisa, e muda
 ---- so em cobertura BAIXA. Default "Crouch" mantem o comportamento antigo para quem
 ---- chamar sem informar a postura.
+---------------------------------------------------------------------------------------------------
+---- PERF (F2.3): `Cover` e `ExposedCover` sao constantes de preset, mas eram resolvidas
+---- DENTRO de RATOAI_CoverCTH -- ou seja, por par (destino, inimigo), sobre todo o raio
+---- de busca da OptLoc.
+----
+---- Medido no processo vivo (10k chamadas, tools/dap_probe.py):
+----     PosGetCoverPercentageFrom  0.8 us   <- o trabalho de verdade
+----     ResolveValue (1x)          0.9 us
+----     RATOAI_CoverCTH            6.3 us
+---- As duas resolucoes eram ~29% do custo desta funcao, e a query nativa que ela existe
+---- para embrulhar custa menos que UMA delas.
+----
+---- `Cover` vem de RATOAI_GetMaxCoverCTH (FUNCTION_ScoreAttacksDetailed.lua) em vez de
+---- um cache proprio: e exatamente o mesmo numero do mesmo preset, e dois caches da
+---- mesma constante e como elas divergem. Aqui fica so o `ExposedCover`, que nao tem
+---- cache em lugar nenhum.
+----
+---- Resolucao preguicosa e nao no escopo do arquivo: os Presets ainda nao existem no
+---- momento em que o mod carrega. Flag separada em vez de `if not valor` -- estes sao
+---- modificadores de CTH e um deles ser 0 e plausivel; `0` reprovaria o teste e o cache
+---- nunca pegaria.
+---------------------------------------------------------------------------------------------------
+local exposed_cover_cth, exposed_cover_cached
+
+function RATOAI_GetExposedCoverCTH()
+    if not exposed_cover_cached then
+        exposed_cover_cth =
+            Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue(
+                "ExposedCover")
+        exposed_cover_cached = true
+    end
+    return exposed_cover_cth
+end
+
+function OnMsg.ModsReloaded()
+    exposed_cover_cth, exposed_cover_cached = nil, false
+end
+
 function RATOAI_CoverCTH(attacker_pos, target_pos, target_stance)
-    local prone_cover_CTH = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover
-    local exposed_value = prone_cover_CTH:ResolveValue("ExposedCover")
-    local full_value = prone_cover_CTH:ResolveValue("Cover")
+    local exposed_value = RATOAI_GetExposedCoverCTH()
+    local full_value = RATOAI_GetMaxCoverCTH()
 
     local cover, any, coverage = GetCoverPercentage(target_pos, attacker_pos,
                                                     target_stance or "Crouch")

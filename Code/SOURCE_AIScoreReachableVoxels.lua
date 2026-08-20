@@ -252,6 +252,34 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
     end
     context.best_end_score = best_end_score
 
+    ---------------------------------------------------------------------------------------
+    ---- BUGFIX (B17): se o destino vencedor e a posicao de cobertura de onde a unidade ja
+    ---- esta peekando, ele vira a POSICAO ATUAL dela em vez de um destino de verdade.
+    ----
+    ---- Sem isto ela faz vai e volta: entra em shooting stance, peeka para P', o scoring
+    ---- elege P (a cobertura de onde saiu), ela anda de volta, ataca, e o
+    ---- `EnterShootingStance` a peeka para P' outra vez. Ciclo de 2, o turno inteiro.
+    ----
+    ---- Trocar o destino -- em vez de tentar ensinar o motor que P e P' sao a mesma coisa
+    ---- -- porque os portoes que decidem andar leem a unidade DIRETO, nao o context:
+    ---- `BeginMovement` (AIBehaviors.lua:145) e `EndMovement` (:202). Com o destino igual
+    ---- a posicao atual, os dois caem em `stance_pos_dist == 0` e devolvem "continue" sem
+    ---- emitir Move -- e o `AIPlayAttacks` (CombatAI.lua:211) passa a avaliar o ataque de
+    ---- P', que e de onde ela realmente atira.
+    ----
+    ---- As tabelas indexadas por dest (dest_ap, dest_target, ...) nao precisam da chave
+    ---- nova: AIPlayAttacks faz `context.dest_ap[dest] or unit.ActionPoints` e reexecuta
+    ---- AIPrecalcDamageScore para o dest que receber.
+    ----
+    ---- Cobre StandardAI, RetreatAI, ApproachInteractableAI e CustomAI, que pegam o
+    ---- destino daqui. NAO cobre PositioningAI, que usa `context.positioning_dest`
+    ---- (AIBehaviors.lua:369) -- se a oscilacao aparecer num archetype de posicionamento,
+    ---- e ali que falta.
+    ---------------------------------------------------------------------------------------
+    if RATOAI_IsPeekAnchorDest(unit, context.best_end_dest) then
+        context.best_end_dest = GetPackedPosAndStance(unit)
+    end
+
     context.closest_dest = closest_dest
     return context.best_end_dest, context.best_end_score
 end

@@ -3,6 +3,14 @@
 Guia de leitura de `Code/AIPOLICYPOS_CustomSeekCover.lua`. Números conferidos contra
 `items.lua` e contra o preset `RangeAttackTargetStanceCover` em agosto de 2026.
 
+> **Estado deste guia.** As seções sobre `SimpleGetCover` foram atualizadas quando esse
+> caminho foi removido do código (ver `PERF_CHANGES.md`, F2.3). O **resto do guia é mais
+> antigo que o arquivo** e tem defasagem conhecida que ninguém revisou ainda: ele descreve
+> `ScalePerDistance` com default `false` (hoje é `true`, e mudou de significado — virou
+> peso no denominador), cita `ExposedAtCloseRange_Score` como propriedade viva (hoje está
+> comentada), e menciona um `extra_mul` de 220 que foi aposentado. Os números de linha da
+> §8 também não valem mais. Trate §2, §5 e §6 como histórico até alguém reconferir.
+
 ---
 
 ## 1. Onde a policy entra
@@ -30,8 +38,9 @@ duas linhas compartilham o mesmo rótulo "Custom Seek Cover".
 
 ## 2. A fórmula, em uma linha
 
-Com a configuração que existe hoje no `items.lua` (ver §6, nenhuma instância liga
-`ScalePerDistance` nem `SimpleGetCover`), o que roda é isto e só isto:
+Com a configuração que existia no `items.lua` quando este guia foi escrito, o que rodava
+era isto e só isto (hoje `ScalePerDistance` vem ligado por default e o peso entra também
+no denominador — a fórmula abaixo é o caso particular de todos os pesos iguais):
 
 ```
 EvalDest = ( Σ cover_score(inimigo)  para cada inimigo visível ) / (nº de inimigos visíveis)
@@ -80,7 +89,7 @@ conhecida de inimigo, usando o **outro** caminho de pontuação:
 
 ```lua
 local cover = GetCoverFrom(dest, stance_pos_pack(last_pos))
-local cover_score = self:SimpleGetCoverScore(context, self.CoverScores[cover] or 0, dest, last_pos)
+local cover_score = self.CoverScores[cover] or 0
 ```
 
 `CoverScores` (linhas 195-200) é uma tabela discreta:
@@ -201,26 +210,27 @@ Três coisas sobre ela:
 
 ---
 
-## 5. `SimpleGetCoverScore` (linha 149) — o caminho paralelo
+## 5. `SimpleGetCover` — removido
 
-O comentário na linha 148 já diz: *"Not really used right now"*. Confirmado — ver §6.
+Existiu um segundo caminho de pontuação, ligado pela property `SimpleGetCover`: em vez do
+CTH real, ele lia a tabela discreta `CoverScores` via `GetCoverFrom`. Estava dormente (0
+de 21 instâncias o ligavam) e o corpo do `SimpleGetCoverScore` estava inteiramente
+comentado — a função era a identidade.
 
-Ele existe pra pontuar a partir da tabela discreta `CoverScores` em vez do CTH, e é onde o
-`ScalePerDistance` de verdade acontece (linhas 156-172): escala o score pela distância, de modo
-que cobertura contra um inimigo perto vale mais que contra um longe.
+Foi removido depois que a medição no processo vivo mostrou que ele não era sequer o
+caminho barato que aparentava ser:
 
-Dois problemas dormentes aqui, pra você saber antes de ligar:
+| chamada | µs/chamada |
+|---|---|
+| `PosGetCoverPercentageFrom` (o caminho "caro", via `RATOAI_CoverCTH`) | 0,8 |
+| `GetCoverFrom` (o caminho "simples") | **1,8** |
 
-1. **Linha 160 atribui na variável errada.** `new_pos = IsValidZ(enemy_pos) and enemy_pos or ...`
-   deveria ser `enemy_pos = ...`. Como está, `new_pos` vira `enemy_pos`, a distância medida é
-   `enemy_pos:Dist(enemy_pos)` = **0 sempre**, e o `ScalePerDistance` colapsa numa constante.
-2. **`range = max_range * const.Scale.AP`** (linha 164) mistura escala de AP com escala de
-   distância. O `dist` do lado esquerdo está em unidades de mundo. Funciona por coincidência
-   numérica, não por estar certo.
+O modo simples custava o dobro *e* era menos preciso. Restou só o uso de `GetCoverFrom` no
+ramo `last_known_enemy_pos` da §3.3, que agora indexa `CoverScores` direto.
 
-E note que `ScalePerDistance` é lido em **dois** lugares: aqui (o escalonamento real) e na linha
-76 (o `extra_mul` de 220). Ligar ele **sem** ligar `SimpleGetCover` não escalona nada — só
-multiplica o resultado final por 2.2.
+Detalhe que sobrevive como aviso: `ScalePerDistance` já foi lido em dois lugares com
+significados diferentes. Hoje tem um significado só — peso na média ponderada, no
+numerador **e** no denominador.
 
 ---
 
@@ -236,14 +246,13 @@ multiplica o resultado final por 2.2.
 | `BaseScore` | 100 | **0** |
 | `visibility_mode` | "team" | **0** |
 | `ScalePerDistance` | false | **0** |
-| `SimpleGetCover` | false | **0** |
 | `ForceCheckLastEnemyPos` | false | **0** |
 
 Seis instâncias são `PlaceObj('AIPolicyCustomSeekCover', nil)` — tudo default.
 
-**Consequência:** metade do arquivo é código morto. O caminho real é sempre
-`GetCoverScore` → `RATOAI_CoverCTH`, com `BaseScore` 100, visibilidade de time e `extra_mul` 100.
-O `SimpleGetCoverScore` só é alcançado pelo ramo `last_known_enemy_pos` da §3.3.
+**Consequência:** o caminho real é sempre `GetCoverScore` → `RATOAI_CoverCTH`, com
+`BaseScore` 100 e visibilidade de time. O ramo `last_known_enemy_pos` da §3.3 é o único
+outro caminho vivo.
 
 ---
 
@@ -291,7 +300,7 @@ tile — o suficiente pra dominar sozinha a soma do `AIScoreDest`. Vale conferir
 | 1-44 | `DefineClass` e propriedades editáveis |
 | 46-57 | constantes locais (`pb_range`, multiplicadores de penalidade, `extra_score_arg_mul`) |
 | 63-146 | `EvalDest` — loop, ramo `last_pos`, média |
-| 149-193 | `SimpleGetCoverScore` — caminho discreto, dormente |
+| — | ~~`SimpleGetCoverScore`~~ — removido, ver §5 |
 | 195-200 | tabela `CoverScores` |
 | 202-247 | `GetCoverScore` — o caminho que roda de verdade |
 | 249-268 | `RATOAI_CoverCTH` — cópia do CalcValue do jogo |

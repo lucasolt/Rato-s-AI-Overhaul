@@ -94,14 +94,14 @@ DefineClass.AIPolicyCustomWeaponRange = {
             id = "RangeMin",
             name = "Faixa preferida (min)",
             editor = "number",
-            default = 40,
+            default = 30,
             min = 0,
             max = 1000
         }, {
             id = "RangeMax",
             name = "Faixa preferida (max)",
             editor = "number",
-            default = 60,
+            default = 50,
             min = 0,
             max = 1000
         }, {

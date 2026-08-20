@@ -18,6 +18,9 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B12 | ✅ aplicado | `SOURCE_AITakeCover.lua` |
 | B13 | ✅ aplicado | `SOURCE_AIScoreReachableVoxels.lua` |
 | B14 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` |
+| B15 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua` (só afeta o modo de debug) |
+| B16 | ✅ aplicado | `UTIL.lua` — `RATOAI_Debug` congelava em `false` no load |
+| B17 | ✅ aplicado | `UTIL.lua`, `SOURCE_AICreateContext.lua`, `SOURCE_AIScoreReachableVoxels.lua` — âncora de peek (oscilação do shooting stance) |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -453,6 +456,161 @@ rende mais acertos esperados (a penalidade de hipfire é linear e só é severa 
 −123×d/28 contra −61×d/40 do snapshot). Antes deste conserto os dois erros se cancelavam
 em parte — ela contava como se hipfirasse. Agora a conta está honesta e a lacuna ficou
 visível, que é o estado certo para decidir se vale implementar a escolha.
+
+---
+
+### 🟢 B15 — `cth_attacks_at` acumulava disparos entre passadas do precalc
+
+Só afeta o modo de debug, mas invalidava o número que se estava olhando.
+
+`FUNCTION_ScoreAttacksDetailed.lua` guarda a CTH disparo a disparo por par
+(destino, alvo) sob `RATOAI_Debug`:
+
+```lua
+context.cth_attacks_at[upos][target] = context.cth_attacks_at[upos][target] or {}
+...
+table.insert(context.cth_attacks_at[upos][target], attack_mod)
+```
+
+Dentro de **uma** chamada de `AIPrecalcDamageScore` cada par é visitado uma vez só, e o
+`or {}` era inofensivo. Mas o precalc roda mais de uma vez por turno, e a UI de debug o
+reexecuta de propósito (camada "target_recalc", e a página Alvo quando não há
+`ai_destination`). A partir da segunda passada o `table.insert` **apendava na lista da
+passada anterior**: um alvo de 3 disparos aparecia com 6, depois 9.
+
+Corrigido para `= {}`. Zerar é o correto justamente porque o par é visitado uma única vez
+por chamada.
+
+---
+
+### 🔴 B16 — `RATOAI_Debug` congelava em `false`: todo o debug do mod estava morto
+
+`UTIL.lua:6` avaliava a flag **uma vez**, na execução do arquivo:
+
+```lua
+RATOAI_Debug = Platform.developer and Platform.cheats and true or false
+```
+
+Em build goldmaster `Platform.developer` é `nil` quando este mod carrega. Quem liga as
+duas flags é o `ForceDev.lua` do mod **Rato Dev**, que carrega **depois** — e o próprio
+comentário dele já documentava isso ("a flag só vira true aqui, DEPOIS").
+
+Resultado: `RATOAI_Debug` ficava `false` para sempre, e com ele **todo** caminho de debug
+do mod — `cth_attacks_at`, `aims_at`, `dbg_targets` — nunca era preenchido, mesmo com o
+painel de debug aberto e os cheats ligados. O rollover de voxel mostrava a seção de
+`aims` vazia; a página Alvo mostrava as colunas novas todas com `-`.
+
+É o **mesmo erro** que `AIPOLICYPOS_CustomSeekCover.lua:101` já registrava para o gate
+antigo daquela policy. A refatoração do `PERF (C9)` centralizou a flag numa global só,
+mas herdou a avaliação no load.
+
+**Confirmado no processo vivo** (via `tools/dap_probe.py`, ver `DEBUG SERVER.md`):
+
+```
+tostring(RATOAI_Debug)                                       => false
+tostring(Platform.developer) .. " / " .. tostring(Platform.cheats)  => true / true
+```
+
+**Correção.** `RATOAI_RecomputeDebugFlag()` recalcula em `ClassesBuilt`, `ModsReloaded` e
+`CombatStart`. Continua sendo um booleano simples e não uma função — o caminho quente lê
+`local dbg = RATOAI_Debug` por chamada e não pode pagar uma chamada de função; só o
+*momento* da avaliação mudou. `CombatStart` sozinho já bastaria para a correção, e está
+lá justamente para não depender de qual marco de carregamento é tarde o bastante.
+
+`RATOAI_DebugForce = true/false` trava o valor à mão. Sem essa válvula, ligar
+`RATOAI_Debug` no console seria desfeito no `CombatStart` seguinte — exatamente quando se
+está tentando depurar.
+
+---
+
+### 🔴 B17 — Vai e volta do shooting stance: a IA oscilava entre a cobertura e o peek
+
+**Sintoma.** A unidade entra em shooting stance, peeka para fora da cobertura, o
+`evaluate` diz que a melhor posição é a cobertura de onde ela acabou de sair, ela volta,
+ataca, peeka de novo. Ciclo de 2, o turno inteiro.
+
+**Causa: um invariante do vanilla que o GBO3 quebrou.** No source, todo sistema resolve
+`return_pos or self` — a posição de cobertura é a canônica e o peek é apresentação:
+
+| | |
+|---|---|
+| `Cover.lua:131-132` | cobertura calculada a partir de `return_pos` |
+| `Unit.lua:6290` | `IsInCover` usa `self.return_pos or self` |
+| `Unit.lua:7584` | `attack_args.step_pos = ... or self.return_pos or ...` |
+
+`Unit:EnterShootingStance` (GBO3, `shooting_stance_functions.lua:13-16`) faz
+`return_pos_reserved = return_pos; return_pos = false` para a unidade **ficar** peekada.
+Com `return_pos` limpo, todos aqueles fallbacks passam a ver o voxel exposto como o real.
+
+O GBO3 remendou **um** consumidor: o CTH dele próprio. `CTH_cover_prone.lua:101` faz
+`target.return_pos_reserved or target.return_pos or false` e, se `peek_percent > 80`,
+aplica valor de cobertura mesmo assim — o modificador "Peeking from Cover". Ou seja,
+**pelo modelo do jogo ela tem cobertura enquanto peeka**; só a IA não sabia.
+
+**Por que remendar as policies de cobertura não resolveria.** P (cobertura) e P' (peek)
+continuariam sendo dois destinos distintos com scores distintos, e enquanto houver dois
+há gradiente entre eles. A oscilação só morre fazendo os dois serem o *mesmo* destino —
+é conserto de insumo, não de score.
+
+**Correção.** `RATOAI_GetPeekAnchor(unit)` (UTIL.lua) devolve
+`return_pos_reserved or return_pos or false` — a mesma expressão do `CTH_cover_prone`.
+Aplicada em três pontos:
+
+1. `AICreateContext` — `pos`, e o `gx,gy,gz` do `unit_grid_voxel` junto.
+2. **`AIUpdateContext`** — override novo, no fim do mesmo arquivo. Sem ele a âncora do
+   item 1 seria desfeita: `AIPlayAttacks` chama `AIUpdateContext` (`CombatAI.lua:204`) e
+   ele reescreve `unit_pos` / `unit_stance_pos` / `unit_grid_voxel` a partir da posição
+   literal.
+
+3. **`AIScoreReachableVoxels`** — se o destino vencedor é a âncora, ele vira
+   `GetPackedPosAndStance(unit)`, ou seja a posição **atual** da unidade.
+
+**Por que o item 3 foi preciso — e por que os itens 1 e 2 sozinhos não bastaram.**
+
+A primeira versão desta correção parou nos itens 1 e 2, com a justificativa de que
+`AIBehaviors.lua:83-85` decidiria o movimento a partir de `context.unit_stance_pos`.
+**Isso estava errado em dois pontos**, e a oscilação continuou em jogo:
+
+- Aquele bloco é o `AIBehavior:TakeStance` — decide **postura**, não movimento.
+- Os portões que de fato decidem andar leem a unidade **direto**, nunca o context:
+  `AIBehavior:BeginMovement` usa `stance_pos_pack(unit, unit.stance)`
+  (`AIBehaviors.lua:145-148`) e `EndMovement` usa `GetPackedPosAndStance(unit)` (`:202`).
+
+Ou seja: a âncora conserta a **avaliação** (cobertura medida em P, que é o que o
+`CTH_cover_prone` do GBO3 já fazia), mas nunca chega na **decisão de andar** — para o
+motor, P e P' seguem sendo tiles diferentes. Por isso o item 3 troca o destino em vez de
+tentar ensinar o motor que os dois são a mesma coisa.
+
+`AIUpdateContext` também não roda onde eu supus: `CombatAI.lua:204` está dentro de
+`AIPlayAttacks`, que é a fase de **ataque** — depois do movimento. O item 2 continua
+correto e útil (mantém a âncora durante o ataque), mas nunca poderia impedir o passo.
+
+**Medido no processo vivo** (`tools/dap_probe.py`) e é o que torna o item 3 robusto:
+`stance_pos_dist` é distância **2D pura** — ignora stance *e* Z. Dois packs com stance 1
+vs 3, ou com Z de um `SlabSizeZ` de diferença, dão `dist = 0`. Então a comparação da
+âncora não precisa casar postura nem altura.
+
+**A divisão que cai de graça:** `CombatAI.lua:211` monta o `dest` do
+`AIPrecalcDamageScore` com `context.ai_destination` — que agora é a posição literal P'.
+Então fica cobertura de P (pelo context ancorado), tiro de P'. É o comportamento do jogo.
+
+**Cobertura do item 3:** `StandardAI`, `RetreatAI`, `ApproachInteractableAI` e `CustomAI`
+pegam o destino de `AIScoreReachableVoxels`. **`PositioningAI` não** — ele usa
+`context.positioning_dest` (`AIBehaviors.lua:369`). Se a oscilação reaparecer num
+archetype de posicionamento, é ali que falta.
+
+**O que fica em aberto.**
+
+- A origem do pathfinding (`AIFindDestinations`, `SOURCE_AIFindDestinations.lua:55`)
+  **não** foi ancorada — é onde mora o risco de
+  `assert(not "AI can't find unit free destination")`, e não é necessária para matar a
+  oscilação. O custo é um viés de um tile *contra* ficar parada. Se na prática isso ainda
+  a fizer querer se mexer, é o próximo passo.
+- **Ponto cego novo:** ancorada em P, a IA deixa de ver o caso em que o ângulo do peek já
+  não dá cobertura (`peek_percent <= 80`) e ela está genuinamente exposta. A correção de
+  verdade é as policies usarem o mesmo teste
+  `GetCoverPercentage(attacker_pos, return_pos)` do CTH do GBO3 — parte do problema maior
+  de "o modelo de cobertura da IA ≠ o modelo do jogo".
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

@@ -4,8 +4,9 @@ Companion do `PERF_PLAN.md`. Aqui está o código concreto de cada mudança.
 
 ## Status de aplicação
 
-**Aplicado:** C1–C9, C11, C12. Todas as mudanças estão no código, marcadas com
-comentários `---- PERF (Cx)` para você achar e reverter individualmente.
+**Aplicado:** C1–C9, C11, C12, e **F2.3 no `CustomSeekCover`** (com medição — ver a
+seção da F2.3). Todas as mudanças estão no código, marcadas com comentários
+`---- PERF (Cx)` / `---- PERF (F2.x)` para você achar e reverter individualmente.
 
 **Não aplicado:**
 
@@ -20,6 +21,9 @@ comentários `---- PERF (Cx)` para você achar e reverter individualmente.
   save do editor de mods. Isso tem que sair pelo editor.
 - **Fase 2 e F3.1/F3.2** — são esboços, não patches. Exigem validação de
   comportamento e ficam para depois de medir o efeito do que já entrou.
+  Exceção: a **F2.3 já saiu do esboço** no `CustomSeekCover`, porque virou medição em vez
+  de estimativa. Faltam nela o `CustomFlanking` e o
+  `getAIShootingStanceBehaviorSelectionScore`.
 
 **Validação feita:** balanceamento de blocos (`function`/`if`/`for` vs `end`) conferido
 em todos os 53 arquivos de `Code/`, e varredura por referências órfãs a símbolos
@@ -856,13 +860,49 @@ recalculam isso por `(destino, inimigo)`.
 Combina bem com C5: depois de F2.2, o teste de alcance que C5 promoveu vira
 uma leitura de tabela.
 
-### F2.3 — Hoistar `ResolveValue` de preset 🟢
+### F2.3 — Hoistar `ResolveValue` de preset 🟢 — **aplicado no CustomSeekCover**
 
 São constantes de preset resolvidas em laço quente:
 `CustomSeekCover.lua:200-201, 247-248` (4 por dest×inimigo),
 `CustomFlanking.lua:42, 58`, `getAIShootingStanceBehaviorSelectionScore.lua:88, 129`.
 
 Resolver uma vez, em `OnMsg.ModsReloaded` ou no início do combate.
+
+**Medido antes de aplicar** (10k chamadas no processo vivo, `tools/dap_probe.py` — ver
+`DEBUG SERVER.md`):
+
+| chamada | µs/chamada |
+|---|---|
+| `PosGetCoverPercentageFrom` (a query nativa) | 0,8 |
+| `GetCover` (lookup de voxel) | 0,8 |
+| `GetCoverFrom` | 1,8 |
+| `ResolveValue` (1×) | 0,9 |
+| `RATOAI_CoverCTH` (o wrapper) | 6,3 |
+
+A leitura que isso força: **o wrapper custa ~7× o trabalho que ele embrulha**. Eram três
+`ResolveValue` por par (destino, inimigo) — dois em `RATOAI_CoverCTH` (`Cover`,
+`ExposedCover`) e um em `GetCoverScore` (`cover_max_malus`) — ou seja ~2,7 µs de ~7,2 µs
+por par, **~37% do custo só relendo constante**.
+
+`Cover` passou a vir de `RATOAI_GetMaxCoverCTH()` (que já existia em
+`FUNCTION_ScoreAttacksDetailed.lua`, o "parcial" desta mesma F2.3) em vez de um cache
+novo — é o mesmo número do mesmo preset, e dois caches da mesma constante é como elas
+divergem. Só `ExposedCover` ganhou cache próprio (`RATOAI_GetExposedCoverCTH`).
+
+Verificado ao vivo que a substituição é valor-idêntica: `Cover = -35`,
+`ExposedCover = -5`, `RATOAI_GetMaxCoverCTH() == ResolveValue("Cover")` → `true`.
+
+**Ainda não aplicado:** `CustomFlanking.lua:42, 58` e
+`getAIShootingStanceBehaviorSelectionScore.lua:88, 129`.
+
+#### Achado colateral: `SimpleGetCover` era uma armadilha, não um atalho
+
+A mesma medição mostrou que `GetCoverFrom` (1,8 µs) — o caminho do `SimpleGetCover` —
+custa **o dobro** de `PosGetCoverPercentageFrom` (0,8 µs), que é o caminho "caro". Ou
+seja o modo "simples" era mais lento *e* menos preciso. Estava dormente (0 de 21
+instâncias), com o corpo do `SimpleGetCoverScore` inteiramente comentado — a função era a
+identidade. Removidos: a property, o ramo no `EvalDest`, e a função. O fallback de
+`last_known_enemy_pos` passou a indexar `self.CoverScores` direto.
 
 ### F2.4 — Cache dos invariantes de `AICalcAttacksAndAim` 🟢
 

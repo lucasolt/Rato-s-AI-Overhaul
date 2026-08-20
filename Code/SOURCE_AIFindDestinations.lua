@@ -15,7 +15,6 @@
 ---- A lista `code` do metadata.lua (espelhada no items.lua) define o que carrega. Sem
 ---- registrar, ele e codigo morto exatamente como o arquivo que ele substitui.
 ---------------------------------------------------------------------------------------------------
-
 ---------------------------------------------------------------------------------------------------
 ---- QUANDO O DESTINO VIRA "AGACHADO"
 ----

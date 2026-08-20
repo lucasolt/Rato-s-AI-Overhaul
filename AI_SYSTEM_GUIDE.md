@@ -1044,6 +1044,63 @@ behavior escolhido, signature action escolhida, alvo, número de ataques e resul
 `DbgShowLastSelectedZone()` (AIActions.lua:176) desenha o polígono da última zona de cone
 escolhida — útil justamente para MG/overwatch/buckshot.
 
+### 10.1 `context.dbg_targets` — por que a IA escolheu **aquele** alvo
+
+Marcador de rastreio no código: `---- DEBUG (D1)`.
+
+`AIPrecalcDamageScore` avalia **todos** os alvos em **todos** os destinos, mas só o
+vencedor sobrevive da função: `dest_cth`, `dest_hit_score` e `dest_target_score` guardam
+`best_*`, e as tabelas `target_cth` / `target_hit` / `target_score` são locais do laço de
+destinos. Não havia como perguntar *"e contra o alvo #3, quanto seria o CTH"*.
+
+`context.dbg_targets[dest]` repõe esse eixo. Só existe com `RATOAI_Debug` (mesmo critério
+de custo do `PERF (C9)`), é zerado a cada chamada do precalc e tem esta forma:
+
+```lua
+context.dbg_targets[dest] = {
+    ap, cost_ap, no_ap,          -- orçamento do destino
+    best_score, threshold,       -- o corte de AIDecisionThreshold (80%)
+    total, roll,                 -- o sorteio ponderado entre finalistas
+    finalists = { <alvo>, ... },
+    chosen, preferred,
+    by_target = {
+        [<alvo>] = {
+            dist, cover, los, recoil,
+            shots,               -- nº de disparos (varia com a DISTÂNCIA)
+            cth1,                -- CTH do 1º disparo
+            hit,                 -- soma de CTH sobre os disparos, já com recoil
+            score,               -- score final do alvo
+            reject,              -- motivo do descarte, quando houve
+            chain = { hit, pos, base, pol, pol_parts, downed, ff, rnd, rnd_pct,
+                      group, group_pct, final },
+        },
+    },
+}
+```
+
+Três coisas que só ficam visíveis com isso:
+
+1. **`best_target` não é o de maior score.** É um sorteio ponderado
+   (`InteractionRand`) entre os finalistas ≥ 80% do melhor. Somado ao
+   `TargetScoreRandomization` do arquétipo (10 a 40 no vanilla — ±40% em alguns), a
+   ordenação chega bem ruidosa no sorteio. Sem `roll`/`total` não dá para separar
+   *"o scoring escolheu mal"* de *"o dado caiu assim"*.
+2. **`shots` varia com a distância** (`AICalcAttacksAndAim(context, ap, target_dist)`),
+   então `hit` — a soma de CTH — não é comparável entre dois alvos sem olhar quantos
+   disparos cada soma tem dentro.
+3. **Motivo do descarte.** `fora de alcance`, `sem linha de fogo`,
+   `linha de fogo bloqueada` e `soma de CTH <= AIShootAboveCTH` eram todos o mesmo `-`.
+
+Consumidor: a página **Alvo** do `RATODBG_AIDebugUI.lua` (mod *Rato Dev*) — tabela de
+candidatos com a cadeia aberta, `p%` de cada finalista, e um cartão por alvo com o CTH
+disparo a disparo (de `cth_attacks_at` / `aims_at`).
+
+**Congelamento da randomização.** Todo precalc disparado pela UI re-sorteia
+`target_score_mod`, ou seja, o número muda só por ter sido observado.
+`IModeAIDebug:PrecalcForDebug` seta `context.dbg_freeze_target_rand` antes de chamar, e o
+precalc então reaproveita o sorteio anterior. O `RandRange` continua sendo consumido
+mesmo congelado — pular a chamada dessincronizaria o fluxo de RNG da unidade.
+
 ---
 
 ## 11. Armadilhas e bugs do source (importantes para modding)

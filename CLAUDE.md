@@ -32,6 +32,7 @@ Integração opcional com CUAE (loot/armas dos inimigos).
 | `SEEKCOVER_GUIDE.md` | Leitura linha a linha de `AIPOLICYPOS_CustomSeekCover.lua`. |
 | `SIGNATURE_POSITIONING_GAP.md` | Investigação: o scoring de posição é cego às signature actions. |
 | `PERF_PLAN.md` / `PERF_CHANGES.md` | Gargalos de performance e os patches C1–C12 (C10 e Fase 2 não aplicados). |
+| `DEBUG SERVER.md` | Console Lua no jogo rodando via DAP (`tools/dap_probe.py`, porta 8165, só `JA3Debug.exe`). |
 
 ## Estrutura do `Code/` — prefixo = tipo de override
 | Prefixo | Papel |
@@ -65,7 +66,9 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
 - `metadata.lua` — não editar sem instrução explícita; a lista `code` define a **ordem de
   carregamento** e está espelhada no `items.lua` (editar um dessincroniza o outro).
 - Lógica nova vai em `Code/*.lua`; presets e números vão pelo editor.
-- Marcadores de rastreio no código: `---- PERF (Cx)` e `BUGFIX (Bn)` — referenciam
-  `PERF_CHANGES.md` e `WEIGHTS_AUDIT.md`. Manter o padrão ao aplicar novas mudanças.
+- Marcadores de rastreio no código: `---- PERF (Cx)`, `BUGFIX (Bn)` e `DEBUG (Dn)` —
+  referenciam `PERF_CHANGES.md`, `WEIGHTS_AUDIT.md` e a seção 10 do `AI_SYSTEM_GUIDE.md`.
+  Manter o padrão ao aplicar novas mudanças; conferir o maior número já usado antes de
+  escolher o próximo (as listas não são contíguas).
 - Repositório git próprio (branches: `main`, `claude-performance-refactor`,
   `New_AiCalcAttacksAndAim`).
