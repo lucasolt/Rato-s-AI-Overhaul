@@ -303,21 +303,17 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
 						'CoverTrust', 90,
-						'CoverNearTiles', 4,
-						'CoverTrustNear', 20,
+						'CoverNearTiles', 6,
+						'PlateauTiles', 4,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 112,
+						'Weight', 200,
 						'Normalization', "soft",
-					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 75,
-						'Normalization', "cap",
 						'MaxHits', 100,
 						'SoftK', 100,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 20,
+						'Weight', 40,
 						'Normalization', "tokill",
 					}),
 				},
