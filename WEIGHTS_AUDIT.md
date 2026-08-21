@@ -22,6 +22,8 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B16 | ✅ aplicado | `UTIL.lua` — `RATOAI_Debug` congelava em `false` no load |
 | B17 | ✅ aplicado | `UTIL.lua`, `SOURCE_AICreateContext.lua`, `SOURCE_AIScoreReachableVoxels.lua` — âncora de peek (oscilação do shooting stance) |
 | B18 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` — laço de mira comprava nível e perdia o disparo |
+| B19 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` — free move contado como AP de ataque |
+| B20 | ✅ aplicado | `SOURCE_AIPolicyDealDamage.lua` — desconto de alvo derrubado nos 4 modos |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -658,6 +660,79 @@ querer dizer "sem mais disparos, despeje o AP que sobrou em mira do último tiro
 fez isso — o nível ia para uma variável local que morria no `break`. Continua não
 implementado; ver **7.0b** em `AIM_AND_STANCE.md`. É o motivo de a unidade acabar o turno
 com AP sobrando e mira 0.
+
+---
+
+### 🔴 B19 — Free move contado como AP de ataque
+
+O `ap` que chega no `AICalcAttacksAndAim` vem de `dest_ap`, que parte de
+`unit.ActionPoints` (`CombatAI.lua:1018`). E `ActionPoints` **contém** o `free_move_ap`
+(por isso `GetUIActionPoints` o subtrai, `Unit.lua:2266`) — mas free move só paga
+**movimento** (`Unit.lua:2315`).
+
+**Medido no processo vivo:** LegionRaider com `AP=19.0`, `free=7.0`, custo de ataque 4.0 e
+mira 1.0. Planejava 3 ataques (3 × (4+2) = 18 ≤ 19) tendo 12.0 utilizáveis. Sete AP de
+orçamento fantasma, mais de um ataque inteiro.
+
+A linha existiu como `ap = ap - free_move_ap`, com o comentário *"Fixes considering free
+move ap as AP"*, e saiu no commit `91b8eb4` ("1.08", 2025-02-04). O **B18** a desmascarou:
+antes, o laço desperdiçava AP em mira e descartava disparos, o que cancelava parte da
+inflação.
+
+**Não voltou como era.** Lendo a distribuição de `dest_ap` dos 204 destinos daquela unidade,
+só **um** valia 19000 (a posição atual) e o seguinte já caía para 16000. Se o free move
+descontasse o trajeto haveria um platô em 19000 para tudo dentro dos 7 AP grátis — não há.
+Logo `dest_ap = ActionPoints − custo_bruto`, e subtrair o free move **cheio** cobraria o
+deslocamento duas vezes. Provavelmente foi por isso que a linha caiu em 2025.
+
+O que sai é só a franquia **não usada**:
+
+```lua
+local moved_ap      = Max(0, (context.start_ap or unit.ActionPoints or 0) - (ap or 0))
+local leftover_free = Max(0, free_move_ap - moved_ap)
+ap = Max(0, (ap or 0) - leftover_free)
+```
+
+| m (trajeto) | dest_ap | franquia que sobra | AP de ataque |
+|---|---|---|---|
+| 0 | 19 | 7 | **12** |
+| 3 | 16 | 4 | **12** |
+| 7 | 12 | 0 | **12** |
+| 10 | 9 | 0 | **9** |
+
+Os 12 se mantêm até o trajeto estourar a franquia — que é a semântica certa. Na execução é
+no-op: `AIPlayAttacks` remove o FreeMove antes (`CombatAI.lua:203`).
+
+**Efeito colateral esperado:** reduz `dest_hit_score` em todo destino com free move
+sobrando, ou seja ataca de frente a inflação do Deal Damage.
+
+---
+
+### 🟠 B20 — Desconto por alvo derrubado, agora nos quatro modos
+
+O `AIPrecalcDamageScore` aplica 5% ao `target_score` quando o alvo está caído. Mas o
+`hit_score`, que alimenta a `AIPolicyDealDamage`, é capturado **antes** disso (ver
+**B10**). Um caído que sobreviva ao corte por ser o único candidato chega na policy sem
+desconto nenhum — em **qualquer** modo.
+
+Só o `tokill` tratava disso, porque lá era patológico: o modo normaliza pelo HP do alvo, e
+quem está caído tem HP no chão, então `needed` vira ~1 e qualquer tiro satura em 100 —
+"finalizar o caído" virava a melhor oportunidade do mapa.
+
+Nos outros três o divisor não colapsa, então o efeito é mais brando — mas a direção é a
+mesma e continua errada: uma posição não fica boa por render tiro em quem já está fora.
+
+**Correção.** O fator saiu de dentro do `tokill` e virou `RATOAI_DownedFactor`, aplicado
+**uma vez no fim** do `EvalDest`, sobre o score de qualquer modo. No `tokill` a ordem é a
+mesma de antes — depois do clamp do `KillIsEnough`. O `EvalDest` passou de vários `return`
+para um `score` único com fallback explícito (`relative` sem `ref` e `tokill` sem
+alvo/dano continuam caindo no `cap`).
+
+**Onde o desconto NÃO é aplicado, de propósito:** o ramo de compatibilidade que lê
+`dest_target_score` quando não há `dest_hit_score`. Aquele número já passou pelos 5% do
+precalc — aplicar de novo seria desconto em cima de desconto.
+
+Continuam sendo os mesmos 5% do source: se o número mudar, o lugar de mudar é lá.
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

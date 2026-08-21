@@ -193,6 +193,32 @@ function AIPolicyDealDamage:EffectiveDivisor(context, base_div)
     return Max(1, MulDivRound(base_div, aplicado, 100))
 end
 
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B20): desconto por alvo DERRUBADO, agora nos quatro modos.
+----
+---- `AIPrecalcDamageScore` aplica 5% ao `target_score` quando o alvo esta caido -- mas o
+---- `hit_score`, que alimenta esta policy, e capturado ANTES disso (ver BUGFIX B10).
+---- Entao um caido que sobreviva ao corte por ser o unico candidato chega aqui sem
+---- desconto nenhum, em QUALQUER modo.
+----
+---- No `tokill` isso era patologico: o modo normaliza pelo HP do alvo, e quem esta caido
+---- tem HP no chao -- `needed` vira ~1 e qualquer tiro satura em 100, declarando
+---- "finalizar o caido" como a melhor oportunidade do mapa.
+----
+---- Nos outros tres o efeito e mais brando (o divisor nao colapsa), mas a direcao e a
+---- mesma e errada: uma posicao nao fica boa por render tiro em quem ja esta fora.
+----
+---- Mesmos 5% do source, de proposito: se um dia aquele numero mudar, o lugar de mudar e
+---- la, e este comentario aponta para ele.
+---------------------------------------------------------------------------------------------------
+local function RATOAI_DownedFactor(context, dest)
+    local target = context.dest_target and context.dest_target[dest]
+    if IsKindOf(target, "Unit") and (target:IsDowned() or target:IsGettingDowned()) then
+        return 5
+    end
+    return 100
+end
+
 function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
     if self.CheckLOS and not g_AIDestEnemyLOSCache[dest] then
         return 0
@@ -202,6 +228,10 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
     if not hits then
         ---- contexto antigo ou caminho que nao passou por AIPrecalcDamageScore:
         ---- cai no comportamento anterior em vez de zerar a policy
+        ----
+        ---- BUGFIX (B20): retorna AQUI, sem o desconto de alvo derrubado, de proposito.
+        ---- Este ramo le `dest_target_score`, que ja passou pelos 5% do
+        ---- AIPrecalcDamageScore -- aplicar de novo seria desconto em cima de desconto.
         local raw = context.dest_target_score[dest] or 0
         return
             raw > 0 and Min(100, MulDivRound(raw, 100, 100 * Max(1, context.max_attacks or 1))) or 0
@@ -212,6 +242,7 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
     end
 
     local modo = self.Normalization or "cap"
+    local score
 
     ---- fracao da PROPRIA capacidade que este tile entrega
     if modo == "relative" then
@@ -220,51 +251,42 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
             ---- o Min existe porque a CTH real pode passar da Marksmanship base (point
             ---- blank, elevacao, mesmo alvo, mira). Nao e regua de calibragem: e "fiz
             ---- melhor que o meu nominal", que e raro -- por isso nao cria plato.
-            return Min(100, MulDivRound(hits, 100, ref))
+            score = Min(100, MulDivRound(hits, 100, ref))
         end
-        ---- sem capacidade legivel: cai no `cap` em vez de zerar a policy
-    end
+        ---- sem capacidade legivel: cai no `cap` la embaixo em vez de zerar a policy
 
-    ---- saturacao suave: sem teto duro, sem trecho plano
-    if modo == "soft" then
-        return MulDivRound(100, hits,
-                           hits + self:EffectiveDivisor(context, Max(1, self.SoftK or 200)))
-    end
+        ---- saturacao suave: sem teto duro, sem trecho plano
+    elseif modo == "soft" then
+        score = MulDivRound(100, hits,
+                            hits + self:EffectiveDivisor(context, Max(1, self.SoftK or 200)))
 
-    ---- acertos necessarios para derrubar o alvo escolhido neste destino
-    if modo == "tokill" then
+        ---- acertos necessarios para derrubar o alvo escolhido neste destino
+    elseif modo == "tokill" then
         local target = context.dest_target and context.dest_target[dest]
         local dmg = RATOAI_DamagePerHit(context)
         if IsValid(target) and dmg then
             ---- `needed` na MESMA escala de `hits` (acertos x100): HP/dano x 100
             local needed = Max(1, MulDivRound(Max(1, target.HitPoints or 1), 100, dmg))
-            local score = MulDivRound(hits, 100, needed)
-            score = self.KillIsEnough and Min(100, score) or score
-
-            ---------------------------------------------------------------------------
-            ---- Alvo derrubado: este modo normaliza pelo HP do alvo, e quem esta caido
-            ---- tem HP no chao -- `needed` vira ~1 e QUALQUER tiro satura em 100. Sem
-            ---- este desconto o `tokill` declara "finalizar o caido" como a melhor
-            ---- oportunidade do mapa, o oposto do que o jogo quer.
-            ----
-            ---- Nao e um caso hipotetico: o AIPrecalcDamageScore aplica os mesmos 5% ao
-            ---- `target_score` (escolha de alvo), mas o `hit_score` que alimenta esta
-            ---- policy e capturado ANTES disso. Entao um caido que sobreviva ao corte
-            ---- por ser o unico candidato chega aqui sem desconto nenhum.
-            ----
-            ---- Mesmos 5% do source, de proposito: se um dia aquele numero mudar, o
-            ---- lugar de mudar e la, e este comentario aponta para ele.
-            ---------------------------------------------------------------------------
-            if IsKindOf(target, "Unit") and (target:IsDowned() or target:IsGettingDowned()) then
-                score = MulDivRound(score, 5, 100)
+            score = MulDivRound(hits, 100, needed)
+            if self.KillIsEnough then
+                score = Min(100, score)
             end
-
-            return score
         end
         ---- sem alvo valido ou sem estimativa de dano: cai no `cap` em vez de zerar a
         ---- policy, senao um destino sem alvo escolhido perderia o score de tiro inteiro
     end
 
-    return Min(100, MulDivRound(hits, 100,
-                                self:EffectiveDivisor(context, Max(1, self.MaxHits or 200))))
+    if not score then
+        score = Min(100, MulDivRound(hits, 100,
+                                     self:EffectiveDivisor(context, Max(1, self.MaxHits or 200))))
+    end
+
+    ---- BUGFIX (B20): aplicado no FIM e uma vez so, para valer nos quatro modos. No
+    ---- `tokill` a ordem e a mesma de antes -- depois do clamp do KillIsEnough.
+    local downed = RATOAI_DownedFactor(context, dest)
+    if downed ~= 100 then
+        score = MulDivRound(score, downed, 100)
+    end
+
+    return score
 end

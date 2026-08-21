@@ -307,20 +307,27 @@ return {
 						'CoverTrustNear', 20,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Normalization', "cap",
+						'Weight', 225,
+						'Normalization', "soft",
 					}),
-					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 25,
+						'Weight', 150,
+						'Normalization', "cap",
+						'MaxHits', 100,
+						'SoftK', 100,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 40,
 						'Normalization', "tokill",
 					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 			PlaceObj('HoldPositionAI', {
-				'Comment', "ShootingStance",
+				'Comment', "ShootingStance.",
 				'Fallback', false,
 				'Score', function (self, unit, proto_context, debug_data)
+					--Isso possivelmente pode ficar obsoleto na medida em que vamos melhorando o eval damage pra seguir as mecanicas do GBO
 					local score = getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
 					return MulDivRound(score, self.Weight, 100)
 				end,
