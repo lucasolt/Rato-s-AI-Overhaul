@@ -24,6 +24,8 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B18 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` — laço de mira comprava nível e perdia o disparo |
 | B19 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` — free move contado como AP de ataque |
 | B20 | ✅ aplicado | `SOURCE_AIPolicyDealDamage.lua` — desconto de alvo derrubado nos 4 modos |
+| B21 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua`, `SOURCE_AIPrecalcDamageScore.lua` — rajada valia um acerto só |
+| B22 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` + **GBO3** `FUNCTIONS_recoil.lua` — sobretaxa de mira do recoil |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -733,6 +735,91 @@ alvo/dano continuam caindo no `cap`).
 precalc — aplicar de novo seria desconto em cima de desconto.
 
 Continuam sendo os mesmos 5% do source: se o número mudar, o lugar de mudar é lá.
+
+---
+
+### 🔴 B21 — Uma rajada valia um acerto só
+
+`hit_score` somava um `attack_mod` por **ataque**, e uma rajada de 6 balas é um ataque.
+Rajada com CTH 60 contribuía 60 — 0,6 acerto esperado — quando a expectativa real é
+várias vezes isso. **Toda arma automática estava subcontada no scoring de posição.**
+
+O jogo rola bala a bala (`Weapon.lua:2149`, e o override do GBO3 em
+`SOURCE_FirearmGetAttackResults.lua:255-279`):
+
+```lua
+shot_cth = original_cth - cth_loss_per_shot * Min(b-1, MaxShotIndexForRecoilCTHLoss)
+if b > 1 then shot_cth = shot_cth - aim_cth end   -- só a 1ª bala fica com o bônus de mira
+shot_cth = Clamp(shot_cth, 0, 100)
+shot_cth = Max(shot_cth, Min(MultishotMinCTH, original_cth))
+```
+
+com `cth_loss_per_shot = -recoil`, do **mesmo `get_recoil`** que a IA já tinha em mãos.
+Constantes conferidas no processo vivo: `MaxShotIndexForRecoilCTHLoss = 6`,
+`MultishotMinCTH = 5`.
+
+Replicado em `RATOAI_BurstHits`. **Custo: zero `CalcChanceToHit` a mais** — laço de N ≤ 6
+com inteiros sobre dois números já calculados. O `GetAutofireShots` foi hoistado para
+`context.burst_shots` (depende só de arma e ação, não do par).
+
+**Magnitude — é mudança de balanceamento, não conserto neutro:**
+
+| cenário | antes | depois |
+|---|---|---|
+| tiro único CTH 60 | 60 | 60 |
+| rajada 4, recoil −8 | 60 | **192** |
+| rajada 6, recoil −8 | 60 | **240** |
+| rajada 6, recoil −15 | 60 | 160 |
+| rajada 6, CTH 25, recoil −15 | 25 | 55 |
+
+O **B19** (free move) baixou `hit_score` para todos; este sobe só para automática. Não se
+cancelam — o líquido é fuzileiro automático relativamente mais atraído por posição de
+tiro. Recoil alto doma sozinho, que é a mecânica certa fazendo o trabalho.
+
+---
+
+### 🔴 B22 — A sobretaxa de mira do recoil, agora prevista
+
+`Rat_recoil` tem uma reação `OnCalcAPCost` que soma
+`cRoundDown(aim_cost * aim_level) * const.Scale.AP` a **qualquer** ataque com mira ≥ 1
+feito por quem tem pilhas. O planejador não sabia: orçava mira pelo preço base, a execução
+cobrava a sobretaxa por cima, o `HasAP` falhava em `AIStartCombatAction` e **o disparo
+simplesmente não saía**. Era o `recoil_aim_cost` declarado e comentado no arquivo com um
+`--- I dont think this is going to work`.
+
+Só aparecia do segundo disparo em diante, porque o primeiro do turno não tem pilhas.
+
+**Mudança no GBO3 (afeta o jogador):** a fórmula foi **extraída** de dentro de
+`ApplyPersistantRecoilEffects` para `Rat_GetRecoilAimCost(attacker, action, weapon, stacks)`
+— pura, sem efeito colateral, sem ler nem escrever o efeito. O `ApplyPersistantRecoilEffects`
+passou a chamá-la. **Comportamento idêntico para o jogador**; o que muda é que o valor
+virou consultável.
+
+Extrair em vez de reimplementar do lado da IA foi deliberado: a fórmula é cheia de float
+(`0.7`, `/30.00`, `cRoundFlt` em 0,5, `0.6`) e uma cópia em aritmética inteira divergiria
+em silêncio na primeira vez que um desses números mudasse — é o defeito que o
+`RECOIL_STACKS_PCT` já tem, duplicado com um comentário de "manter em sincronia".
+
+**Custo: negligível.** `get_recoilP_value` não recebe alvo nem posição, então é invariante
+no turno — cacheado por número de pilhas no context, 3-6 chamadas por unidade por turno em
+vez de por par (destino, alvo).
+
+O planejador agora modela as pilhas ao longo do turno, inclusive o reset por mira 3
+(`ApplyPersistantRecoilEffects` remove tudo e soma 1). Efeito simulado, AK com 19 AP,
+rajada 4 AP, mira 1 AP, já em stance:
+
+| sobretaxa | miras planejadas | sobra |
+|---|---|---|
+| 0,0 AP | `3, 3, 3` | 1,0 |
+| 0,5 AP | `3, 3, 1` | 1,0 |
+| 1,0 AP | `3, 3` | 3,0 |
+| 2,0 AP | `3, 2` | 2,0 |
+
+É o comportamento que faltava: **mirar menos quando mirar fica caro**, em vez de planejar
+um disparo que não sai.
+
+**Compatibilidade:** o chamador é guardado por `rawget(_G, "Rat_GetRecoilAimCost")`. Com um
+GBO3 anterior a esta mudança a sobretaxa vira 0 e o comportamento é o de antes, sem erro.
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

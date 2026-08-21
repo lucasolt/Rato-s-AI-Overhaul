@@ -112,6 +112,15 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     local max_check_range, is_melee = AIGetWeaponCheckRange(unit, weapon, action)
     local is_heavy = IsKindOf(weapon, "HeavyWeapon")
 
+    ---- BUGFIX (B21): balas por ataque, para RATOAI_BurstHits expandir a rajada.
+    ---- Depende so de (arma, acao) -- nem do destino nem do alvo -- entao e resolvido
+    ---- UMA vez aqui em vez de por par no laco quente. `GetAutofireShots` devolve 0 ou
+    ---- nil para tiro unico, dai o Max(1, ...).
+    context.burst_shots = 1
+    if weapon and weapon.GetAutofireShots then
+        context.burst_shots = Max(1, weapon:GetAutofireShots(action) or 1)
+    end
+
     local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
     -- stance mod
     -- TODO: #64 check messing around with modCrouchBonus and modProneBonus

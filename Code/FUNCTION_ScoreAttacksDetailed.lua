@@ -24,6 +24,64 @@ local RECOIL_STACKS_PCT = 35
 ---- fracao do recoil que se aplica por nivel de mira (era 0.33 / 0.66 / 1.0)
 local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
 
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B21): uma RAJADA valia um acerto so.
+----
+---- `hit_score` somava um `attack_mod` por ATAQUE, e uma rajada de 6 balas e um ataque.
+---- Rajada com CTH 60 contribuia 60 -- 0,6 acerto esperado -- quando a expectativa real
+---- e varias vezes isso. Toda arma automatica estava subcontada no scoring de posicao.
+----
+---- O jogo rola BALA A BALA. Formula real, de SOURCE_FirearmGetAttackResults.lua:255-279
+---- do GBO3 (que por sua vez espelha Weapon.lua:2149):
+----
+----     shot_cth = original_cth - cth_loss_per_shot * Min(b-1, MaxShotIndexForRecoilCTHLoss)
+----     se b > 1:  shot_cth = shot_cth - aim_cth      <- so a 1a bala fica com o bonus de mira
+----     shot_cth = Clamp(shot_cth, 0, 100)
+----     shot_cth = Max(shot_cth, Min(MultishotMinCTH, original_cth))    <- piso
+----
+---- com `cth_loss_per_shot = -recoil`, do MESMO `get_recoil` que a IA ja tem em maos.
+---- Aqui `recoil_cth` ja vem negativo, entao a subtracao vira soma.
+----
+---- CUSTO: laco de N <= 6 com inteiros, ZERO `CalcChanceToHit` a mais -- os dois insumos
+---- (`original_cth` e `recoil_cth`) ja estao calculados e cacheados quando este laco roda.
+----
+---- Constantes conferidas no processo vivo: MaxShotIndexForRecoilCTHLoss = 6,
+---- MultishotMinCTH = 5.
+---------------------------------------------------------------------------------------------------
+---- Valor do modificador `Aim` para um nivel, cacheado na tabela do chamador.
+---- `cache` nil = arma de tiro unico: nao ha bala 2 para perder o bonus, devolve 0.
+local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
+    if not cache or (aim_level or 0) <= 0 then
+        return 0
+    end
+    local v = cache[aim_level]
+    if v == nil then
+        local use, bonus = Presets.ChanceToHitModifier.Default.Aim:CalcValue(
+                               unit, target, nil, action, weapon, nil, nil, aim_level)
+        v = (use and bonus) or 0
+        cache[aim_level] = v
+    end
+    return v
+end
+
+local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth)
+    if shots <= 1 then
+        return original_cth
+    end
+    local max_idx = const.Combat.MaxShotIndexForRecoilCTHLoss or 6
+    local floor_cth = Min(const.Combat.MultishotMinCTH or 5, original_cth)
+    local total = 0
+    for b = 1, shots do
+        ---- recoil_cth e negativo; Min(b-1, max_idx) congela a degradacao apos o teto
+        local c = original_cth + (recoil_cth or 0) * Min(b - 1, max_idx)
+        if b > 1 then
+            c = c - (aim_cth or 0)
+        end
+        total = total + Max(floor_cth, Clamp(c, 0, 100))
+    end
+    return total
+end
+
 function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k, ap, context,
                                      action, weapon, targets_attack_data, target_covers, target_los,
                                      attacker_pos, recoil_cth)
@@ -88,6 +146,19 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- CTH calculada -- desapareceu quando este bloco substituiu o do vanilla.
     local first_cth
 
+    ---- BUGFIX (B21): balas por ataque. Uma rajada e UM ataque no laco abaixo, mas N
+    ---- balas na resolucao -- ver RATOAI_BurstHits.
+    ---- Vem do context: `GetAutofireShots` depende so de (arma, acao), nao do destino
+    ---- nem do alvo, entao e resolvido uma vez em AIPrecalcDamageScore.
+    local burst_shots = context.burst_shots or 1
+
+    ---- O bonus de mira so vale para a PRIMEIRA bala da rajada; as seguintes o perdem.
+    ---- Tabela criada SO quando a arma e automatica -- em arma de tiro unico nao ha
+    ---- segunda bala para perder bonus, e `RATOAI_AimBonus` devolve 0 sem alocar nada.
+    ---- PERF (C11): funcao de arquivo, nao closure. Este trecho roda por par
+    ---- (destino, alvo) e uma closure por par e exatamente o que o C11 tirou daqui.
+    local aim_cth_by_level = burst_shots > 1 and {} or nil
+
     local cth_by_aim = {}
     for i = 1, attacks do
         local aim_i = aims[i]
@@ -103,9 +174,14 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         end
 
         if dbg then
+            ---- guardado o CTH da bala LIDER, nao a expectativa da rajada -- e o numero
+            ---- que a pagina Alvo mostra por disparo, e o que se compara com o dest_cth
             table.insert(context.cth_attacks_at[upos][target], attack_mod)
         end
-        mod = mod + attack_mod
+
+        mod = mod + RATOAI_BurstHits(attack_mod, burst_shots, recoil_cth,
+                                    RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
+                                                    action, weapon))
 
         if i > 1 and aim_i < 3 then
             ---- BUGFIX (B7): era

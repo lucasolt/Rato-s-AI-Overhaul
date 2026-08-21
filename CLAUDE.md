@@ -82,3 +82,10 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
   escolher o próximo (as listas não são contíguas).
 - Repositório git próprio (branches: `main`, `claude-performance-refactor`,
   `New_AiCalcAttacksAndAim`).
+- **O GBO3 também é do autor e pode ser modificado.** Ele não é uma dependência
+  intocável: se mudar algo lá (expor um valor, quebrar uma função em duas, tornar um
+  cálculo consultável sem efeito colateral) simplifica ou barateia o lado da IA, **sugira
+  a mudança lá** em vez de contornar aqui. O mesmo vale para o `Rato-s-ToG-Compatibility-Patch`
+  e o `Rato-s-Explosive-Overhaul-2.0`.
+  Vale ainda assim manter a fronteira explícita: mudança no GBO3 afeta o jogador
+  diretamente, então diga o que muda para ele, não só para a IA.

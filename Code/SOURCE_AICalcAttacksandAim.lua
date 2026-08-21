@@ -68,6 +68,57 @@ local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_
            tostring(context.max_attacks), tostring(attacks),
            aims and table.concat(aims, ",") or "nil")
 end
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B22): a sobretaxa de MIRA cobrada pelo recoil acumulado.
+----
+---- `Rat_recoil` tem uma reacao `OnCalcAPCost` (GBO3 CharacterEffect/Rat_recoil.lua:160)
+---- que adiciona `cRoundDown(aim_cost * aim_level) * const.Scale.AP` a QUALQUER ataque
+---- com mira >= 1 feito por quem tem pilhas. O planejador nao sabia disso: orcava mira
+---- pelo preco base e a execucao cobrava a sobretaxa por cima -- o `HasAP` falhava e o
+---- ultimo disparo nao saia. Era o `recoil_aim_cost` declarado e comentado logo abaixo.
+----
+---- O valor vem de `Rat_GetRecoilAimCost`, que EXTRAI a formula de dentro do
+---- `ApplyPersistantRecoilEffects` do GBO3 -- de proposito, para nao existirem duas
+---- copias de uma conta cheia de float que divergiriam em silencio.
+----
+---- CUSTO: `get_recoilP_value` (que esta por dentro) nao recebe alvo nem posicao, entao
+---- e invariante no turno. Cacheado por numero de pilhas no context: 3-6 chamadas por
+---- unidade por turno, em vez de por par (destino, alvo).
+---------------------------------------------------------------------------------------------------
+local function RATOAI_RecoilAimSurcharge(context, stacks, level)
+    level = Min(3, level or 0) ---- mesmo teto do OnCalcAPCost
+    if level < 1 or (stacks or 0) < 1 then
+        return 0
+    end
+    if not rawget(_G, "Rat_GetRecoilAimCost") then
+        return 0 ---- GBO3 antigo, sem a funcao extraida: nao inventa custo
+    end
+    local cache = context.__ratoai_recoil_aimcost
+    if not cache then
+        cache = {}
+        context.__ratoai_recoil_aimcost = cache
+    end
+    local v = cache[stacks]
+    if v == nil then
+        ---- pcall: a conta passa por componentes de arma e opcoes de mod; um mod de
+        ---- terceiro que quebre ali nao pode derrubar o turno da IA
+        local ok, res = pcall(Rat_GetRecoilAimCost, context.unit, context.default_attack,
+                              context.weapon, stacks)
+        v = (ok and type(res) == "number" and res > 0) and res or 0
+        cache[stacks] = v
+    end
+    if v <= 0 then
+        return 0
+    end
+    return cRoundDown(v * level) * const.Scale.AP
+end
+
+---- custo marginal de subir a mira de `from` para `from + 1`, com `stacks` de recoil
+local function RATOAI_AimStep(context, aim_cost, stacks, from)
+    return aim_cost + RATOAI_RecoilAimSurcharge(context, stacks, from + 1) -
+               RATOAI_RecoilAimSurcharge(context, stacks, from)
+end
+
 ---TODO: Consider leaving this function as "pre-planning" and moving the more complex logic to when the positions are defined?
 function AICalcAttacksAndAim(context, ap, target_dist)
 
@@ -268,14 +319,28 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     local first_atk_cost = stance_cost + rotation_cost + cost
     local remaining_ap_after_first_atk = remaining_ap - first_atk_cost
 
+    ---- BUGFIX (B22): pilhas de recoil que a unidade ja carrega. Normalmente 0 no inicio
+    ---- do planejamento -- o primeiro disparo do turno nao paga sobretaxa, que e
+    ---- exatamente por que o defeito so aparecia do segundo em diante.
+    local recoil_eff = unit:GetStatusEffect("Rat_recoil")
+    local stacks = (recoil_eff and recoil_eff.stacks) or 0
+
     -- Determine the first attack aim level
     local aim = min_aim
     if to_reach_desired_aim_level > 0 then
-        while remaining_ap_after_first_atk >= aim_cost and aim < desired_aim_level do
+        while aim < desired_aim_level do
+            local step = RATOAI_AimStep(context, aim_cost, stacks, aim)
+            if remaining_ap_after_first_atk < step then
+                break
+            end
             aim = aim + 1
-            remaining_ap_after_first_atk = remaining_ap_after_first_atk - aim_cost
+            remaining_ap_after_first_atk = remaining_ap_after_first_atk - step
         end
     end
+
+    ---- `ApplyPersistantRecoilEffects`: mira 3 zera as pilhas e entao soma 1; qualquer
+    ---- outra soma 1. Modelado aqui para os disparos seguintes verem o custo certo.
+    stacks = (aim > 2) and 1 or (stacks + 1)
 
     -- Record the first aim level
     local aims = {aim}
@@ -312,15 +377,21 @@ function AICalcAttacksAndAim(context, ap, target_dist)
         ---- era mira 1 + disparo = 3 AP, um disparo.
         ----
         ---- Agora o nivel so e comprado se o disparo continuar cabendo depois dele.
-        while remaining_ap - aim_cost >= atk_cost and current_aim < desired_aim_level do
+        ---- BUGFIX (B22): o passo de mira agora inclui a sobretaxa do recoil acumulado
+        while current_aim < desired_aim_level do
+            local step = RATOAI_AimStep(context, aim_cost, stacks, current_aim)
+            if remaining_ap - step < atk_cost then
+                break ---- BUGFIX (B18): so compra o nivel se o disparo continuar cabendo
+            end
             current_aim = current_aim + 1
-            remaining_ap = remaining_ap - aim_cost
+            remaining_ap = remaining_ap - step
         end
 
         if remaining_ap >= atk_cost then
             aims[index] = current_aim
             index = index + 1
             remaining_ap = remaining_ap - atk_cost
+            stacks = (current_aim > 2) and 1 or (stacks + 1) ---- BUGFIX (B22)
         else
             break
         end
