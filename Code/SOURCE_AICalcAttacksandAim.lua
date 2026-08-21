@@ -1,4 +1,4 @@
-local debug = true
+local debug = false
 
 ---------------------------------------------------------------------------------------------------
 ---- ESCOLHA DE HIPFIRE
@@ -25,6 +25,49 @@ end
 local function RATOAI_ShotsOf(n)
     return n - n % 1
 end
+
+---------------------------------------------------------------------------------------------------
+---- DIAGNOSTICO DE MIRA / CONTAGEM DE ATAQUES
+----
+---- `local debug = true` no topo liga. UMA linha por chamada, no log do jogo
+---- (AppData/Roaming/Jagged Alliance 3/logs/). A versao anterior eram 13 `print`
+---- separados por par (destino, alvo) -- milhares de linhas por turno, ilegivel e caro.
+----
+---- `RATOAI_AimDebugUnit = "413"` (qualquer trecho do session_id) filtra para uma
+---- unidade so. Sem filtro, sai tudo.
+----
+---- Campos que respondem a pergunta do free move:
+----   ap      = o que a funcao recebeu (dest_ap na predicao, ActionPoints na execucao)
+----   AP      = unit.ActionPoints agora
+----   free    = unit.free_move_ap  -- so paga MOVIMENTO, mas esta dentro do AP
+----   start   = context.start_ap   -- AP no inicio do turno
+---- Se `ap` > `AP - free`, a estimativa esta contando free move como AP de ataque.
+----
+---- `pred` vs `EXEC` separa as duas chamadas: a predicao roda por (destino, alvo) no
+---- scoring; a execucao roda uma vez em AIPlayAttacks (CombatAI.lua:285). As ultimas
+---- linhas `pred` antes de um `EXEC` sao do destino ESCOLHIDO -- o AIPlayAttacks
+---- reexecuta o precalc so nele antes de atirar.
+---------------------------------------------------------------------------------------------------
+local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
+                                   bolting_cost, min_aim, desired, has_stance, has_stance_ap,
+                                   attacks, aims)
+    local filt = rawget(_G, "RATOAI_AimDebugUnit")
+    if filt and not tostring(unit.session_id):find(tostring(filt), 1, true) then
+        return
+    end
+    local free = unit.free_move_ap or 0
+    printf("[AIM] %s %s | ap=%s AP=%s free=%s start=%s limpo=%s | dist=%s | cost=%s stance=%s " ..
+               "rot=%s bolt=%s | min_aim=%s desired=%s stance?=%s stance_ap?=%s max_atk=%s " ..
+               "|| tiros=%s miras=%s", tostring(unit.session_id),
+           context.AIisPlayingAttacks and "EXEC" or "pred", tostring(ap),
+           tostring(unit.ActionPoints), tostring(free), tostring(context.start_ap),
+           tostring((unit.ActionPoints or 0) - free),
+           target_dist and tostring(MulDivRound(target_dist, 1, const.SlabSizeX)) or "nil",
+           tostring(cost), tostring(stance_cost), tostring(rotation_cost), tostring(bolting_cost),
+           tostring(min_aim), tostring(desired), tostring(has_stance), tostring(has_stance_ap),
+           tostring(context.max_attacks), tostring(attacks),
+           aims and table.concat(aims, ",") or "nil")
+end
 ---TODO: Consider leaving this function as "pre-planning" and moving the more complex logic to when the positions are defined?
 function AICalcAttacksAndAim(context, ap, target_dist)
 
@@ -35,6 +78,40 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     unit.AI_dont_return_Stance_min_aim_level = false
 
     local free_move_ap = unit.free_move_ap or 0
+
+    ---------------------------------------------------------------------------------------
+    ---- BUGFIX (B19): o `ap` que chega aqui contava o free move como AP de ataque.
+    ----
+    ---- `free_move_ap` esta DENTRO de `ActionPoints` (Unit.lua:2266, por isso
+    ---- `GetUIActionPoints` o subtrai) mas so paga MOVIMENTO (Unit.lua:2315). E o `ap`
+    ---- da predicao vem de `dest_ap`, que parte de `unit.ActionPoints`
+    ---- (CombatAI.lua:1018) -- ou seja, com o free move inteiro dentro.
+    ----
+    ---- Medido no processo vivo: LegionRaider com AP=19.0, free=7.0, custo de ataque
+    ---- 4.0 e mira 1.0. Ela planejava 3 ataques (3 x (4+2) = 18 <= 19) quando so tinha
+    ---- 12.0 utilizaveis. Sete AP de orcamento fantasma, mais de um ataque inteiro.
+    ----
+    ---- A linha existiu como `ap = ap - free_move_ap` e saiu no commit 91b8eb4 ("1.08",
+    ---- 2025-02-04). Nao volta assim: `dest_ap` NAO desconta o trajeto com free move --
+    ---- verificado lendo a distribuicao de `dest_ap` dos 204 destinos daquela unidade,
+    ---- onde so UM valia 19000 (a posicao atual) e o seguinte ja caia para 16000. Se
+    ---- houvesse desconto haveria um plato em 19000 para tudo dentro dos 7 AP gratis.
+    ---- Logo `dest_ap = ActionPoints - custo_bruto`, e subtrair o free move CHEIO
+    ---- cobraria o deslocamento duas vezes.
+    ----
+    ---- O que precisa sair e so o que SOBRA da franquia depois do trajeto:
+    ----     m  = start_ap - ap                  custo bruto ate este destino
+    ----     F' = Max(0, free_move_ap - m)       franquia nao usada
+    ---- Com A=19 e F=7: m=0 -> 12 | m=3 -> 12 | m=7 -> 12 | m=10 -> 9.
+    ---- O AP de ataque so cai depois que o trajeto estoura a franquia, que e a
+    ---- semantica correta.
+    ----
+    ---- Na EXECUCAO e no-op: AIPlayAttacks remove o FreeMove antes (CombatAI.lua:203),
+    ---- entao `free_move_ap` ja e 0 e `F'` da 0.
+    ---------------------------------------------------------------------------------------
+    local moved_ap = Max(0, (context.start_ap or unit.ActionPoints or 0) - (ap or 0))
+    local leftover_free = Max(0, free_move_ap - moved_ap)
+    ap = Max(0, (ap or 0) - leftover_free)
     ----
 
     ---- Shooting Stance checks
@@ -151,34 +228,6 @@ function AICalcAttacksAndAim(context, ap, target_dist)
 
     local to_reach_desired_aim_level = desired_aim_level - min_aim
 
-    ------ Debug
-    if debug then
-        print("----AI calc attacks and aim ----")
-        print("min aim = ", min_aim)
-        print("has_stance =", has_stance)
-        print("not moved = ", not_moved)
-        print("base cost = ", cost)
-        print("stance cost = ", stance_cost)
-        print("rotation_cost = ", rotation_cost)
-        print("cycling cost = ", bolting_cost, not is_unbolted)
-        -- print("recoil_aim_cost = ", recoil_aim_cost)
-        print("total_stance_cost = ", total_stance_cost)
-        print("has_stance_ap = ", has_stance_ap)
-        print("baseap = ", ap)
-        print("free_move_ap = ", free_move_ap)
-        -- print("atts = ", num_attacks)
-        -- print("remaining ap = ", remaining)
-        ---- guarda obrigatoria: `context.current_target` so existe DENTRO do laco de
-        ---- alvos do AIPrecalcDamageScore (ele seta e zera ali). Na chamada de execucao
-        ---- -- AIPlayAttacks, CombatAI.lua:285 -- ele e nil, e sem esta guarda ligar
-        ---- `debug = true` estoura justamente na chamada que interessa comparar.
-        print("current target = ",
-              tostring(context.current_target and context.current_target.session_id))
-        print("target_dist = ", tostring(target_dist))
-        print("desired_aim_level = ", desired_aim_level, "to_reach = ", to_reach_desired_aim_level)
-    end
-    ------
-
     if not has_stance_ap or to_reach_desired_aim_level <= 0 then
         ---- BUGFIX (B14): era `ap / cost`, o AP CRU. Este ramo nao descontava o
         ---- `stance_cost` que a unidade vai pagar para entrar em shooting stance -- o
@@ -204,6 +253,11 @@ function AICalcAttacksAndAim(context, ap, target_dist)
         local aims = {}
         for i = 1, num_atks do
             aims[i] = min_aim
+        end
+        if debug then
+            RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
+                                bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
+                                num_atks, aims)
         end
         return num_atks, aims
     end
@@ -274,13 +328,11 @@ function AICalcAttacksAndAim(context, ap, target_dist)
 
     local num_attacks = #aims
 
-    ------ Debug
     if debug then
-        print("AI atks and aim = ", num_attacks, aims)
-        print("-----------------------------------")
-        print(HasPerk(unit, "shooting_stance"))
+        RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
+                            bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
+                            num_attacks, aims)
     end
-    ------
 
     -- ic(#aims, aims)
     return num_attacks, aims
