@@ -50,23 +50,30 @@ end
 ---------------------------------------------------------------------------------------------------
 local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                                    bolting_cost, min_aim, desired, has_stance, has_stance_ap,
-                                   attacks, aims)
+                                   attacks, aims, surcharge_fn)
     local filt = rawget(_G, "RATOAI_AimDebugUnit")
     if filt and not tostring(unit.session_id):find(tostring(filt), 1, true) then
         return
     end
     local free = unit.free_move_ap or 0
+    ---- sobretaxa de mira do recoil, para 1 e 2 pilhas, no nivel 1. `-` = a funcao do
+    ---- GBO3 nao existe (mod antigo); `0` = existe e devolveu zero para esta arma.
+    ---- Sem isto nao da para separar "sem recoil" de "sem a funcao".
+    local sc = "-"
+    if rawget(_G, "Rat_GetRecoilAimCost") and surcharge_fn then
+        sc = string.format("%s/%s", tostring(surcharge_fn(1, 1)), tostring(surcharge_fn(2, 1)))
+    end
     printf("[AIM] %s %s | ap=%s AP=%s free=%s start=%s limpo=%s | dist=%s | cost=%s stance=%s " ..
-               "rot=%s bolt=%s | min_aim=%s desired=%s stance?=%s stance_ap?=%s max_atk=%s " ..
-               "|| tiros=%s miras=%s", tostring(unit.session_id),
+               "rot=%s bolt=%s | balas=%s recoil_aim=%s | min_aim=%s desired=%s stance?=%s " ..
+               "stance_ap?=%s max_atk=%s || tiros=%s miras=%s", tostring(unit.session_id),
            context.AIisPlayingAttacks and "EXEC" or "pred", tostring(ap),
            tostring(unit.ActionPoints), tostring(free), tostring(context.start_ap),
            tostring((unit.ActionPoints or 0) - free),
            target_dist and tostring(MulDivRound(target_dist, 1, const.SlabSizeX)) or "nil",
            tostring(cost), tostring(stance_cost), tostring(rotation_cost), tostring(bolting_cost),
-           tostring(min_aim), tostring(desired), tostring(has_stance), tostring(has_stance_ap),
-           tostring(context.max_attacks), tostring(attacks),
-           aims and table.concat(aims, ",") or "nil")
+           tostring(context.burst_shots), sc, tostring(min_aim), tostring(desired),
+           tostring(has_stance), tostring(has_stance_ap), tostring(context.max_attacks),
+           tostring(attacks), aims and table.concat(aims, ",") or "nil")
 end
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B22): a sobretaxa de MIRA cobrada pelo recoil acumulado.
@@ -402,7 +409,9 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     if debug then
         RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                             bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
-                            num_attacks, aims)
+                            num_attacks, aims, function(st, lv)
+            return RATOAI_RecoilAimSurcharge(context, st, lv)
+        end)
     end
 
     -- ic(#aims, aims)

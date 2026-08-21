@@ -307,31 +307,21 @@ return {
 						'CoverTrustNear', 20,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 225,
+						'Weight', 112,
 						'Normalization', "soft",
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 150,
+						'Weight', 75,
 						'Normalization', "cap",
 						'MaxHits', 100,
 						'SoftK', 100,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 40,
+						'Weight', 20,
 						'Normalization', "tokill",
 					}),
 				},
 				'TakeCoverChance', 50,
-			}),
-			PlaceObj('HoldPositionAI', {
-				'Comment', "ShootingStance.",
-				'Fallback', false,
-				'Score', function (self, unit, proto_context, debug_data)
-					--Isso possivelmente pode ficar obsoleto na medida em que vamos melhorando o eval damage pra seguir as mecanicas do GBO
-					local score = getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
-					return MulDivRound(score, self.Weight, 100)
-				end,
-				'TakeCoverChance', 0,
 			}),
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",

@@ -10,8 +10,8 @@ function AICreateContext(unit, context)
     local weapon_can_unbolt = rat_canBolt(weapon) and IsKindOf(weapon, "SniperRifle")
     local RPG = IsKindOfClasses(weapon, "RocketLauncher")
 
-    -- local extra_max_attacks = (weapon_can_unbolt or RPG) and 0 or extra_max_attacks_arg
-    local extra_max_attacks = (RPG) and 0 or extra_max_attacks_arg
+    local extra_max_attacks = (weapon_can_unbolt or RPG) and 0 or extra_max_attacks_arg
+
     if IsKindOf(weapon, "Firearm") and not IsKindOf(weapon, "HeavyWeapon") and
         not unit:HasStatusEffect("shooting_stance") then
 
@@ -123,6 +123,12 @@ function AICreateContext(unit, context)
     -- not used yet
     context.cth_attacks_at = {}
     context.aims_at = {}
+    ---- BUGFIX (B21): acertos esperados de CADA ataque ja com a rajada expandida
+    ---- bala a bala. Paralelo ao cth_attacks_at, que guarda so a bala LIDER.
+    context.burst_hits_at = {}
+    ---- BUGFIX (B24): quanto o recoil PERSISTENTE tirou de CTH neste par, somado
+    ---- sobre os ataques. So para o overlay saber separar essa perda das outras.
+    context.recoil_loss_at = {}
     ---- DEBUG (D1): [dest] -> { by_target = {[alvo] = linha}, roll, total, threshold, ... }
     ---- Preenchido por AIPrecalcDamageScore so com RATOAI_Debug; inicializado aqui para
     ---- que a UI possa indexar sem checar nil quando o precalc sai cedo (sem arma,

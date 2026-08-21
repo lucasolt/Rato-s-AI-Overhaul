@@ -15,11 +15,34 @@ function OnMsg.ModsReloaded()
     max_cover_cth = nil
 end
 
----- BUGFIX (B7): const.Combat.Recoil.StacksMultiplier e um float (0.35). Multiplicacao
----- de ponto flutuante neste caminho entra no NetUpdateHash de AIPrecalcDamageScore e
----- e fonte classica de desync. Versao inteira, em percentual.
----- MANTER EM SINCRONIA com GBO3 Code/__RecoilParams.lua:9
-local RECOIL_STACKS_PCT = 35
+---------------------------------------------------------------------------------------------------
+---- Conversao do recoil POR BALA para o recoil PERSISTENTE.
+----
+---- Sao dois recoils diferentes, e o mod so calcula um deles:
+----
+----   por bala (dentro da rajada)   get_recoil(..., num_shots = N, stacks = nil)
+----                                 -> penalty * 0.5            <- e este que a IA guarda
+----   persistente (entre ataques)   get_recoil(..., aim, num_shots = false, stacks = n)
+----                                 -> penalty * 0.35 * n, depois * (1 - 0.34 * aim)
+----
+---- Os dois partem do MESMO `penalty` -- mesmos parametros de arma, calibre, forca,
+---- componentes, stance. `num_shots` so entra num lugar do GetCaliberStrRecoil, e so
+---- para arma com tracante (`* Other.Tracer`, 0.89).
+----
+---- Logo, converter de um para o outro e 0.35 / 0.5 = **0.70**.
+----
+---- BUGFIX (B23b): era 35, o `StacksMultiplier` do GBO3 copiado cru. Mas aquele 0.35
+---- pertence ao ramo que parte do `penalty` BRUTO; aplicado sobre um valor que ja levou
+---- o 0.5, saia pela METADE. O recoil persistente estava sendo subestimado em 2x.
+----
+---- RESSALVA: em arma com tracante a conversao fica ~12% fora, porque o valor guardado
+---- levou o 0.89 e o persistente nao. Nao vale um segundo `get_recoil` cacheado so por
+---- isso -- se um dia valer, o lugar e o cache de bucket do PERF (C4).
+----
+---- BUGFIX (B7): era float (`const.Combat.Recoil.StacksMultiplier`), e float neste
+---- caminho entra no NetUpdateHash e e fonte classica de desync. Percentual inteiro.
+---------------------------------------------------------------------------------------------------
+local RECOIL_STACKS_PCT = 70
 
 ---- fracao do recoil que se aplica por nivel de mira (era 0.33 / 0.66 / 1.0)
 local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
@@ -65,8 +88,12 @@ local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
 end
 
 local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth)
+    ---- BUGFIX (B24): tiro unico tambem clampa. Desde que o recoil persistente entra na
+    ---- CTH do ataque (e nao na soma), `original_cth` pode chegar negativo aqui -- e um
+    ---- ataque nunca pode CONTRIBUIR negativo para os acertos esperados. No caminho de
+    ---- rajada abaixo o clamp por bala ja resolvia; este ramo escapava.
     if shots <= 1 then
-        return original_cth
+        return Clamp(original_cth, 0, 100)
     end
     local max_idx = const.Combat.MaxShotIndexForRecoilCTHLoss or 6
     local floor_cth = Min(const.Combat.MultishotMinCTH or 5, original_cth)
@@ -126,6 +153,10 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         ---- "target_recalc") -- e o `table.insert` abaixo entao APENDAVA na lista da
         ---- passada anterior, dobrando a contagem de disparos. Zerar e o correto.
         context.cth_attacks_at[upos][target] = {}
+        context.burst_hits_at[upos] = context.burst_hits_at[upos] or {}
+        context.burst_hits_at[upos][target] = {}
+        context.recoil_loss_at[upos] = context.recoil_loss_at[upos] or {}
+        context.recoil_loss_at[upos][target] = 0
     end
 
     ---- PERF (C1): memoizacao do CTH por nivel de mira.
@@ -159,6 +190,19 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- (destino, alvo) e uma closure por par e exatamente o que o C11 tirou daqui.
     local aim_cth_by_level = burst_shots > 1 and {} or nil
 
+    ---- BUGFIX (B23a): pilhas de recoil PERSISTENTE acumuladas DENTRO desta sequencia.
+    ----
+    ---- Comeca em ZERO de proposito, e nao nas pilhas que a unidade ja carrega. As que
+    ---- ela ja tem estao no efeito `Rat_recoil`, cuja reacao de CTH o `CalcChanceToHit`
+    ---- abaixo ja aplica -- ou seja, ja estao dentro de `attack_mod`. Somar de novo aqui
+    ---- seria contar duas vezes.
+    ----
+    ---- Este acumulador existe so para as pilhas que a IA PREVE que vao surgir ao longo
+    ---- do turno planejado, e que por isso nao existem no momento da consulta. E o mesmo
+    ---- motivo do portao `i > 1`: o primeiro ataque nao ganha penalidade manual porque
+    ---- ele ainda nao gerou pilha nenhuma.
+    local stacks = 0
+
     local cth_by_aim = {}
     for i = 1, attacks do
         local aim_i = aims[i]
@@ -173,26 +217,50 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             first_cth = attack_mod
         end
 
-        if dbg then
-            ---- guardado o CTH da bala LIDER, nao a expectativa da rajada -- e o numero
-            ---- que a pagina Alvo mostra por disparo, e o que se compara com o dest_cth
-            table.insert(context.cth_attacks_at[upos][target], attack_mod)
-        end
-
-        mod = mod + RATOAI_BurstHits(attack_mod, burst_shots, recoil_cth,
-                                    RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
-                                                    action, weapon))
-
-        if i > 1 and aim_i < 3 then
-            ---- BUGFIX (B7): era
-            ----   (aim_i == 2 and recoil_cth * 0.33 or aim_i == 1 and recoil_cth * 0.66
-            ----    or recoil_cth) * (i - 1) * const.Combat.Recoil.StacksMultiplier
-            ---- Mesma conta, agora inteira.
+        ---- RECOIL PERSISTENTE -- outro recoil, nao o de dentro da rajada.
+        ---- O de dentro da rajada esta no RATOAI_BurstHits e NAO depende de pilhas.
+        ---- Este aqui e o `Rat_recoil`: acumula entre ATAQUES e some com mira 3.
+        ----
+        ---- BUGFIX (B24): ele era somado ao `mod` ACUMULADO, fora da expansao da rajada.
+        ---- Com isso uma penalidade grande no 2o ataque comia o que o 1o tinha rendido --
+        ---- um recoil de -500 invalidava um ataque anterior de 100. Nao e o que o jogo
+        ---- faz: o `Rat_recoil` aplica em `data.mod_add`, ou seja mexe na CTH DAQUELE
+        ---- ataque antes das balas rolarem, e ai cada bala clampa sozinha em [0, 100].
+        ---- Agora entra na CTH do ataque, antes de expandir. O piso sai de graca.
+        ----
+        ---- BUGFIX (B7): era float; agora inteiro.
+        ---- BUGFIX (B23a): a contagem era `i - 1`. Mas um ataque com mira 3 ZERA as
+        ---- pilhas (ApplyPersistantRecoilEffects remove tudo e soma 1), entao o ataque
+        ---- seguinte volta a 1 pilha em vez de seguir contando. Agora `stacks` acompanha,
+        ---- com a MESMA progressao que o planejador de AP usa em AICalcAttacksAndAim.
+        local eff_cth = attack_mod
+        if i > 1 and aim_i < 3 and stacks > 0 then
             local aim_pct = recoil_pct_by_aim[aim_i] or 100
-            local recoil_penalty = MulDivRound(recoil_cth or 0, aim_pct * (i - 1), 100)
+            local recoil_penalty = MulDivRound(recoil_cth or 0, aim_pct * stacks, 100)
 
-            mod = mod + MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
+            local perda = MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
+            eff_cth = eff_cth + perda
+            if dbg then
+                context.recoil_loss_at[upos][target] =
+                    context.recoil_loss_at[upos][target] + perda
+            end
         end
+
+        if dbg then
+            ---- a CTH da bala LIDER deste ataque, ja com o recoil persistente dentro --
+            ---- e o numero que a rajada de fato expandiu
+            table.insert(context.cth_attacks_at[upos][target], eff_cth)
+        end
+
+        local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth,
+                                          RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
+                                                          action, weapon))
+        if dbg then
+            table.insert(context.burst_hits_at[upos][target], expanded)
+        end
+        mod = mod + expanded
+
+        stacks = (aim_i > 2) and 1 or (stacks + 1)
     end
 
     ---------------- For Custom Flanking Policy
