@@ -301,16 +301,15 @@ return {
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 150,
+						'Weight', 200,
 						'CoverTrust', 90,
+						'CoverNearTiles', 4,
+						'CoverTrustNear', 20,
 					}),
-					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyDealDamage', {
 						'Normalization', "cap",
 					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Normalization', "soft",
-					}),
+					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 25,
 						'Normalization', "tokill",
@@ -338,7 +337,9 @@ return {
 				'Weight', 110,
 				'Falloff', 6,
 			}),
-			PlaceObj('AIPolicyCustomSeekCover', nil),
+			PlaceObj('AIPolicyCustomSeekCover', {
+				'AssumeCrouch', true,
+			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",

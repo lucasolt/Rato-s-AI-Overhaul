@@ -1,4 +1,4 @@
-local debug = false
+local debug = true
 
 ---------------------------------------------------------------------------------------------------
 ---- ESCOLHA DE HIPFIRE
@@ -168,7 +168,14 @@ function AICalcAttacksAndAim(context, ap, target_dist)
         print("free_move_ap = ", free_move_ap)
         -- print("atts = ", num_attacks)
         -- print("remaining ap = ", remaining)
-        print("current target = ", context.current_target.session_id)
+        ---- guarda obrigatoria: `context.current_target` so existe DENTRO do laco de
+        ---- alvos do AIPrecalcDamageScore (ele seta e zera ali). Na chamada de execucao
+        ---- -- AIPlayAttacks, CombatAI.lua:285 -- ele e nil, e sem esta guarda ligar
+        ---- `debug = true` estoura justamente na chamada que interessa comparar.
+        print("current target = ",
+              tostring(context.current_target and context.current_target.session_id))
+        print("target_dist = ", tostring(target_dist))
+        print("desired_aim_level = ", desired_aim_level, "to_reach = ", to_reach_desired_aim_level)
     end
     ------
 
