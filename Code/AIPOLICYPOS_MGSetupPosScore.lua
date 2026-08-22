@@ -68,6 +68,33 @@
 ---- ARMADILHA do ReserveAPforSetup em OptLocPolicies: tiles fora do alcance de movimento nao tem
 ---- `dest_ap`, entao a reserva zera todos eles e a "melhor posicao" nunca pode estar a mais de um
 ---- turno de distancia. Por isso o default e `false`. Ligue so no placement de EndTurn.
+----
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B29) -- QUATRO LUGARES ONDE A POLICY DIZIA "SIM" E A ACAO DIZIA "NAO"
+----
+---- Sintoma medido em campo (sonda `tools/check_mgsetup_gates.lua`, combate real): o
+---- LegionGunner:412 tinha nota 100 -- o TETO -- no destino escolhido, e o `AIActionMGSetup`
+---- saia da lista de signature actions sem nenhuma mensagem. A policy respondia a pergunta dela
+---- certo; o que estava errado era ela estar respondendo uma pergunta MAIS FROUXA que a da acao.
+----
+----   a) ANEL. `min_range >= max_range` quer dizer "sem minimo" (e o que o AIFilterTargetPoints
+----      do vanilla faz), e o alcance efetivo e limitado por `Min(sight, GetMaxRange())`, que e
+----      o segundo CheckLOS do AIPrecalcConeTargetZones. Ver RATOAI_MGCone.
+----   b) QUEM CONTA. A acao gera ponto de mira so para inimigo que ESTA unidade enxerga agora
+----      (`VisibilityCheckAll ... uvVisible`). Medido: LegionGunner:411 com 4 inimigos vistos
+----      pelo time e 0 por ele -- target_pts = 0, MGSetup indisponivel. Novo modo
+----      `visibility_mode = "self"`.
+----   c) ALIADOS. O pool das zonas e `enemies + GetAllAlliedUnits`, e aliado no cone vale
+----      `team_score` (-20 / -10 nos presets). Novo `AllyPenalty`, com o aliado passando pelo
+----      mesmo lote de raios do inimigo.
+----   d) RESERVA DE AP. Agora que o custo do MGSetup inclui a mudanca para Prone (GBO3,
+----      `rat_MGSetup_getap`), a reserva tem que medir a partir da postura DO DESTINO, senao o
+----      destino empacotado Prone pelo B25 paga a postura duas vezes.
+----
+---- O que a policy CONTINUA sem ver, de proposito: o CTH. Ele foi consertado do outro lado --
+---- o preview do MGSetup passou a ser medido como a interrupcao que a MG realmente faz
+---- (GBO3, `CTH_hipfire_and_snapshot.lua`). Medir CTH por tile aqui custaria um CalcValue por
+---- inimigo por tile, que e justamente o que o B27 tirou.
 ---------------------------------------------------------------------------------------------------
 DefineClass.AIPolicyMGSetupPosScore = {
     __parents = {"AIPositioningPolicy"},
@@ -128,18 +155,34 @@ DefineClass.AIPolicyMGSetupPosScore = {
         }, {
             id = "visibility_mode",
             name = "Quem conta como inimigo",
-            help = "'team' = so quem o time ja avistou (recomendado; nao depende da postura " ..
-                "nem da posicao atual desta unidade). 'all' = todos os inimigos vivos.",
+            help = "'team' = quem o time ja avistou (default; nao depende da postura nem da " ..
+                "posicao atual desta unidade).\n" ..
+                "'self' = so quem ESTA unidade enxerga agora, o mesmo VisibilityCheckAll que " ..
+                "o AICalcAOETargetPoints usa para gerar as zonas do MGSetup. Paridade exata " ..
+                "com a acao, ao preco de ignorar a inteligencia do time ao ESCOLHER o tile.\n" ..
+                "'all' = todos os inimigos vivos.",
             editor = "choice",
             default = "team",
             items = function(self)
-                return {"team", "all"}
+                return {"team", "self", "all"}
             end
+        }, {
+            id = "AllyPenalty",
+            name = "Desconto por aliado no cone",
+            help = "Subtraido por cada ALIADO que cai no mesmo cone. A AIEvalZones ja faz isso " ..
+                "(o pool dela e `enemies + GetAllAlliedUnits`, e o aliado vale `team_score`), " ..
+                "entao sem isto a policy manda a unidade para um tile cuja unica zona a " ..
+                "propria acao rejeita por ter amigo na linha. 0 desliga.",
+            editor = "number",
+            default = 30,
+            min = 0
         }, {
             id = "ReserveAPforSetup",
             name = "Reservar AP para montar",
             help = "Zera tiles onde nao sobra AP para o MGSetup. Usa o custo real da acao " ..
-                "(CombatActions.MGSetup:GetAPCost), nao um numero fixo.\n" ..
+                "(CombatActions.MGSetup:GetAPCost), corrigido para a POSTURA DO DESTINO -- o " ..
+                "custo inclui a mudanca para Prone, e o GetAPCost a mede a partir da postura " ..
+                "atual da unidade, nao da que o dest carrega.\n" ..
                 "NAO ligue em OptLocPolicies: tile fora do alcance de movimento nao tem " ..
                 "dest_ap e seria zerado, o que impede a IA de mirar uma posicao a dois turnos.",
             editor = "bool",
@@ -179,10 +222,39 @@ local function RATOAI_MGCone(context)
         return false
     end
 
+    local min_r = (params.min_range or 0) * const.SlabSizeX
+    local max_r = (params.max_range or 0) * const.SlabSizeX
+
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B29a): o anel tem que ser o MESMO que a acao usa. Duas correcoes:
+    ----
+    ---- 1. `min_range >= max_range` significa "sem minimo", nao "so a casca do circulo". O
+    ----    proprio vanilla escreve isso no AIFilterTargetPoints (CombatAI.lua:2035):
+    ----        elseif min_range and min_range < max_range and dist < min_range then remove
+    ----    O GBO3 hoje devolve min=2 para MachineGun, mas a BrowningM2HMG continua com
+    ----    min == max == WeaponRange (SOURCE_ChangeMGSetupGetAreaParams.lua) -- e para ela o
+    ----    gate `d >= min_range and d <= max_range` era `d == max_range`, ou seja, a policy
+    ----    zerava TODO tile.
+    ----
+    ---- 2. O alcance efetivo nao e o do cone: o AIPrecalcConeTargetZones passa os alvos por um
+    ----    segundo CheckLOS com `Min(unit_sight, weapon:GetMaxRange())`. Quem estiver alem
+    ----    disso e contado aqui e descartado la. Medido: MG42 cone = 45600, GetMaxRange =
+    ----    46800, sight = 67200 -- hoje o cone e o menor, mas isso depende da arma e do
+    ----    modificador de visao, entao o minimo fica explicito em vez de assumido.
+    ---------------------------------------------------------------------------------------------
+    if min_r >= max_r then
+        min_r = 0
+    end
+    max_r = Min(max_r, Min(unit:GetSightRadius(), weapon:GetMaxRange()))
+    if max_r <= 0 then
+        context.__mg_cone = false
+        return false
+    end
+
     c = {
         width = width, ---- LARGURA TOTAL, em minutos (21600 = 360 graus)
-        min_range = (params.min_range or 0) * const.SlabSizeX,
-        max_range = (params.max_range or 0) * const.SlabSizeX
+        min_range = min_r,
+        max_range = max_r
     }
     context.__mg_cone = c
     return c
@@ -200,9 +272,21 @@ local function RATOAI_MGEnemies(context, mode)
     ---- `pos` para geometria (anel + angulo), `packed` para o raio de LOS (pos + postura do
     ---- inimigo, mesma forma que o AIUpdateDestLosCache usa como alvo).
     local list = {pos = {}, packed = {}, n = 0}
+    local unit = context.unit
     for _, enemy in ipairs(context.enemies or empty_table) do
         local alive = enemy and not (enemy:IsDead() or enemy:IsDowned())
-        local known = (mode == "all") or context.enemy_visible_by_team[enemy]
+        ---- BUGFIX (B29b): 'self' e o mesmo teste que o AICalcAOETargetPoints faz para gerar as
+        ---- zonas do MGSetup. Sem ele, um inimigo que o TIME avistou mas que esta unidade nao
+        ---- enxerga pontua o tile e depois nao vira ponto de mira nenhum -- medido em campo:
+        ---- LegionGunner:411 com vis_team=4 e vis_self=0, target_pts=0, MGSetup indisponivel.
+        local known
+        if mode == "all" then
+            known = true
+        elseif mode == "self" then
+            known = VisibilityCheckAll(unit, enemy, nil, const.uvVisible)
+        else
+            known = context.enemy_visible_by_team[enemy]
+        end
         if alive and known then
             local pos = context.enemy_pos[enemy] or enemy:GetPos()
             local packed = context.enemy_pack_pos_stance[enemy]
@@ -217,6 +301,42 @@ local function RATOAI_MGEnemies(context, mode)
 
     context.__mg_enemies = list
     context.__mg_enemies_mode = mode
+    return list
+end
+
+---------------------------------------------------------------------------------------------------
+---- Aliados, pelo mesmo motivo e no mesmo formato -- BUGFIX (B29c).
+----
+---- A AIEvalZones nao pontua so inimigos: o pool que entra nas zonas e
+---- `context.enemies + GetAllAlliedUnits(unit)` (AIPrecalcConeTargetZones), e cada aliado dentro
+---- do cone soma `team_score`, que nos presets do artilheiro e -20 / -10. Com
+---- `enemy_score = 110` e `min_score = 100`, UM aliado na linha ja derruba a zona de um inimigo
+---- abaixo do limiar. A policy nao via nada disso e mandava a unidade justamente para la.
+----
+---- Medido em campo: das 5 unidades que entraram nas zonas do LegionGunner:412, uma era o
+---- LegionRaider:415, aliado dele.
+---------------------------------------------------------------------------------------------------
+local function RATOAI_MGAllies(context)
+    local cached = context.__mg_allies
+    if cached then
+        return cached
+    end
+
+    local unit = context.unit
+    local list = {pos = {}, packed = {}, n = 0}
+    for _, ally in ipairs(GetAllAlliedUnits(unit) or empty_table) do
+        if ally ~= unit and not (ally:IsDead() or ally:IsDowned()) and ally:IsValidPos() then
+            local pos = RATOAI_ValidatePosZ(ally:GetPos())
+            if IsValidPos(pos) then
+                local n = list.n + 1
+                list.n = n
+                list.pos[n] = pos
+                list.packed[n] = GetPackedPosAndStance(ally)
+            end
+        end
+    end
+
+    context.__mg_allies = list
     return list
 end
 
@@ -236,11 +356,18 @@ end
 ----
 ---- Devolve nil quando o orcamento acabou -- o chamador cai para geometria pura.
 ---------------------------------------------------------------------------------------------------
-local function RATOAI_MGVerifyLOS(context, key, packed, budget)
-    local memo = context.__mg_seen
+local function RATOAI_MGVerifyLOS(context, key, packed, budget, tag)
+    local memos = context.__mg_seen
+    if not memos then
+        memos = {}
+        context.__mg_seen = memos
+    end
+    ---- Duas memos por tile: o lote de inimigos e o de aliados tem tamanhos diferentes, entao
+    ---- nao podem dividir a mesma linha.
+    local memo = memos[tag or "enemy"]
     if not memo then
         memo = {}
-        context.__mg_seen = memo
+        memos[tag or "enemy"] = memo
     end
     local row = memo[key]
     if row ~= nil then
@@ -319,9 +446,28 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
         end
     end
 
-    ---- Reserva de AP: custo REAL da acao. dest_ap ausente = tile fora do alcance de movimento.
+    ---------------------------------------------------------------------------------------------
+    ---- Reserva de AP: custo REAL da acao, medido NA POSTURA DO DESTINO -- BUGFIX (B29d).
+    ----
+    ---- Desde a mudanca no GBO3 (`rat_MGSetup_getap`), o custo do MGSetup inclui a mudanca de
+    ---- postura para Prone. Mas o `GetAPCost` a mede a partir da postura ATUAL da unidade, e o
+    ---- que vale aqui e a postura que o `dest` carrega -- e onde ela vai estar quando montar.
+    ---- Sem esta troca, um artilheiro em pe avaliando um destino ja empacotado Prone (o passe
+    ---- B25 do AIFindDestinations) pagaria a mudanca duas vezes: uma descontada do `dest_ap`
+    ---- pelo B25, outra dentro do `cost` -- que e exatamente o custo dobrado que este bloco
+    ---- existia para NAO criar.
+    ----
+    ---- `Unit:GetStanceToStanceAP(stance, override)` aceita a postura de origem por argumento,
+    ---- devolve -1 quando ja se esta nela (dai o `Max(0, ...)`) e ja trata a perk `HitTheDeck`.
+    ---- `dest_ap` ausente = tile fora do alcance de movimento.
+    ---------------------------------------------------------------------------------------------
     if self.ReserveAPforSetup then
-        local cost = CombatActions.MGSetup:GetAPCost(context.unit, false) or 0
+        local unit = context.unit
+        local cost = CombatActions.MGSetup:GetAPCost(unit, false) or 0
+        if not unit:HasStatusEffect("ManningEmplacement") then
+            cost = cost - Max(0, unit:GetStanceToStanceAP("Prone")) +
+                       Max(0, unit:GetStanceToStanceAP("Prone", StancesList[stance_idx]))
+        end
         if (context.dest_ap[dest] or 0) < cost then
             return 0
         end
@@ -370,29 +516,92 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
     end
 
     ---------------------------------------------------------------------------------------------
-    ---- Maior aglomerado que cabe na largura do cone: janela deslizante circular. Para cada
-    ---- inimigo, conta quantos estao dentro de [angulo dele, angulo dele + largura]. O maximo
-    ---- e o tamanho do maior grupo que uma orientacao unica do cone consegue cobrir -- e a
-    ---- direcao otima sempre pode ser posta com um inimigo na borda, entao a janela ancorada
-    ---- em cada inimigo cobre todos os casos.
+    ---- BUGFIX (B29c): aliados que cairiam no cone.
+    ----
+    ---- ORDEM IMPORTA POR CUSTO. O anel e largo (2,4 m a ~50 m) e o time e grande: medido em
+    ---- campo, **22 a 24 dos 26 aliados** do artilheiro estao dentro do anel. Passar todos eles
+    ---- pelo lote de raios custaria ~3000 raios por turno so em amigo (o teto inteiro do
+    ---- MaxLOSChecks) para achar os zero ou um que importam.
+    ----
+    ---- O cone, porem, e ESTREITO -- 645 a 1049 minutos nas MGs medidas, ou seja 11 a 17 graus.
+    ---- Entao o filtro barato vem primeiro: so entra no lote de raios o aliado cujo angulo cabe
+    ---- em ALGUMA janela ancorada num inimigo que ja sobreviveu ao LOS. Na pratica sobram 0 a 2.
     ---------------------------------------------------------------------------------------------
-    local best = 1
+    local ally_angles, na = nil, 0
+    if (self.AllyPenalty or 0) > 0 then
+        local allies = RATOAI_MGAllies(context)
+        local cand_ang, cand_packed, nc = {}, {}, 0
+        for i = 1, allies.n do
+            local apos = allies.pos[i]
+            local d = from:Dist2D(apos)
+            if d >= cone.min_range and d <= cone.max_range then
+                local ang = CalcOrientation(from, apos)
+                for j = 1, n do
+                    local diff = ang - angles[j]
+                    if diff < 0 then
+                        diff = diff + 21600
+                    end
+                    if diff <= cone.width then
+                        nc = nc + 1
+                        cand_ang[nc] = ang
+                        cand_packed[nc] = allies.packed[i]
+                        break
+                    end
+                end
+            end
+        end
+
+        if nc > 0 and self.VerifyLOS and los_fixes then
+            local seen = RATOAI_MGVerifyLOS(context, prone_key, cand_packed, self.MaxLOSChecks,
+                                            "ally")
+            if seen then
+                local kept = 0
+                for i = 1, nc do
+                    if seen[i] then
+                        kept = kept + 1
+                        cand_ang[kept] = cand_ang[i]
+                    end
+                end
+                nc = kept
+            end
+        end
+        ally_angles, na = cand_ang, nc
+    end
+
+    ---------------------------------------------------------------------------------------------
+    ---- Melhor cone: janela deslizante circular ancorada em cada inimigo. Para cada ancora,
+    ---- conta quem cai em [angulo dela, angulo dela + largura] e pontua a zona como a
+    ---- AIEvalZones pontuaria -- inimigos somam, aliados subtraem. A direcao otima sempre pode
+    ---- ser posta com um inimigo na borda, entao ancorar em cada inimigo cobre todos os casos.
+    ---------------------------------------------------------------------------------------------
+    local best_score = 0
     for i = 1, n do
-        local count = 0
+        local hits = 0
         for j = 1, n do
             local diff = angles[j] - angles[i]
             if diff < 0 then
                 diff = diff + 21600
             end
             if diff <= cone.width then
-                count = count + 1
+                hits = hits + 1
             end
         end
-        if count > best then
-            best = count
+        local friendlies = 0
+        for j = 1, na do
+            local diff = ally_angles[j] - angles[i]
+            if diff < 0 then
+                diff = diff + 21600
+            end
+            if diff <= cone.width then
+                friendlies = friendlies + 1
+            end
+        end
+        local s = self.FirstEnemyScore + (hits - 1) * self.ClusterBonus - friendlies *
+                      self.AllyPenalty
+        if s > best_score then
+            best_score = s
         end
     end
 
-    local score = self.FirstEnemyScore + (best - 1) * self.ClusterBonus
-    return Clamp(score, 0, self.MaxScore)
+    return Clamp(best_score, 0, self.MaxScore)
 end

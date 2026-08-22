@@ -1177,6 +1177,121 @@ de propósito — é bug de outra família, e a ideia é poder testar um sem o o
 
 ---
 
+### 🔴 B29 — A policy da MG dizia "sim" no teto e o `MGSetup` sumia da lista
+
+Sintoma que o Lucas relatou: a `AIPolicyMGSetupPosScore` pontua positivo em alguns tiles e a
+`AIActionMGSetup` não aparece como signature action, sem mensagem nenhuma. Isolado com a sonda
+`tools/check_mgsetup_gates.lua`, que roda a cadeia inteira de portões da ação na mesma ordem do
+jogo e diz onde morreu. Combate real, turno 1, dois `HeavyGunner`:
+
+```
+LegionGunner:411 (RPD_1)
+POLICY   nota=0 | 0/115 destinos >0
+PORTÃO 4 inimigos=4 | visíveis PARA ESTE ATIRADOR=0 | vistos pelo TIME=4 -> target_pts=0
+VEREDITO MGSetup INDISPONÍVEL — morreu em: AICalcAOETargetPoints
+
+LegionGunner:412 (MG42)
+POLICY   nota no ai_destination=100 (teto) | 4/57 destinos >0
+PORTÃO 5 cone: 5 alvos | PORTÃO 6 alcance: 5/5 | PORTÃO 7 CTH>0 com aim 0: 0/5
+PORTÃO 8 score=99 (= min_score-1, sentinela de "nenhuma zona") -> IsAvailable=false
+VEREDITO MGSetup INDISPONÍVEL — morreu em: CalcChanceToHit == 0
+```
+
+**A causa dominante é o CTH, e ela é circular.** O fim do `AIPrecalcConeTargetZones` descarta do
+cone todo alvo com `chance_to_hit == 0`, e o CTH é medido com `aim = 0` na postura de tiro atual —
+antes do setup. Decomposto ao vivo (MG42 a 22 m): `base=74 Bipod=-5 HipshotPenalty=-58 Crouch=-9
+WeaponCondition=-10` → 0. A ação que existe para montar a arma estava sendo julgada pela pontaria
+de quem ainda não montou.
+
+Não era o hipfire: o `if action.id == "MGSetup" then aim = Max(aim, 1) end` já existia, e o
+`GetWeaponHipfireOrSnapshotMul` desvia por `aim == 0` (hipfire) vs `aim > 0` (snapshot) — ou seja o
+preview já entrava pelo ramo **snapshot**. O que faltava era `opportunity_attack`. O ramo de
+interrupção de MG já existe no GBO3 (curva `MGInterruptMaxDist` = 90 tiles em vez de 40,
+`MGInterruptBasePenalty` = -16, vezes `MGSetupInterruptMul` = 80) e nunca era alcançado pela
+previsão. Medido, mesmo alvo:
+
+| | HipshotPenalty | CTH |
+|---|---|---|
+| `aim 0` | -58 | 1 |
+| `aim 1` (o `Max(aim,1)` que já existia) | -58 | 2 |
+| `aim 1` + `opportunity_attack` | **-32** | **19** |
+| `aim 3` (modificador some acima de 2) | 0 | 62 |
+
+E a intermitência é literal: rodando a sonda de novo depois que o alvo andou ~2,8 m, o CTH de um
+único alvo passou de 0 para 1, o `PORTÃO 7` foi de `0/5` para `1/5`, o score de 99 para 110 e o
+`MGSetup` virou DISPONÍVEL. A decisão inteira pendura num limiar duro (`== 0`) sobre um número que
+estava errado por ~30 pontos.
+
+**Consertos aplicados.**
+
+*No GBO3 (`CTH_hipfire_and_snapshot.lua`)* — a previsão passa a medir o tiro que a arma vai fazer:
+```lua
+if action.id == "MGSetup" or action.id == "MGRotate" then
+    aim = Max(aim, 1)
+    opportunity_attack = true
+end
+```
+O tiro real já chega com `opportunity_attack = true`, então ele não muda; muda só quem pergunta
+"quanto eu acertaria se montasse". O jogador não vê CTH por alvo em ação de cone
+(`IModeCombatAreaAim` não chama `CalcChanceToHit`).
+
+*No GBO3 (`COMBAT_ACTIONS.lua`, `rat_MGSetup_getap`)* — o custo de deitar deixa de ser invisível:
+```lua
+if not unit:HasStatusEffect("ManningEmplacement") then
+    cost = cost + Max(0, unit:GetStanceToStanceAP("Prone"))
+end
+```
+`Unit:MGSetup` (vanilla, `UnitActions.lua:537`) deita com `DoChangeStance`, que não debita AP —
+verificado no processo vivo que nenhum mod substitui as duas funções. Ou seja o prone sempre foi
+grátis, para merc e para IA, e por isso o MGSetup custava o mesmo em qualquer posição. Agora: em pé
++2, agachado +1, já deitado +0. Total pago continua o mesmo; o que muda é que ele passa a depender
+da posição. Fica **depois** da redução do `HeavyWeaponsTraining` de propósito — a perk barateia
+manejo de arma pesada, não o ato de deitar, e assim o piso `min_ap_cost` não engole o delta.
+
+Com isso a conta do B25 fecha nos dois caminhos, medido ao vivo (`GetStanceToStanceAP` = 2000):
+
+| postura do dest | descontado do `dest_ap` pelo B25/crouch | cobrado pelo MGSetup | total |
+|---|---|---|---|
+| Prone | 2000 | 0 | 2000 |
+| Crouch | 1000 | 1000 | 2000 |
+| Standing | 0 | 2000 | 2000 |
+
+Antes, o desconto do B25 era **custo fantasma**: o MGSetup cobrava o mesmo dos dois lados e o
+`DoChangeStance` do `EndMovement` nunca debitava nada. Confirmado: o LegionGunner:412 escolheu
+ficar onde estava e tinha `AP real = 11000` contra `dest_ap = 9000` — a diferença era exatamente a
+reserva do prone.
+
+*Na policy (`AIPOLICYPOS_MGSetupPosScore.lua`)* — quatro pontos onde ela respondia uma pergunta
+mais frouxa que a da ação:
+
+| | o que era | o que é |
+|---|---|---|
+| B29a | anel `d >= min_range` cru, sem teto de visão | `min >= max` vira "sem mínimo" (é o que o `AIFilterTargetPoints` do vanilla faz) e o máximo é clampado por `Min(sight, GetMaxRange())`, o segundo `CheckLOS` da ação |
+| B29b | pool sempre `enemy_visible_by_team` | novo `visibility_mode = "self"`, o mesmo `VisibilityCheckAll ... uvVisible` do `AICalcAOETargetPoints` |
+| B29c | cega para aliados | novo `AllyPenalty` (default 30), subtraído por aliado na janela vencedora |
+| B29d | reserva de AP com o custo medido da postura ATUAL | medido da postura **do destino**, senão o dest empacotado Prone paga a postura duas vezes |
+
+O B29a vale para a `BrowningM2HMG`, que continua com `min == max == WeaponRange` — para ela o gate
+antigo era `d == max_range`, ou seja a policy zerava **todo** tile. As MGs comuns já tinham `min=2`
+por causa do override do GBO3, então ali o efeito é só o teto de visão.
+
+**Custo do B29c, e por que a ordem importa.** O anel é largo (2,4 m a ~50 m) e o time é grande:
+medido, **22 a 24 dos 26 aliados** do artilheiro caem dentro dele. Passar todos pelo lote de raios
+custaria ~3000 raios por turno só em amigo — o teto inteiro do `MaxLOSChecks`. O cone, porém, é
+estreito (645 a 1049 minutos nas MGs medidas, 11° a 17°), então o filtro barato vem primeiro: só
+entra no lote de raios o aliado cujo ângulo cabe em alguma janela ancorada num inimigo que já
+sobreviveu ao LOS. Na prática sobram 0 a 2.
+
+**O que a policy continua sem ver, de propósito:** o CTH. Ele foi consertado do outro lado. Medir
+CTH por tile aqui custaria um `CalcValue` por inimigo por tile — exatamente o que o B27 tirou.
+
+*Na `AIPOLICYPOS_MGSetupAP.lua`* — mesma correção de reserva (B29d), mais duas que só existiam ali:
+a consulta ao `g_AIDestEnemyLOSCache` usava o `dest` cru (postura que ele por acaso tem, não Prone)
+e tratava `nil` como "sem linha". Essa policy roda com `Required = true` no `PositioningAI`
+"MG Setup", então erro ali não dilui: **elimina** o destino.
+
+---
+
 ### 🎛️ Interruptor mestre: `RATOAI_LOSFixes`
 
 Definido em `CONSTANTS_AI_source.lua`. `RATOAI_LOSFixes = false` no console devolve **as três**
@@ -1188,6 +1303,8 @@ combate:
 | B25 | `SOURCE_AIFindDestinations.lua` | destino de PrefStance=Prone volta a ser empacotado em pé |
 | B26 | `SOURCE_AIPrecalcConeTargetZones.lua` | cone da MG volta a ser medido na postura atual |
 | B27 | `AIPOLICYPOS_MGSetupPosScore.lua` | portão de LOS e checagem por inimigo desligados (a nota vira geometria pura) |
+| B29c | `AIPOLICYPOS_MGSetupPosScore.lua` | o raio que confirma o aliado no cone (o desconto por aliado continua, por geometria pura) |
+| B29e | `AIPOLICYPOS_MGSetupAP.lua` | a consulta ao cache de LOS volta a usar o `dest` cru em vez da chave Prone |
 
 Os individuais continuam valendo (`RATOAI_PronePackDests`, `RATOAI_ConeStanceLOS`, e as
 propriedades `RequireLOS` / `VerifyLOS`); o mestre tem precedência.

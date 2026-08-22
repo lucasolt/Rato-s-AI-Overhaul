@@ -979,9 +979,6 @@ return {
 						'Normalization', "soft",
 						'SoftK', 100,
 					}),
-					PlaceObj('AIPolicyCustomWeaponRange', {
-						'Falloff', 6,
-					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 80,
 						'CoverTrust', 50,
@@ -989,8 +986,9 @@ return {
 						'MeleeRange', 10,
 					}),
 					PlaceObj('AIPolicyMGSetupPosScore', {
-						'Weight', 300,
+						'Weight', 150,
 						'ClusterBonus', 20,
+						'visibility_mode', "self",
 						'ReserveAPforSetup', true,
 					}),
 				},
@@ -1016,7 +1014,7 @@ return {
 							return self.Weight, false, self.Priority
 						end,
 						'enemy_score', 110,
-						'team_score', -30,
+						'team_score', -20,
 						'min_score', 100,
 						'enemy_cover_mod', 50,
 						'cur_zone_mod', 140,
@@ -1046,7 +1044,20 @@ return {
 						'AttackTargeting', set( "Torso" ),
 					}),
 					PlaceObj('AIActionMGSetup', {
-						'team_score', -10,
+						'BiasId', "MGSetup",
+						'Weight', 200,
+						'Priority', true,
+						'CustomScoring', function (self, context)
+							local unit = context.unit
+							if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
+								return 0, true, false   
+							end
+							
+							return self.Weight, false, self.Priority
+						end,
+						'enemy_score', 110,
+						'team_score', -20,
+						'min_score', 100,
 						'enemy_cover_mod', 50,
 						'cur_zone_mod', 140,
 					}),
@@ -1065,19 +1076,15 @@ return {
 		},
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMax', 40,
+				'RangeMin', 40,
 				'Falloff', 6,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
-			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 70,
-				'Indoors', false,
+			PlaceObj('AIPolicyLosToEnemy', {
+				'Weight', 80,
 			}),
-			PlaceObj('AIPolicyMGSetupPosScore', {
-				'Weight', 120,
-				'ClusterBonus', 20,
-				'RequireLOS', false,
-				'VerifyLOS', false,
+			PlaceObj('AIPolicyIndoorsOutdoors', {
+				'Weight', 50,
+				'Indoors', false,
 			}),
 		},
 		OptLocSearchRadius = 80,

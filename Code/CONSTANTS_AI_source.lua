@@ -22,9 +22,11 @@
 ---- fazer A/B de bug intermitente, que e o unico jeito de saber se um deles e a causa.
 ----
 ---- O que ele desliga:
-----   B25  SOURCE_AIFindDestinations.lua        -- destino empacotado Prone p/ PrefStance=Prone
-----   B26  SOURCE_AIPrecalcConeTargetZones.lua  -- cone da MG medido deitado
-----   B27  AIPOLICYPOS_MGSetupPosScore.lua      -- portao de LOS + verificacao por inimigo
+----   B25   SOURCE_AIFindDestinations.lua        -- destino empacotado Prone p/ PrefStance=Prone
+----   B26   SOURCE_AIPrecalcConeTargetZones.lua  -- cone da MG medido deitado
+----   B27   AIPOLICYPOS_MGSetupPosScore.lua      -- portao de LOS + verificacao por inimigo
+----   B29c  AIPOLICYPOS_MGSetupPosScore.lua      -- raio que confirma o aliado no cone
+----   B29e  AIPOLICYPOS_MGSetupAP.lua            -- chave Prone na consulta ao cache de LOS
 ----
 ---- Os interruptores individuais continuam valendo (RATOAI_PronePackDests,
 ---- RATOAI_ConeStanceLOS, e as propriedades RequireLOS / VerifyLOS da policy). O mestre tem
