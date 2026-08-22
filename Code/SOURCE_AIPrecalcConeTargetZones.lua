@@ -88,6 +88,25 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     local min_range = params.min_range * const.SlabSizeX
     local max_range = params.max_range * const.SlabSizeX
 
+    ---------------------------------------------------------------------------------------------
+    ---- COMPRIMENTO DO CONE DA MG (RATOAI_MGConeRange, CONSTANTS_AI_source.lua)
+    ----
+    ---- So para MGSetup / MGRotate: Overwatch, DanceForMe e EyesOnTheBack passam por aqui e
+    ---- ficam byte a byte iguais ao vanilla.
+    ----
+    ---- `max_range` manda em tres coisas de uma vez, e e por isso que basta trocar aqui:
+    ----   1. AICalcAOETargetPoints -- quais inimigos viram direcao candidata;
+    ----   2. `target_pos = attack_pos + SetLen(dir, max_range)` -- o COMPRIMENTO do cone que vai
+    ----      ser plantado, que e o que decide quem dispara interrupcao;
+    ----   3. `CheckLOS(units, unit, unit:GetDist(target_pos), ...)` -- a distancia de LOS do cone.
+    ----
+    ---- Com os defaults (pct = 100, tiles = 0) o unico efeito e o teto de
+    ---- `Min(sight, GetMaxRange())` e a guarda `min >= max` do vanilla -- nenhum encurtamento.
+    ---------------------------------------------------------------------------------------------
+    if action_id == "MGSetup" or action_id == "MGRotate" then
+        min_range, max_range = RATOAI_MGConeRange(unit, weapon, params)
+    end
+
     local target_pts = AICalcAOETargetPoints(context, min_range, max_range)
     if additional_target_pt then
         target_pts[#target_pts + 1] = additional_target_pt
@@ -143,7 +162,10 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     end
 
     -- filter LOS targets
-    local max_distance = Min(unit_sight, weapon:GetMaxRange())
+    ---- O `max_range` ja carrega o teto de `Min(sight, GetMaxRange())` e o encurtamento do cone
+    ---- quando a acao e da MG; sem isso um alvo alem do comprimento do cone passaria neste
+    ---- segundo filtro, que e mais largo que o primeiro.
+    local max_distance = Min(Min(unit_sight, weapon:GetMaxRange()), max_range)
     local los_any, los_targets = CheckLOS(targets, unit, max_distance, override)
     if not los_any then
         for _, zone in ipairs(zones) do

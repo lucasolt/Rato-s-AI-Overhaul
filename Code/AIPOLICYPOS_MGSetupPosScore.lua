@@ -222,30 +222,14 @@ local function RATOAI_MGCone(context)
         return false
     end
 
-    local min_r = (params.min_range or 0) * const.SlabSizeX
-    local max_r = (params.max_range or 0) * const.SlabSizeX
-
     ---------------------------------------------------------------------------------------------
-    ---- BUGFIX (B29a): o anel tem que ser o MESMO que a acao usa. Duas correcoes:
-    ----
-    ---- 1. `min_range >= max_range` significa "sem minimo", nao "so a casca do circulo". O
-    ----    proprio vanilla escreve isso no AIFilterTargetPoints (CombatAI.lua:2035):
-    ----        elseif min_range and min_range < max_range and dist < min_range then remove
-    ----    O GBO3 hoje devolve min=2 para MachineGun, mas a BrowningM2HMG continua com
-    ----    min == max == WeaponRange (SOURCE_ChangeMGSetupGetAreaParams.lua) -- e para ela o
-    ----    gate `d >= min_range and d <= max_range` era `d == max_range`, ou seja, a policy
-    ----    zerava TODO tile.
-    ----
-    ---- 2. O alcance efetivo nao e o do cone: o AIPrecalcConeTargetZones passa os alvos por um
-    ----    segundo CheckLOS com `Min(unit_sight, weapon:GetMaxRange())`. Quem estiver alem
-    ----    disso e contado aqui e descartado la. Medido: MG42 cone = 45600, GetMaxRange =
-    ----    46800, sight = 67200 -- hoje o cone e o menor, mas isso depende da arma e do
-    ----    modificador de visao, entao o minimo fica explicito em vez de assumido.
+    ---- BUGFIX (B29a): o anel tem que ser o MESMO que a acao usa, entao ele sai da fonte unica
+    ---- (`RATOAI_MGConeRange`, em CONSTANTS_AI_source.lua) que o
+    ---- SOURCE_AIPrecalcConeTargetZones.lua tambem consulta. Discordancia entre os dois e o
+    ---- proprio B29. La estao documentados: a guarda `min >= max` do vanilla, o teto de
+    ---- `Min(sight, GetMaxRange())` e os parametros de encurtamento do cone.
     ---------------------------------------------------------------------------------------------
-    if min_r >= max_r then
-        min_r = 0
-    end
-    max_r = Min(max_r, Min(unit:GetSightRadius(), weapon:GetMaxRange()))
+    local min_r, max_r = RATOAI_MGConeRange(unit, weapon, params)
     if max_r <= 0 then
         context.__mg_cone = false
         return false

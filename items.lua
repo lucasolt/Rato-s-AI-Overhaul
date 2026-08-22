@@ -304,6 +304,7 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
 						'CoverTrust', 80,
+						'CoverNearTiles', 8,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
@@ -973,9 +974,10 @@ return {
 					return self.Weight
 					--return getStandardBehaviorScore_HeavyGunner(self, unit, proto_context, debug_data)
 				end,
+				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
+						'Weight', 300,
 						'Normalization', "soft",
 						'SoftK', 100,
 					}),
@@ -986,7 +988,7 @@ return {
 						'MeleeRange', 10,
 					}),
 					PlaceObj('AIPolicyMGSetupPosScore', {
-						'Weight', 150,
+						'Weight', 200,
 						'ClusterBonus', 20,
 						'visibility_mode', "self",
 						'ReserveAPforSetup', true,
@@ -994,7 +996,6 @@ return {
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMGBurstFire', {
-						'Weight', 200,
 						'CustomScoring', function (self, context)
 							return AutoFire_CustomScoring(self, context)
 						end,
@@ -1004,7 +1005,6 @@ return {
 					PlaceObj('AIActionMGSetup', {
 						'BiasId', "MGSetup",
 						'Weight', 200,
-						'Priority', true,
 						'CustomScoring', function (self, context)
 							local unit = context.unit
 							if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
@@ -1039,14 +1039,11 @@ return {
 				'OptLocWeight', 0,
 				'SignatureActions', {
 					PlaceObj('AIActionMGBurstFire', {
-						'Weight', 200,
 						'Aiming', "Maximum",
 						'AttackTargeting', set( "Torso" ),
 					}),
 					PlaceObj('AIActionMGSetup', {
 						'BiasId', "MGSetup",
-						'Weight', 200,
-						'Priority', true,
 						'CustomScoring', function (self, context)
 							local unit = context.unit
 							if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
@@ -1076,7 +1073,7 @@ return {
 		},
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMin', 40,
+				'Weight', 150,
 				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
@@ -1085,6 +1082,10 @@ return {
 			PlaceObj('AIPolicyIndoorsOutdoors', {
 				'Weight', 50,
 				'Indoors', false,
+			}),
+			PlaceObj('AIPolicyMGSetupPosScore', {
+				'RequireLOS', false,
+				'AllyPenalty', 0,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1459,18 +1460,10 @@ return {
 			PlaceObj('StandardAI', {
 				'turn_phase', "Early",
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 50,
-					}),
-					PlaceObj('AIPolicyGrenadeRange', {
-						'Weight', 300,
-						'RangeMin', 40,
-						'RangeMax', 60,
-						'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
-						'SaveAP', true,
-					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 50,
+					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyThreatExposure', {
+						'CoverNearTiles', 8,
+						'PlateauTiles', 0,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -1480,7 +1473,7 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLosToEnemy', nil),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 200,
+				'Weight', 80,
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyGrenadeRange', {
@@ -1499,12 +1492,14 @@ return {
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 50,
+				'AssumeCrouch', true,
 			}),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 50,
+				'DownhillMax', 40,
 			}),
 		},
-		OptLocSearchRadius = 100,
+		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
 		SignatureActions = {
 			PlaceObj('AIActionThrowGrenade', {

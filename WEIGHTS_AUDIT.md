@@ -1266,7 +1266,7 @@ mais frouxa que a da ação:
 
 | | o que era | o que é |
 |---|---|---|
-| B29a | anel `d >= min_range` cru, sem teto de visão | `min >= max` vira "sem mínimo" (é o que o `AIFilterTargetPoints` do vanilla faz) e o máximo é clampado por `Min(sight, GetMaxRange())`, o segundo `CheckLOS` da ação |
+| B29a | anel `d >= min_range` cru, sem teto de visão | `min >= max` vira "sem mínimo" (é o que o `AIFilterTargetPoints` do vanilla faz) e o máximo é clampado por `Min(sight, GetMaxRange())`, o segundo `CheckLOS` da ação. Mora em `RATOAI_MGConeRange` (`CONSTANTS_AI_source.lua`), fonte única lida pelos dois lados |
 | B29b | pool sempre `enemy_visible_by_team` | novo `visibility_mode = "self"`, o mesmo `VisibilityCheckAll ... uvVisible` do `AICalcAOETargetPoints` |
 | B29c | cega para aliados | novo `AllyPenalty` (default 30), subtraído por aliado na janela vencedora |
 | B29d | reserva de AP com o custo medido da postura ATUAL | medido da postura **do destino**, senão o dest empacotado Prone paga a postura duas vezes |
@@ -1289,6 +1289,52 @@ CTH por tile aqui custaria um `CalcValue` por inimigo por tile — exatamente o 
 a consulta ao `g_AIDestEnemyLOSCache` usava o `dest` cru (postura que ele por acaso tem, não Prone)
 e tratava `nil` como "sem linha". Essa policy roda com `Required = true` no `PositioningAI`
 "MG Setup", então erro ali não dilui: **elimina** o destino.
+
+---
+
+### 🎛️ `RATOAI_MGConeRangePct` / `RATOAI_MGConeRangeTiles` — comprimento do cone da MG
+
+Não é bug, é uma liberdade que o jogador tem e a IA não. Medido no processo vivo, dois cones
+ativos no mesmo combate:
+
+```
+Grizzly (merc)      dist até target_pos = 15481   (~13 tiles, escolha do jogador)
+LegionGunner:412    dist até target_pos = 45600   (= max_range exato)
+```
+
+`AIPrecalcConeTargetZones` monta o alvo com `target_pos = attack_pos + SetLen(dir, max_range)`, e
+para MachineGun `max_range` é o `WeaponRange` inteiro. A IA sempre planta no máximo.
+
+Encurtar importa porque o número de interrupções é limitado (medido: o LegionGunner:412 tinha
+**uma**), e um cone de 38 tiles gasta essa única interrupção no primeiro inimigo que pisar na
+borda. Rampa do `HipshotPenalty` (MG42, interrupção de MG, aim 1):
+
+| tiles | 4 | 8 | 12 | 16 | 20 | 24 | 28 | 32 | 36 |
+|---|---|---|---|---|---|---|---|---|---|
+| penal | -10 | -14 | -21 | -29 | -33 | -36 | -40 | -45 | -47 |
+
+~1,2 ponto por tile, **sem joelho** — não há ótimo para derivar, o corte é escolha de projeto. Por
+isso é parâmetro, e por isso o default (`pct = 100`, `tiles = 0`) não muda nada. Efeito medido dos
+ajustes:
+
+```
+RPD_1 WR=38   100/0=38t   60/0=22t   100/20=20t   10/0=8t (piso)
+RPD_1 WR=44   100/0=42t   60/0=25t   100/20=20t   10/0=8t
+MG42  WR=38   100/0=38t   60/0=22t   100/20=20t   10/0=8t
+```
+
+(o `42t` do RPD_1 de WR=44 é o teto de `GetMaxRange`, não o encurtamento.)
+
+Os dois são globais de propriedade — `RATOAI_MGConeRangePct = 60` no console vale na hora. O
+`context.__mg_cone` da policy cacheia por turno, então um ajuste no meio do turno só aparece no
+próximo.
+
+**Ressalva:** o lado que planta o cone está em `SOURCE_AIPrecalcConeTargetZones.lua`, que **não
+está registrado** na lista `code` do `metadata.lua` — verificado no processo vivo, quem roda é o
+`AIPrecalcConeTargetZones` do vanilla (`@Lua/Tactical/CombatAI.lua`). Sem registrar pelo editor, o
+parâmetro muda só a nota dos tiles e o cone continua sendo plantado no máximo. **O B26 está no
+mesmo barco — ele nunca rodou.** O outro arquivo em disco fora da lista é
+`SOURCE_AIGetBias.lua`.
 
 ---
 
