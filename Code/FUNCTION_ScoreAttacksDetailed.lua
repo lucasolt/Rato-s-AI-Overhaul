@@ -58,6 +58,7 @@ local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
 ---- do GBO3 (que por sua vez espelha Weapon.lua:2149):
 ----
 ----     shot_cth = original_cth - cth_loss_per_shot * Min(b-1, MaxShotIndexForRecoilCTHLoss)
+----     se b > 1:  shot_cth = shot_cth - aim_cth      <- so a 1a bala fica com o bonus de mira
 ----     shot_cth = Clamp(shot_cth, 0, 100)
 ----     shot_cth = Max(shot_cth, Min(MultishotMinCTH, original_cth))    <- piso
 ----
@@ -70,7 +71,23 @@ local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
 ---- Constantes conferidas no processo vivo: MaxShotIndexForRecoilCTHLoss = 6,
 ---- MultishotMinCTH = 5.
 ---------------------------------------------------------------------------------------------------
-local function RATOAI_BurstHits(original_cth, shots, recoil_cth)
+---- Valor do modificador `Aim` para um nivel, cacheado na tabela do chamador.
+---- `cache` nil = arma de tiro unico: nao ha bala 2 para perder o bonus, devolve 0.
+local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
+    if not cache or (aim_level or 0) <= 0 then
+        return 0
+    end
+    local v = cache[aim_level]
+    if v == nil then
+        local use, bonus = Presets.ChanceToHitModifier.Default.Aim:CalcValue(
+                               unit, target, nil, action, weapon, nil, nil, aim_level)
+        v = (use and bonus) or 0
+        cache[aim_level] = v
+    end
+    return v
+end
+
+local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth)
     ---- BUGFIX (B24): tiro unico tambem clampa. Desde que o recoil persistente entra na
     ---- CTH do ataque (e nao na soma), `original_cth` pode chegar negativo aqui -- e um
     ---- ataque nunca pode CONTRIBUIR negativo para os acertos esperados. No caminho de
@@ -84,6 +101,9 @@ local function RATOAI_BurstHits(original_cth, shots, recoil_cth)
     for b = 1, shots do
         ---- recoil_cth e negativo; Min(b-1, max_idx) congela a degradacao apos o teto
         local c = original_cth + (recoil_cth or 0) * Min(b - 1, max_idx)
+        if b > 1 then
+            c = c - (aim_cth or 0)
+        end
         total = total + Max(floor_cth, Clamp(c, 0, 100))
     end
     return total
@@ -163,6 +183,13 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- nem do alvo, entao e resolvido uma vez em AIPrecalcDamageScore.
     local burst_shots = context.burst_shots or 1
 
+    ---- O bonus de mira so vale para a PRIMEIRA bala da rajada; as seguintes o perdem.
+    ---- Tabela criada SO quando a arma e automatica -- em arma de tiro unico nao ha
+    ---- segunda bala para perder bonus, e `RATOAI_AimBonus` devolve 0 sem alocar nada.
+    ---- PERF (C11): funcao de arquivo, nao closure. Este trecho roda por par
+    ---- (destino, alvo) e uma closure por par e exatamente o que o C11 tirou daqui.
+    local aim_cth_by_level = burst_shots > 1 and {} or nil
+
     ---- BUGFIX (B23a): pilhas de recoil PERSISTENTE acumuladas DENTRO desta sequencia.
     ----
     ---- Comeca em ZERO de proposito, e nao nas pilhas que a unidade ja carrega. As que
@@ -225,7 +252,9 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             table.insert(context.cth_attacks_at[upos][target], eff_cth)
         end
 
-        local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth)
+        local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth,
+                                          RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
+                                                          action, weapon))
         if dbg then
             table.insert(context.burst_hits_at[upos][target], expanded)
         end
