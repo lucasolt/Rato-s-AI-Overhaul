@@ -13,3 +13,28 @@
 -- const.AIFriendlyFire_LOFConeFar = 300 * guic -- same as above for cone attacks (far side of the cone, positioned at AIFriendlyFire_MaxRange)
 -- const.AIFriendlyFire_ScoreMod = 50 -- % of damage score evaluation remanining when an ally is in danger
 -- const.AIShootAboveCTH = 0
+
+---------------------------------------------------------------------------------------------------
+---- INTERRUPTOR MESTRE DAS CORRECOES DE LOS
+----
+---- `RATOAI_LOSFixes = false` no console devolve as tres intervencoes de linha de visao ao
+---- comportamento anterior NA HORA -- sem recarregar mod, sem sair do combate. Existe para
+---- fazer A/B de bug intermitente, que e o unico jeito de saber se um deles e a causa.
+----
+---- O que ele desliga:
+----   B25  SOURCE_AIFindDestinations.lua        -- destino empacotado Prone p/ PrefStance=Prone
+----   B26  SOURCE_AIPrecalcConeTargetZones.lua  -- cone da MG medido deitado
+----   B27  AIPOLICYPOS_MGSetupPosScore.lua      -- portao de LOS + verificacao por inimigo
+----
+---- Os interruptores individuais continuam valendo (RATOAI_PronePackDests,
+---- RATOAI_ConeStanceLOS, e as propriedades RequireLOS / VerifyLOS da policy). O mestre tem
+---- PRECEDENCIA: com ele em false, os individuais nao importam.
+----
+---- O que ele NAO desliga: a policy em si (a nota por aglomerado no cone continua saindo, so
+---- que por geometria pura, sem checar linha) e o reajuste de alvo pos-MGSetup do
+---- REACTIONS_StopMGPackingUp.lua, que tem interruptor proprio (RATOAI_MGRetargetAfterSetup)
+---- por ser bug de OUTRA familia -- alvo fora do cone, nao linha de visao.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_LOSFixes") == nil then
+    RATOAI_LOSFixes = true
+end

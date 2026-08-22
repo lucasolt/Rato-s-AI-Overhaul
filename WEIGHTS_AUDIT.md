@@ -26,6 +26,12 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B20 | ✅ aplicado | `SOURCE_AIPolicyDealDamage.lua` — desconto de alvo derrubado nos 4 modos |
 | B21 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua`, `SOURCE_AIPrecalcDamageScore.lua` — rajada valia um acerto só |
 | B22 | ✅ aplicado | `SOURCE_AICalcAttacksandAim.lua` + **GBO3** `FUNCTIONS_recoil.lua` — sobretaxa de mira do recoil |
+| B23a/b | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua` — pilhas de recoil começando em zero + fator de conversão |
+| B24 | ✅ aplicado | `FUNCTION_ScoreAttacksDetailed.lua` — penalidade persistente aplicada à soma, não ao CTH do ataque |
+| B25 | ⚠️ **aplicado, NÃO resolveu** | `SOURCE_AIFindDestinations.lua` — destino de quem prefere Prone era empacotado em pé. O sintoma do MG continua. **Em aberto.** |
+| B26 | ⚠️ **aplicado, não testado em jogo** | `SOURCE_AIPrecalcConeTargetZones.lua` (**novo — falta registrar no editor**) — o parâmetro `stance` do vanilla era ignorado: o cone da MG era decidido com a linha em pé. |
+| B27 / C13 | ⚠️ **aplicado, não testado em jogo** | `AIPOLICYPOS_MGSetupPosScore.lua` — reescrita. Ângulo medido da unidade e não do tile, portão de ângulo com unidade errada (razão vs AP), visibilidade da posição atual, média em vez de aglomerado, sem portão de LOS. |
+| B28 | ⚠️ **aplicado, não testado em jogo** | `REACTIONS_StopMGPackingUp.lua` — montava a MG e atirava fora do cone. Ordem, não filtro: o precalc roda antes da signature action. |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |
@@ -820,6 +826,373 @@ um disparo que não sai.
 
 **Compatibilidade:** o chamador é guardado por `rawget(_G, "Rat_GetRecoilAimCost")`. Com um
 GBO3 anterior a esta mudança a sobretaxa vira 0 e o comportamento é o de antes, sem erro.
+
+---
+
+### 🔴 B23a / B23b — As pilhas de recoil na avaliação
+
+Dois defeitos no mesmo trecho, ambos no `FUNCTION_ScoreAttacksDetailed.lua`.
+
+**B23a — dupla contagem.** As pilhas eram inicializadas lendo o efeito `Rat_recoil` vivo na
+unidade. Mas `CalcChanceToHit` **já desconta as pilhas existentes** — elas entram como
+modificador dela. Somar de novo punia o primeiro ataque planejado duas vezes. Agora
+`stacks` começa em **zero** e só conta o que o próprio turno planejado acumula.
+
+**B23b — fator de conversão.** `RECOIL_STACKS_PCT` era 35, misturando as duas magnitudes de
+recoil. Os dois recoils saem do mesmo `get_recoil` e diferem no multiplicador final: `*0.5`
+por bala dentro da rajada, `*0.35*n` persistente entre ataques. Como o valor de partida aqui
+é o **por bala**, a conversão correta é `0.35/0.5 = 70%`, não 35%. O valor está duplicado do
+GBO3 com comentário de sincronia — é exatamente o defeito que o B22 evitou extraindo a
+função em vez de copiar a fórmula.
+
+### 🔴 B24 — Um ataque tardio podia apagar um ataque anterior
+
+A penalidade persistente era aplicada ao **acumulado** em vez de ao CTH daquele ataque. Um
+segundo ataque com recoil de −500 zerava (ou invertia) a contribuição de um primeiro ataque
+que valia 100 — o destino inteiro perdia valor por causa de um disparo marginal que a
+unidade nem precisava fazer.
+
+O conserto é estrutural: cada ataque é clampeado em `[0, 100]` (e no piso `MultishotMinCTH`
+dentro da rajada) **antes** de entrar na soma. A soma virou monotônica — planejar um ataque
+a mais nunca reduz o score de um destino, no máximo soma zero.
+
+### 🔴 B25 — O MG testava a linha de visão em pé e atirava deitado
+
+Sintoma relatado em campo: o artilheiro anda até um tile de onde enxerga o alvo, monta a MG,
+deita — e perde a linha.
+
+`AIBuildArchetypePaths` (CombatAI.lua:1063-1075) escolhe **uma** postura por voxel:
+
+```lua
+if pn_ap > mn_ap then  pack(pref_stance)  else  pack(move_stance)
+```
+
+Só empacota a postura preferida quando o voxel é alcançável **naquela postura** sobrando mais
+AP. Andar deitado é caro, então na prática todo destino além de um ou dois tiles cai no ramo
+`move_stance`. Para o `HeavyGunner` (PrefStance=Prone, MoveStance=Standing) isso significa que
+quase todos os destinos eram empacotados **em pé**.
+
+O que torna isso um bug e não uma aproximação: **o cache de LOS é chaveado pelo destino
+empacotado** — `AIUpdateDestLosCache` (CombatAI.lua:862) faz `srcs[count] = dests[i]`, stance
+inclusa. Então esses tiles tinham a linha testada em pé. Depois o `AIActionMGSetup:PrecalcAction`
+força `action_state.stance = "Prone"` (AIActions.lua:808), na fase de ataques, com a posição já
+escolhida. As policies de LOS premiavam **exatamente** os tiles onde em pé se vê e deitado não —
+o viés apontava para o erro, não só o tolerava.
+
+**O conserto não é novo.** O passe de Crouch que já existe logo abaixo faz exatamente este
+padrão — troca a stance empacotada, mantém `dest_path` na postura de movimento e tira o custo
+da mudança do `dest_ap`. O B25 só estende o padrão para PrefStance = Prone. A stance do destino
+passa a significar **onde ela termina**, não como ela chega — que é o que `EndMovement` faz de
+fato (`DoChangeStance` ao chegar).
+
+Roda antes do `AIEnumValidDests`, então o cache de LOS já nasce com a postura certa.
+
+**Excludente com o passe de Crouch de propósito:** Standing → Crouch → Prone cobraria a mudança
+duas vezes, e a unidade vai direto de pé para deitada.
+
+**Alcance da mudança:** todo archetype com `PrefStance = Prone` — hoje `HeavyGunner` e
+`AnimTestDummy_Prone`. O `EmplacementGunner` é Standing/Standing e não é afetado. Desligar em
+campo: `RATOAI_PronePackDests = false` no console.
+
+**Medido ao vivo** (`LegionGunner:412`, HeavyGunner, 11 AP, sonda DAP, código *antes* do
+conserto):
+
+| | |
+|---|---|
+| destinos | 68 |
+| empacotados **Prone** | **0** |
+| empacotados Standing | 44 |
+| empacotados Crouch | 24 (o passe de agachar já convertia) |
+| destinos com LOS cacheada | 68 de 68 — todas em pé ou agachado |
+
+Zero. Não é "quase sempre em pé" — é que o ramo `pref_stance` **nunca dispara** para esta
+unidade. Toda a comparação de posição do artilheiro de MG era feita numa postura que ele não ia
+usar.
+
+**Efeito do gate `ap >= cost`:** deitar custa 2 AP a partir de Standing (1 a partir de Crouch).
+Dos 68 destinos, **43 sobrevivem** ao gate e passam a Prone; os 25 restantes ficam como estavam.
+Isso não é uma perda: são exatamente os destinos longe, onde o AP acabou no caminho — ela não
+teria AP para montar a MG lá de qualquer forma. O gate e a viabilidade da ação coincidem.
+
+---
+
+#### ⚠️ B25 NÃO RESOLVEU O SINTOMA — retomar daqui
+
+Testado em jogo em **2026-08-21**: o artilheiro de MG **continua** montando e perdendo a linha.
+A mudança está aplicada e a medição acima é real, mas ela **não era a causa** (ou não era a
+causa *única*). Não há diagnóstico novo ainda — o que segue são as verificações a fazer, em
+ordem de custo, **não** conclusões.
+
+**Antes de qualquer coisa, separar "não rodou" de "rodou e não bastou".** É barato e decide o
+resto:
+
+1. `RATOAI_PronePackDests` no console. Se vier `nil`, o arquivo não recarregou e o teste não
+   testou nada.
+2. Rodar de novo o histograma de posturas da mesma unidade (a query está em
+   `DEBUG SERVER.md`; foi ela que produziu a tabela acima). Se **Prone continuar 0**, o passe
+   não está executando — checar se `context.archetype` chega preenchido e se
+   `StancesList[context.archetype.PrefStance]` é 3 de fato.
+3. Se Prone > 0 e o sintoma persiste, o empacotamento foi consertado e **o problema é outro**.
+
+**Verificado desde então (ver B26):** o `AIUpdateDestLosCache` roda **imediatamente depois** do
+`AIFindDestinations`, dentro do próprio `AICreateContext` (CombatAI.lua:832-836; o override do mod
+mantém a ordem, `SOURCE_AICreateContext.lua:225-229`) — a premissa estava certa. E o cache **é**
+sensível à postura empacotada: a forma em batelada do `CheckLOS`, com arrays de `stance_pos` como
+origem, devolve os mesmos números da forma objeto+stance (medido ao vivo, tabela no B26). Ou seja,
+o B25 realmente muda a postura em que o tile é avaliado. O que **falta** medir é o histograma de
+posturas com um artilheiro vivo em campo, para saber se o passe está de fato convertendo.
+
+**Pistas para o caso (3), as demais ainda não verificadas:**
+- **Pode não ser LOS, e sim o CONE.** A MG tem arco de tiro; `AIPOLICYPOS_MGSetupPosScore.lua`
+  usa `GetShootingAngleDiff`. Perder o alvo ao montar pode ser ângulo, não linha — e aí toda
+  esta investigação estava no eixo errado desde o começo.
+- **A altura muda a linha, e o `stance_pos_dist` é 2D.** Deitar baixa o ponto de origem do tiro;
+  se algum passo compara posições ignorando Z/postura (medido: `stance_pos_dist` ignora os dois),
+  a diferença some justamente onde importa.
+- **`AIActionMGSetup:PrecalcAction` (AIActions.lua:808)** força `action_state.stance = "Prone"`
+  na fase de ataques. Vale ler o que mais ele mexe além da postura.
+
+**Lembrete de higiene:** `RATOAI_PronePackDests = false` desliga o passe no console. Se ele for
+descartado de vez, tirar junto o guarda `not prone_pass` que hoje desativa o passe de Crouch para
+quem prefere Prone — senão o HeavyGunner fica sem agachar **e** sem deitar.
+
+**A conferir também (independente do acima):** os 2 AP saem do `dest_ap` dos 43, e a montagem da
+MG também custa. Vale olhar se o artilheiro não ficou parado demais por falta de orçamento nos
+destinos bons.
+
+---
+
+### 🔴 B26 — O cone da MG era decidido com a linha de visão em pé
+
+Sintoma que o Lucas isolou depois do B25: **o único caso problemático é ele montar a MG atrás
+de cobertura** (ou de outro obstáculo que corta a linha quando ele deita).
+
+O `stance` é um parâmetro declarado na assinatura do `AIPrecalcConeTargetZones`
+(CombatAI.lua:2040) e **nunca usado no corpo**. Quem passa esse parâmetro é um chamador só — o
+MGSetup, com um comentário que promete exatamente o que não acontece:
+
+```lua
+-- AIActions.lua:807-809
+action_state.stance = "Prone" -- MGSetup will change the stance so we need to check LOS in that stance
+AIActionBaseConeAttack.PrecalcAction(self, context, action_state)
+```
+
+As três medições que decidem quem está dentro do cone usavam a postura do momento: os dois
+`CheckLOS` (um com `nil` explícito no lugar da stance) e o `GetLoFData` com `stance = unit.stance`.
+
+**Por que o B25 não bastou.** O B25 conserta a *escolha do tile* — o `g_AIDestEnemyLOSCache` do
+artilheiro passou a ser medido deitado. A *decisão de montar a arma* não passa pelo cache: ela
+sai do `PrecalcAction`, medido na hora. E há dois momentos em que a unidade **ainda não está
+deitada** quando esse cálculo roda:
+
+1. **A porta de reposicionamento.** `Get_HeavyGunnerShouldUsePositioningBehavior` chama o
+   `PrecalcAction` na fase de seleção de behavior, antes de qualquer movimento, com a unidade em
+   pé. Responder "dá pra montar daqui" medindo em pé mantém o behavior de reposicionamento fora
+   da disputa.
+2. **O lote de movimento abortado** (`CROUCH_REPORT.md`, item 2). `EndMovement` — que é quem
+   aplica a postura do destino — só roda para quem sobrou em `playing`. Quando o lote é
+   interrompido, a unidade chega ao destino Prone **em pé**, o `PrecalcAction` mede em pé, e o
+   `MGSetup` deita na execução. É intermitente por construção, como o sintoma.
+
+**O conserto é a regra do jogador.** A UI do jogador já previsualiza este cone deitada
+(`IModeCombatAreaAim.lua:349`):
+
+```lua
+local stance = action.id == "MGSetup" and "Prone" or attacker.stance
+GetAOETiles(attacker_pos, stance, ...)  -->  CheckLOS(step_positions, step_pos, -1, stance, ...)
+```
+
+O jogador vê o cone deitado antes de confirmar. A IA não via. O override repassa o `stance` para
+as três chamadas e nada mais — o diff normalizado contra o vanilla é o `local override` e três
+argumentos.
+
+#### Medido no processo vivo (sonda DAP, combate real, 5 alvos)
+
+| unidade | pt-stand | pt-prone | obj-nil | obj-prone |
+|---|---|---|---|---|
+| LegionButcher:2038 | 5 | **0** | 5 | 0 |
+| LegionButcher:2043 | 4 | **1** | 4 | 1 |
+| LegionGrenadier:408 | 5 | 4 | 5 | 4 |
+| LegionRaider:404 | 5 | 3 | 5 | 3 |
+
+Três coisas ficam provadas, e as duas primeiras eram premissas em aberto do B25:
+
+1. **O 4º parâmetro do `CheckLOS` funciona.** Deitar apaga a linha na maioria dos casos — 5 → 0
+   no pior deles. É a magnitude do sintoma.
+2. **A engine honra a stance pedida mesmo com o objeto `unit` como origem** (colunas `obj-*` ==
+   `pt-*` em todo humano). Não é preciso trocar a origem por um ponto: basta parar de passar
+   `nil`. A única linha que diverge é a do cachorro, que não tem stance.
+3. **O `GetLoFData` honra `stance` sozinho, sem `step_pos`** (LegionScout:2033: 5 alvos com LOF
+   em pé, 3 deitado). Passar `step_pos` junto muda o resultado — o voxel empacotado não é
+   exatamente a posição visual — então ele ficou de fora: o objetivo é mudar a altura do olho,
+   não a origem.
+
+**Não conserta:** `unit:CalcChanceToHit`, no fim da função, continua medindo o CTH na postura
+real — ele não aceita postura hipotética por argumento (Unit.lua:6947 não menciona stance; os
+modificadores leem `attacker.stance`/`target.stance` dos objetos). O portão que importa é a
+linha, não o número: sem linha deitado, o LOF já derruba o alvo antes do CTH.
+
+**Alcance:** só o MGSetup passa stance. Overwatch, DanceForMe e EyesOnTheBack passam `nil`, e o
+MGRotate (já montado) chama com a unidade já deitada — nos dois casos as chamadas são as do
+vanilla. Desligar em campo: `RATOAI_ConeStanceLOS = false`.
+
+> ⚠️ **Falta registrar no editor de mods.** Sem entrar na lista `code`, é código morto.
+
+---
+
+### 🔴 B27 / PERF C13 — `AIPolicyMGSetupPosScore` reescrita
+
+A policy que deveria responder *"esta é uma boa posição para montar a MG?"* nunca discriminou
+tile nenhum. Cinco defeitos, todos lidos no código:
+
+**1. O portão de ângulo era um no-op por incompatibilidade de unidade.** Ela passava
+`GetShootingAngleDiff(unit, weapon, enemy, true)` como `angle_override` para o
+`RATOAI_GetEnemyCoverScore`, onde o valor é comparado com `angle_ap_threshold * const.Scale.AP`
+= **2000**. Mas `GetShootingAngleDiff` (GBO3, `shooting_stance_functions.lua:106-122`) devolve
+`abs(unit:AngleToPoint(pos)) / (weapon.OverwatchAngle / 2)` — uma **razão**, tipicamente 0–15.
+O caminho sem override passa `unit:GetShootingStanceAP(...)`, que é AP de verdade. Com o
+override, `angle_ap <= 2000` era sempre verdadeiro.
+
+**2. O ângulo saía da UNIDADE, não do tile.** `AngleToPoint` usa a posição e a orientação atuais
+dela — o mesmo valor para todos os destinos. É a causa direta do "nunca funcionou direito".
+
+**3. A visibilidade também era da posição atual** (`context.enemy_visible`, gravado uma vez por
+turno). Um inimigo que só se vê *daqui* entrava na conta de um tile do outro lado do mapa.
+
+**4. Média em vez de aglomerado.** Retornava `score / Max(1, enemies)`: um tile com linha para 4
+inimigos alinhados valia o mesmo que um com linha para 1 — justamente o sinal que a policy
+existia para dar (`AI_SYSTEM_GUIDE.md` §9.2d).
+
+**5. `Update_AIPrecalcDamageScore(unit)` dentro do `EvalDest`** — precalc completo disparado de
+dentro da varredura de tiles (protegido por flag, então roda uma vez, mas roda escondido).
+
+**A nova pergunta é só uma:** *quantos inimigos cabem no meu cone se eu deitar aqui?* Portão de
+LOS deitado pelo cache que a engine já calculou (zero raycast novo), anel de alcance do cone
+medido **do tile**, e uma janela deslizante circular sobre os ângulos para achar o maior
+aglomerado. `cone_angle` é largura **total** — a UI desenha de `-cone_angle/2` a `+cone_angle/2`
+(`UnitAOEActionVisuals.lua:450`).
+
+#### Medido no processo vivo, sobre os destinos reais de uma unidade
+
+`LegionRaider:457`, cone 22°, anel 2–23 slabs, 4 inimigos, **1384 tiles**:
+
+| | |
+|---|---|
+| zerados pelo portão de LOS | 460 |
+| com nota | 435 |
+| histograma `score:qtd` | `0:949  40:70  70:264  100:101` |
+| **tempo total** | **14 ms** |
+
+A versão antiga, nos mesmos 1384 tiles: 4 inimigos × `ChanceToHitModifier:CalcValue` (0,03 ms
+medido) + `GetShootingAngleDiff` (0,003 ms) ≈ **200 ms**. Catorze vezes mais barata, e agora com
+gradiente de verdade — 70 tiles cobrem 1 inimigo, 264 cobrem 2, 101 cobrem 3.
+
+**Custo depende de onde ela está ligada:** em `EndTurnPolicies` roda por `context.destinations`
+(~68); em `OptLocPolicies`, por `context.all_destinations` (1384–1477 medidos, raio 100). A
+versão nova aguenta as duas.
+
+**Armadilha registrada:** `ReserveAPforSetup` (que substitui o `ReserveAPforCrouchProne` de 2000
+AP fixos pelo custo real de `CombatActions.MGSetup:GetAPCost`) **não** deve ser ligada em
+`OptLocPolicies` — tile fora do alcance de movimento não tem `dest_ap` e seria zerado, o que
+impediria a IA de mirar uma posição a dois turnos de distância. Default `false`.
+
+**Compatibilidade:** a classe manteve o nome, então o `PlaceObj('AIPolicyMGSetupPosScore', {…})`
+do `items.lua` continua válido e o Weight não se perde. As propriedades novas entram com default.
+
+---
+
+#### B27, segunda passada — o portão binário não bastava para CONTAR
+
+Relatado em campo depois da primeira versão: a policy continuava pontuando tiles de onde o
+artilheiro não veria nada, **principalmente nas bordas de obstáculo**, e em lugares onde ele não
+veria nem de pé — ou seja, o defeito não era de postura.
+
+A causa é a assimetria entre o portão e a contagem: `g_AIDestEnemyLOSCache[dest]` responde
+*"**algum** inimigo é visto daqui"*, o que é o critério certo para o tile entrar na disputa e o
+insumo errado para contar aglomerado. Borda de obstáculo é exatamente a geometria onde se tem
+linha para **um** inimigo — e a contagem, puramente geométrica (anel de alcance + ângulo), dava
+crédito pelos outros três atrás da parede.
+
+Conserto: um raio por inimigo do anel, **a partir daquele tile, deitado**, memoizado por tile.
+Só os vistos entram na janela deslizante.
+
+**Medido sobre 1509 destinos reais, 22 inimigos conhecidos pelo time, cone 17°:**
+
+| | histograma `score:qtd` | tempo |
+|---|---|---|
+| só geometria | `0:899  100:610` | 119 ms |
+| com checagem | `0:962  40:61  70:76  100:410` | 522 ms (11292 raios) |
+
+Duzentos tiles que reivindicavam nota máxima eram mentira, e o gradiente 40/70/100 só existe com
+a checagem — sem ela o resultado é quase binário (0 ou 100).
+
+**Custo, e por que existe orçamento.** Medido: **0,04 ms por raio** (900 tiles × 22 inimigos =
+19800 raios em 793 ms numa batelada única; uma chamada por tile custa 1187 ms — batelada só ganha
+1,5×, o custo é raio, não chamada). Daí:
+
+- `EndTurnPolicies` (~68 destinos): ~1500 raios, **~70 ms**. É o placement atual e cabe.
+- `OptLocPolicies` (~1500 destinos): ~11000 raios, **~520 ms**. Não cabe.
+
+`MaxLOSChecks` (default 4000 ≈ 160 ms) é o teto por turno; estourado, os tiles restantes caem
+para geometria pura — e a nota deles fica otimista. **A recomendação é manter a policy em
+`EndTurnPolicies`.**
+
+**Isso também explica "pararam de montar".** A policy geométrica mandava o artilheiro para tiles
+cegos; chegando lá, o `AIActionMGSetup:PrecalcAction` não acha zona nenhuma (nem em pé — e o B26
+nem estava registrado, então era o vanilla medindo) e a ação fica indisponível. Ele anda e não
+monta. Com a checagem, esses tiles deixam de ganhar nota.
+
+---
+
+### 🔴 B28 — Montava a MG e atirava em alguém fora do cone
+
+Bug antigo, ressurgido. **O filtro de cone existe e está correto**
+(`SOURCE_AIPrecalcDamageScore.lua:187-191`): com `StationedMachineGun`, `targets` é filtrado por
+`target:IsThreatened({unit}, "overwatch")`. Nada foi removido dele.
+
+O defeito é de **ordem**. Dentro de um mesmo turno, `AIPlayAttacks` (CombatAI.lua:216) roda o
+`AIPrecalcDamageScore` **antes** de escolher a signature action — com a unidade ainda em pé e sem
+MG montada. O filtro não dispara. O `MGSetup` executa depois e cria o cone; ao voltar, a linha 268
+lê o alvo que já estava gravado:
+
+```lua
+local target = (context.dest_target or empty_table)[dest]
+```
+
+e atira nele, cone ou não. O filtro só pegaria no turno seguinte, quando o `HoldPositionAI`
+"In Setup" refaz o precalc com a unidade já montada.
+
+Conserto em `REACTIONS_StopMGPackingUp.lua` (arquivo já registrado, não precisa de editor):
+no `OnMsg.CombatActionEnd` do `MGSetup`, apaga `context.dest_target[dest]`. Isso faz o **caminho
+de recuperação que o vanilla já tem** (CombatAI.lua:269-277) refazer o precalc — agora com o
+`StationedMachineGun` aplicado, então o filtro de cone entra. Não é preciso tocar no
+`AIPlayAttacks`.
+
+Guarda registrada: esse mesmo bloco do vanilla reinicia o turno inteiro quando
+`TargetChangePolicy == "restart"`. O default é `"recalc"` e no `items.lua` só o `Brute` usa
+`"restart"` — que não monta MG. O guarda está explícito no código mesmo assim.
+
+Interruptor próprio: `RATOAI_MGRetargetAfterSetup = false`. **Não** está sob o `RATOAI_LOSFixes`
+de propósito — é bug de outra família, e a ideia é poder testar um sem o outro.
+
+---
+
+### 🎛️ Interruptor mestre: `RATOAI_LOSFixes`
+
+Definido em `CONSTANTS_AI_source.lua`. `RATOAI_LOSFixes = false` no console devolve **as três**
+intervenções de linha de visão ao comportamento anterior, na hora, sem recarregar mod nem sair do
+combate:
+
+| | arquivo | o que volta a ser |
+|---|---|---|
+| B25 | `SOURCE_AIFindDestinations.lua` | destino de PrefStance=Prone volta a ser empacotado em pé |
+| B26 | `SOURCE_AIPrecalcConeTargetZones.lua` | cone da MG volta a ser medido na postura atual |
+| B27 | `AIPOLICYPOS_MGSetupPosScore.lua` | portão de LOS e checagem por inimigo desligados (a nota vira geometria pura) |
+
+Os individuais continuam valendo (`RATOAI_PronePackDests`, `RATOAI_ConeStanceLOS`, e as
+propriedades `RequireLOS` / `VerifyLOS`); o mestre tem precedência.
+
+Fora dele, de propósito: a policy em si e o B28.
 
 ## Parte 2 — Problemas de magnitude (não são bugs, são calibragem)
 

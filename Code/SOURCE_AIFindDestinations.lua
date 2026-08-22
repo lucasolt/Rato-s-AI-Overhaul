@@ -40,6 +40,14 @@
 ---------------------------------------------------------------------------------------------------
 RATOAI_CrouchTrigger = rawget(_G, "RATOAI_CrouchTrigger") or "any_cover"
 
+---------------------------------------------------------------------------------------------------
+---- Empacotar o destino na PrefStance quando ela e Prone -- ver o bloco BUGFIX (B25) abaixo.
+---- Global para dar como desligar no console se aparecer efeito colateral em campo.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_PronePackDests") == nil then
+    RATOAI_PronePackDests = true
+end
+
 local function RATOAI_WantsCrouch(cover_low, cover_high)
     local mode = RATOAI_CrouchTrigger
     if mode == "always" then
@@ -90,12 +98,67 @@ function AIFindDestinations(unit, context)
         change_stance_costs[stance_idx] = GetStanceToStanceAP(StancesList[stance_idx], "Crouch")
     end
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B25): quem prefere PRONE tinha o destino empacotado EM PE.
+    ----
+    ---- `AIBuildArchetypePaths` (CombatAI.lua:1063-1075) escolhe UMA stance por voxel:
+    ----     if pn_ap > mn_ap then  pack(pref_stance)  else  pack(move_stance)
+    ---- Ou seja, so empacota a stance preferida quando o voxel e alcancavel NAQUELA
+    ---- postura sobrando mais AP. Andar deitado e caro, entao praticamente todo destino
+    ---- alem de um ou dois tiles cai no ramo `move_stance`.
+    ----
+    ---- Para o HeavyGunner (PrefStance=Prone, MoveStance=Standing) isso e grave: o cache
+    ---- de LOS e chaveado pelo destino EMPACOTADO (AIUpdateDestLosCache usa
+    ---- `srcs[i] = dests[i]`), entao esses tiles tem a linha testada EM PE. Depois o
+    ---- MGSetup forca Prone -- o proprio vanilla comenta isso em AIActions.lua:808 -- e a
+    ---- linha some. As policies de LOS premiavam exatamente os tiles onde em pe se ve e
+    ---- deitado nao.
+    ----
+    ---- O conserto usa o mesmo padrao do bloco de Crouch logo abaixo: a stance do destino
+    ---- e ONDE ELA TERMINA, nao como ela chega. `dest_path` continua sendo a stance de
+    ---- movimento, e o custo da mudanca sai do `dest_ap`. Roda antes do
+    ---- `AIEnumValidDests`, entao o cache de LOS ja nasce com a postura certa.
+    ----
+    ---- Excludente com o passe de Crouch de proposito: converter Standing -> Crouch ->
+    ---- Prone cobraria a mudanca duas vezes, e ela vai direto de pe para deitada.
+    ---------------------------------------------------------------------------------------------
+    local prone_idx = StancesList.Prone
+    local pref_idx = context.archetype and StancesList[context.archetype.PrefStance] or 0
+
+    ---- Interruptor mestre (CONSTANTS_AI_source.lua): RATOAI_LOSFixes = false desliga o passe
+    ---- junto com o B26 e os portoes da AIPolicyMGSetupPosScore, para A/B de bug intermitente.
+    local los_fixes = rawget(_G, "RATOAI_LOSFixes") ~= false
+    local prone_pass = los_fixes and (pref_idx == prone_idx) and RATOAI_PronePackDests and true or
+                           false
+
+    if prone_pass then
+        for i, dest in ipairs(destinations) do
+            local x, y, z, stance_idx = stance_pos_unpack(dest)
+            ---- stance_idx 0 e o "sem postura" do StancesList; o passe de Crouch se protege
+            ---- dele por tabelar os custos com ipairs (que pula o indice 0). Aqui a chamada e
+            ---- direta, entao o guarda e explicito.
+            if stance_idx ~= prone_idx and stance_idx > 0 then
+                local cost = GetStanceToStanceAP(StancesList[stance_idx], "Prone")
+                local ap = dest_ap[dest]
+                if cost and ap and ap >= cost then
+                    table.remove_value(important_dests, dest)
+                    local new_dest = stance_pos_pack(x, y, z, prone_idx)
+                    destinations[i] = new_dest
+                    voxel_to_dest[point_pack(x, y, z)] = new_dest
+                    dest_ap[new_dest] = ap - cost
+                    dest_path[new_dest] = dest_path[dest]
+                    table.insert_unique(important_dests, new_dest)
+                end
+            end
+        end
+    end
+
     -- preprocess destinations to find those where we need to change stance at the dest to take cover
     local low = const.CoverLow
     local high = const.CoverHigh
     for i, dest in ipairs(destinations) do
         local x, y, z, stance_idx = stance_pos_unpack(dest)
-        if stance_idx ~= crouch_idx then
+        if not prone_pass and stance_idx ~= crouch_idx then
             local cost = change_stance_costs[stance_idx]
             local ap = dest_ap[dest]
             if cost and ap and ap >= cost then

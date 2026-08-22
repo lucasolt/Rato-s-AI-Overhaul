@@ -175,7 +175,7 @@ local function GetRoleArgs_BoostStats(class)
             Leadership = {mul = 0, flat = 0},
             Mechanical = {mul = 0, flat = 0}
         },
-        Milita = {
+        Militia = {
             Health = {mul = 10, flat = 5},
             Marksmanship = {mul = 0, flat = 4},
             Dexterity = {mul = 0, flat = 0},

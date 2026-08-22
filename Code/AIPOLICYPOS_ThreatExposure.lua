@@ -103,7 +103,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "por inteiro (agressiva). Abaixo disso sobra ameaca mesmo coberta, e a " ..
                 "IA fica mais cautelosa. 0 = cobertura nao vale nada.",
             editor = "number",
-            default = 100,
+            default = 90,
             min = 0,
             max = 100
         }, {
@@ -134,11 +134,10 @@ DefineClass.AIPolicyThreatExposure = {
             name = "Raio de exclusao da cobertura (tiles)",
             help = "Abaixo desta distancia a confianca na cobertura cai de CoverTrust " ..
                 "ate CoverTrustNear, linearmente, chegando em CoverTrustNear com o " ..
-                "inimigo colado.\n" ..
-                "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
+                "inimigo colado.\n" .. "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
                 "So tem efeito com `CoverCancels` ligado.",
             editor = "number",
-            default = 0,
+            default = 6,
             min = 0,
             max = 30
         }, {
@@ -150,8 +149,7 @@ DefineClass.AIPolicyThreatExposure = {
             help = "Confianca aplicada com o inimigo a distancia 0. Interpola " ..
                 "linearmente ate CoverTrust em CoverNearTiles tiles.\n" ..
                 "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
-                "cheia, como se fosse corpo a corpo.\n" ..
-                "So tem efeito com CoverNearTiles > 0.",
+                "cheia, como se fosse corpo a corpo.\n" .. "So tem efeito com CoverNearTiles > 0.",
             editor = "number",
             default = 0,
             min = 0,
@@ -169,7 +167,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "Cuidado: plato maior infla o SOMA(w) e satura mais cedo; se subir muito " ..
                 "aqui, suba a saturacao junto.",
             editor = "number",
-            default = 6,
+            default = 4,
             min = 0,
             max = 30
         }, {
@@ -177,7 +175,7 @@ DefineClass.AIPolicyThreatExposure = {
             name = "Alcance corpo a corpo (tiles)",
             help = "Alcance usado para inimigos sem arma de fogo.",
             editor = "number",
-            default = 5,
+            default = 8,
             min = 1,
             max = 30
         }, {
@@ -344,8 +342,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                 ---- contribuicao e a rampa crua, exatamente como antes.
                 local uncovered, trust = 100, nil
                 if cancels and ramp > 0 then
-                    uncovered, trust =
-                        self:GetUncovered(att_pos, target_pos, stance, is_firearm, d)
+                    uncovered, trust = self:GetUncovered(att_pos, target_pos, stance, is_firearm, d)
                 end
                 local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
                 threat = threat + contrib
@@ -397,9 +394,8 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                                      (near > 0) and
                                                          string.format(
                                                              ", caindo a %d%% dentro de %st",
-                                                             Clamp(self.CoverTrustNear or 0, 0,
-                                                                   100), tostring(tiles(near))) or
-                                                         "") or
+                                                             Clamp(self.CoverTrustNear or 0, 0, 100),
+                                                             tostring(tiles(near))) or "") or
                                        "classico (so ameaca)", tostring(tiles(plateau)),
                                    tostring(stance or "-"))
         local tail = string.format("  SOMA %d / %d -> EvalDest %d", threat, saturation,
