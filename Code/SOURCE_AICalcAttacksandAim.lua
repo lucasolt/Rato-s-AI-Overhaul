@@ -92,7 +92,11 @@ end
 ---- e invariante no turno. Cacheado por numero de pilhas no context: 3-6 chamadas por
 ---- unidade por turno, em vez de por par (destino, alvo).
 ---------------------------------------------------------------------------------------------------
-local function RATOAI_RecoilAimSurcharge(context, stacks, level)
+---- PERF (C13): `action` explicita. O cache era so por `stacks`, o que era correto
+---- enquanto so existia UMA acao (o default_attack). Com RATOAI_ExpectedFor avaliando
+---- acoes alternativas o mesmo balde devolveria o custo de mira da acao errada.
+local function RATOAI_RecoilAimSurcharge(context, stacks, level, action)
+    action = action or context.default_attack
     level = Min(3, level or 0) ---- mesmo teto do OnCalcAPCost
     if level < 1 or (stacks or 0) < 1 then
         return 0
@@ -100,16 +104,21 @@ local function RATOAI_RecoilAimSurcharge(context, stacks, level)
     if not rawget(_G, "Rat_GetRecoilAimCost") then
         return 0 ---- GBO3 antigo, sem a funcao extraida: nao inventa custo
     end
-    local cache = context.__ratoai_recoil_aimcost
+    local by_action = context.__ratoai_recoil_aimcost
+    if not by_action then
+        by_action = {}
+        context.__ratoai_recoil_aimcost = by_action
+    end
+    local cache = by_action[action.id or false]
     if not cache then
         cache = {}
-        context.__ratoai_recoil_aimcost = cache
+        by_action[action.id or false] = cache
     end
     local v = cache[stacks]
     if v == nil then
         ---- pcall: a conta passa por componentes de arma e opcoes de mod; um mod de
         ---- terceiro que quebre ali nao pode derrubar o turno da IA
-        local ok, res = pcall(Rat_GetRecoilAimCost, context.unit, context.default_attack,
+        local ok, res = pcall(Rat_GetRecoilAimCost, context.unit, action,
                               context.weapon, stacks)
         v = (ok and type(res) == "number" and res > 0) and res or 0
         cache[stacks] = v
@@ -121,18 +130,29 @@ local function RATOAI_RecoilAimSurcharge(context, stacks, level)
 end
 
 ---- custo marginal de subir a mira de `from` para `from + 1`, com `stacks` de recoil
-local function RATOAI_AimStep(context, aim_cost, stacks, from)
-    return aim_cost + RATOAI_RecoilAimSurcharge(context, stacks, from + 1) -
-               RATOAI_RecoilAimSurcharge(context, stacks, from)
+local function RATOAI_AimStep(context, aim_cost, stacks, from, action)
+    return aim_cost + RATOAI_RecoilAimSurcharge(context, stacks, from + 1, action) -
+               RATOAI_RecoilAimSurcharge(context, stacks, from, action)
 end
 
 ---TODO: Consider leaving this function as "pre-planning" and moving the more complex logic to when the positions are defined?
-function AICalcAttacksAndAim(context, ap, target_dist)
+---------------------------------------------------------------------------------------------------
+---- `action_override` / `cost_override` (PERF C13): permitem perguntar "e se fosse ESTA
+---- acao?" sem mexer no context. Sem eles a funcao e byte a byte a de antes -- os tres
+---- chamadores do source e os dois do mod continuam passando 3 argumentos.
+----
+---- Existem para o RATOAI_ExpectedFor: a contagem de ataques e a escolha de mira sao o
+---- que separa "10 balas do quadril" de "3 balas preparadas", e as duas dependem do
+---- custo da acao. Sem parametrizar, qualquer comparacao entre modos de tiro herdaria o
+---- orcamento do default_attack e responderia sempre a mesma coisa.
+---------------------------------------------------------------------------------------------------
+function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_override)
 
     ------- Fix for min aim
     local unit = context.unit
+    local action = action_override or context.default_attack
     unit.AI_dont_return_Stance_min_aim_level = true --- avoiding duplicates. GetBaseAimLevelRange check considers unit position, not future positions like the current function calculates
-    local min_aim, max_aim = unit:GetBaseAimLevelRange(context.default_attack, false)
+    local min_aim, max_aim = unit:GetBaseAimLevelRange(action, false)
     unit.AI_dont_return_Stance_min_aim_level = false
 
     local free_move_ap = unit.free_move_ap or 0
@@ -205,14 +225,14 @@ function AICalcAttacksAndAim(context, ap, target_dist)
 
         if has_stance then
             rotation_cost = unit:GetShootingStanceAP(context.current_target, context.weapon, 1,
-                                                     context.default_attack, "rotate")
+                                                     action, "rotate")
         else
             stance_cost = GetWeapon_StanceAP(unit, context.weapon) + aim_cost
         end
     end
     ------
 
-    local cost = context.default_attack_cost
+    local cost = cost_override or context.default_attack_cost
 
     ---- Manual Cycling
     local bolting_cost = 0
@@ -281,6 +301,30 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     -------
 
     local desired_aim_level = GetIdealAimLevels(context, target_dist, max_aim, min_aim)
+
+    ---------------------------------------------------------------------------------------
+    ---- RATOAI_AimReplan: nivel desejado decidido por RESULTADO em vez de heuristica.
+    ----
+    ---- `GetIdealAimLevels` escolhe por distancia e nunca compara "N ataques com mira
+    ---- baixa" contra "M ataques com mira alta". Medido em campo, o nivel otimo muda com
+    ---- o AP e NAO e monotonico. Quem decide o nivel e o RATOAI_EnsureAimPlan; aqui so se
+    ---- honra a escolha, para que todo o resto -- a caminhada de AP, o teto de
+    ---- max_attacks e a SOBRETAXA DE MIRA DO RECOIL (B22, via RATOAI_AimStep) -- continue
+    ---- sendo o mesmo codigo. Nada de um segundo planejador paralelo que divergiria.
+    ----
+    ---- `Clamp` em [min_aim, max_aim]: min_aim ja carrega o +1 da stance mais acima, e
+    ---- max_aim e o teto da ACAO (a AutoFire tem max = 1 por natureza). Entao um nivel
+    ---- forcado nunca cria um estado impossivel -- em particular, nunca produz "mira 0
+    ---- com stance", que o hipfire do GBO3 converteria em snapshot.
+    ----
+    ---- So vale para o ataque padrao. As candidatas avaliadas pelo RATOAI_ExpectedFor
+    ---- passam `action_override` e seguem com a heuristica -- o replan compara planos do
+    ---- MESMO ataque, nao acoes diferentes.
+    ---------------------------------------------------------------------------------------
+    local aim_force = context.__ratoai_aim_force
+    if aim_force and action == context.default_attack then
+        desired_aim_level = Clamp(aim_force, min_aim, max_aim)
+    end
     ---- PERF (C11.2): removido `local aims = {}` morto aqui -- era redeclarado
     ---- nos dois caminhos de retorno abaixo, entao esta tabela era pura alocacao
 
@@ -317,7 +361,11 @@ function AICalcAttacksAndAim(context, ap, target_dist)
                                 bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
                                 num_atks, aims)
         end
-        return num_atks, aims
+        ---- 3o retorno (RATOAI_StanceBias): este plano PAGA a stance, ou seja a unidade
+        ---- termina o turno preparada. Vale ate o proximo turno, e nenhum "acertos
+        ---- esperados" deste turno enxerga isso. Backward compatible -- os chamadores
+        ---- do source pegam so os dois primeiros.
+        return num_atks, aims, stance_cost > 0
     end
 
     local remaining_ap = ap
@@ -336,7 +384,7 @@ function AICalcAttacksAndAim(context, ap, target_dist)
     local aim = min_aim
     if to_reach_desired_aim_level > 0 then
         while aim < desired_aim_level do
-            local step = RATOAI_AimStep(context, aim_cost, stacks, aim)
+            local step = RATOAI_AimStep(context, aim_cost, stacks, aim, action)
             if remaining_ap_after_first_atk < step then
                 break
             end
@@ -386,7 +434,7 @@ function AICalcAttacksAndAim(context, ap, target_dist)
         ---- Agora o nivel so e comprado se o disparo continuar cabendo depois dele.
         ---- BUGFIX (B22): o passo de mira agora inclui a sobretaxa do recoil acumulado
         while current_aim < desired_aim_level do
-            local step = RATOAI_AimStep(context, aim_cost, stacks, current_aim)
+            local step = RATOAI_AimStep(context, aim_cost, stacks, current_aim, action)
             if remaining_ap - step < atk_cost then
                 break ---- BUGFIX (B18): so compra o nivel se o disparo continuar cabendo
             end
@@ -410,10 +458,10 @@ function AICalcAttacksAndAim(context, ap, target_dist)
         RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                             bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
                             num_attacks, aims, function(st, lv)
-            return RATOAI_RecoilAimSurcharge(context, st, lv)
+            return RATOAI_RecoilAimSurcharge(context, st, lv, action)
         end)
     end
 
     -- ic(#aims, aims)
-    return num_attacks, aims
+    return num_attacks, aims, stance_cost > 0
 end

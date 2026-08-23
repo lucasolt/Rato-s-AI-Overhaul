@@ -131,3 +131,61 @@ function RATOAI_MGConeRange(unit, weapon, params)
 
     return min_r, max_r
 end
+
+---------------------------------------------------------------------------------------------------
+---- ESCOLHA DE ACAO POR RESULTADO ESPERADO (RATOAI_ExpectedActionScore)
+----
+---- Liga o RATOAI_ExpectedRatio (FUNCTION_ScoreAttacksDetailed.lua) nas CustomScoring: em vez
+---- de modular o peso do preset por uma razao de CTH ("quanto esta penalidade doi"), modula
+---- pela razao entre os ACERTOS ESPERADOS da acao e os do ataque padrao ("quanto ela rende").
+----
+---- Em false, cada CustomScoring volta byte a byte ao caminho antigo -- o ramo novo e um
+---- `elseif` guardado, nao uma substituicao. Serve para comparar os dois lado a lado no mesmo
+---- combate: `RATOAI_ExpectedActionScore = false` pelo console/DAP entre dois turnos.
+----
+---- Hoje so a AutoFire_CustomScoring usa. As outras (Pindown, Overwatch, SingleShotTargeted,
+---- MobileAttack) continuam no PenaltyScale de proposito: elas pagam AP por efeito que nao e
+---- dano -- supressao, interrupcao no turno inimigo, debuff de membro -- e acertos esperados
+---- sozinho ordena mal essas tres. Ver a ressalva no cabecalho do RATOAI_ExpectedFor.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_ExpectedActionScore") == nil then
+    RATOAI_ExpectedActionScore = true
+end
+
+---------------------------------------------------------------------------------------------------
+---- REPLANEJAMENTO DE MIRA POR RESULTADO (RATOAI_AimReplan / RATOAI_AimReplanThreshold)
+----
+---- Liga o RATOAI_EnsureAimPlan: uma vez por turno, no destino e alvo ja escolhidos, o nivel de
+---- mira do ataque padrao passa a ser escolhido pelos acertos esperados em vez de pela heuristica
+---- de distancia do GetIdealAimLevels. O caminho quente (o laco de destinos) NAO e tocado.
+----
+---- O limiar e a margem, em pontos percentuais, que DESCER de nivel de mira precisa vencer.
+---- Subir nao paga margem. A assimetria e proposital: "acertos esperados" nao enxerga a chance de
+---- CRITICO que a mira compra (o reset de pilhas de recoil do nivel 3 ele enxerga), entao errar
+---- para o lado de mirar mais e o erro barato. Subir o numero deixa o replan mais conservador;
+---- 0 o torna um otimizador puro, que converge para spray e nao e o que se quer.
+----
+---- Em false, o GetIdealAimLevels volta a mandar sozinho e o ramo de sobrescrita do
+---- AICalcAttacksAndAim nem e alcancado.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_AimReplan") == nil then
+    RATOAI_AimReplan = true
+end
+if rawget(_G, "RATOAI_AimReplanThreshold") == nil then
+    RATOAI_AimReplanThreshold = 15
+end
+
+---------------------------------------------------------------------------------------------------
+---- VIES DE SHOOTING STANCE (RATOAI_StanceBias, em pontos percentuais)
+----
+---- Terminar o turno com a arma preparada vale AP no turno SEGUINTE: o proximo ataque nao paga
+---- stance outra vez e o min_aim ja comeca em 1. "Acertos esperados" e um estimador de UM turno
+---- e por construcao nao ve isso -- este e o termo que repoe a diferenca.
+----
+---- Aplicado aos dois lados da razao antes de dividir, e so quando a unidade ainda NAO esta
+---- preparada. Se as duas pontas preparam (ou nenhuma prepara) ele se cancela sozinho.
+---- 0 desliga. Deliberadamente pequeno: e desempate, nao argumento.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_StanceBias") == nil then
+    RATOAI_StanceBias = 8
+end

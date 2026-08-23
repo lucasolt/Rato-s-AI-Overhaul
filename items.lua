@@ -304,7 +304,6 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
 						'CoverTrust', 80,
-						'CoverNearTiles', 8,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
@@ -1462,7 +1461,6 @@ return {
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyThreatExposure', {
-						'CoverNearTiles', 8,
 						'PlateauTiles', 0,
 					}),
 				},

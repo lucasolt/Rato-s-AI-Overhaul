@@ -1,6 +1,41 @@
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B30): a acao de assinatura sumia quando o destino escolhido so trocava de POSTURA.
+----
+---- `GetPackedPosAndStance` empacota posicao E postura numa chave so. O vanilla usa essa chave
+---- para achar o alvo (CombatAI.lua:1955), mas o `ai_destination` costuma vir com a postura
+---- PREFERIDA do arquetipo, que a unidade ainda nao adotou quando o PrecalcAction roda.
+----
+---- Medido no processo vivo (LegionScout:2021, arquetipo Skirmisher, PrefStance = Crouch):
+----     cur  = 160200,163800,7700 / Standing   -> dest_target[cur]  = nil
+----     dest = 160200,163800,7700 / Crouch     -> dest_target[dest] = <alvo>
+---- MESMO TILE. A unidade decidiu ficar onde estava e agachar. `args.target` saia nil, e o
+---- `AIActionSingleTargetShot:IsAvailable` (AIActions.lua:753) reprovava no `IsValidTarget` --
+---- silenciosamente, sem log. Toda signature action de tiro morria nesse caso, e ele nao e
+---- raro: qualquer arquetipo com PrefStance diferente da postura atual cai nele.
+----
+---- QUE ISTO E VANILLA, E QUE O PROPRIO VANILLA SABE. Tres linhas abaixo, o bloco de AP
+---- desempacota as duas chaves e compara SO O PONTO, ignorando a postura de proposito -- ele ja
+---- trata "mesma posicao, postura diferente" como "a unidade nao se moveu". A linha do alvo
+---- simplesmente nao recebeu o mesmo cuidado.
+----
+---- FORMA DO CONSERTO: fallback, nao substituicao. `upos` continua sendo a chave primaria, e o
+---- `ai_destination` so e consultado quando a primaria nao tem alvo. Assim nenhum caso que hoje
+---- funciona muda de resposta -- so os que devolviam nil passam a devolver o alvo que o resto
+---- do fluxo (AIPlayAttacks, dest_cth, dest_hit_score) ja usava para aquele mesmo destino.
+----
+---- NAO CONSERTADO, fica registrado: no mesmo cenario o `unit_ap` abaixo cai em
+---- `GetUIActionPoints()` (15400 na medicao) em vez de `dest_ap[ai_destination]` (14400), porque
+---- as POSICOES batem -- ou seja, o orcamento ignora o AP de agachar. E otimista por um passo de
+---- postura. Mexer nisso muda quanto AP a IA acha que tem, que e mudanca de comportamento de
+---- outra magnitude; fica para uma conversa propria.
+---------------------------------------------------------------------------------------------------
 function AIGetAttackArgs(context, action, target_spot_group, aim_type, override_target)
     local upos = GetPackedPosAndStance(context.unit)
     local target = override_target or context.dest_target[upos]
+
+    if not target and context.ai_destination then
+        target = context.dest_target[context.ai_destination]
+    end
     local args = {target = target, target_spot_group = target_spot_group or "Torso"}
 
     local dest_ap

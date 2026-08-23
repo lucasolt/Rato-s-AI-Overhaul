@@ -55,10 +55,54 @@ function AutoFire_CustomScoring(self, context)
 
     local upos, unit, action, dist, target, dest_cth, dest_recoil, attacker_pos = GetDestArgs(self,
                                                                                               context)
+    ---- O point blank continua sendo PRIORIDADE, e nao um numero. E regra tatica
+    ---- deliberada ("colado, despeja o pente"), nao artefato do scoring -- e o resultado
+    ---- esperado concordaria com ela de qualquer jeito, com 10 balas e sem penalidade de
+    ---- distancia. Deixar de fora mantem a flag mudando uma coisa so.
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
-    elseif dest_recoil then
-        weight = MulDivRound(weight, PenaltyScale(dest_cth, dest_recoil), 100)
+    else
+        -------------------------------------------------------------------------------------------
+        ---- PORTAO DE AP, ANTES DE GASTAR O CALCULO.
+        ----
+        ---- O `has_ap` do AIGetAttackArgs e a MESMA resposta que o PrecalcAction vai usar daqui
+        ---- a pouco para reprovar a acao no IsAvailable -- ele custa um GetAPCost e nao consome
+        ---- RNG. Sem ele, dois problemas:
+        ----
+        ---- 1. DESPERDICIO. O RATOAI_ExpectedFor gasta 4 a 8 CalcChanceToHit para pontuar uma
+        ----    acao que sera descartada logo em seguida.
+        ---- 2. CONTRADICAO NO PAINEL. Os dois lados modelam o custo diferente: aqui o custo e nu
+        ----    (action:GetAPCost(unit), sem args) e o AICalcAttacksAndAim DEGRADA quando falta AP
+        ----    -- larga a shooting stance e devolve um plano do quadril. O IsAvailable pergunta
+        ----    com `args` montados (mira no maximo, alvo), entao o AP de stance ja esta dentro do
+        ----    custo e nao ha degradacao: e sim ou nao. Dai saia "razao 127" numa acao marcada
+        ----    "[falta: AP]" -- os dois certos, respondendo perguntas diferentes.
+        ----
+        ---- Desabilitar aqui e o MESMO desfecho que o IsAvailable daria, so que mais cedo e mais
+        ---- barato. Nao muda decisao nenhuma.
+        -------------------------------------------------------------------------------------------
+        if upos and target then
+            local _, has_ap = AIGetAttackArgs(context, action, "Torso", self.Aiming, target)
+            if not has_ap then
+                return 0, true, false
+            end
+        end
+
+        ---- RATOAI_ExpectedActionScore: peso pelo QUANTO RENDE em vez de quanto doi.
+        ---- Ver o cabecalho de RATOAI_ExpectedFor em FUNCTION_ScoreAttacksDetailed.lua.
+        ---- `nil` = nao deu para responder (sem destino, sem alvo, sem denominador);
+        ---- ai cai no caminho antigo, que e o mesmo de quando a flag esta desligada.
+        local ratio = RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
+        if ratio then
+            ---- zero acertos esperados nao e "peso baixo", e "nao faz sentido": desabilita
+            ---- e ainda poupa o PrecalcAction desta acao no AISelectAction.
+            if ratio <= 0 then
+                return 0, true, false
+            end
+            weight = MulDivRound(weight, ratio, 100)
+        elseif dest_recoil then
+            weight = MulDivRound(weight, PenaltyScale(dest_cth, dest_recoil), 100)
+        end
     end
 
     return Max(0, weight), weight < 0 and true or disable, priority
