@@ -93,6 +93,19 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
 - **Criar global em runtime é erro de execução.** O engine só permite no load — em runtime levanta
   `Attempt to create a new global` e derruba a ação em curso. Global nova se declara no escopo do
   arquivo; `rawset(_G, ...)` contorna o `__newindex` mas é gambiarra, não solução.
+- **Nunca escrever guard de global.** Nada de `rawget(_G, "f") and f(...)`, nada de
+  `if not _G.f then return end`, nada de checar se uma função de dependência existe antes de
+  chamar. GBO3, JA3_CommonLib e Zulib são dependências **duras** — se sumirem, o mod está quebrado
+  de qualquer jeito, e é melhor estourar do que degradar em silêncio. Chame nu, como o
+  `rat_close_range` (`UTIL.lua`) e o `GetWeapon_StanceAP` (`AIACTION_PrepareWeapon.lua`) sempre
+  fizeram. Onde a chamada de terceiro pode legitimamente explodir (conta que passa por componente
+  de arma, opção de mod), o que protege é `pcall` — não um teste de existência.
+  Isto não é preferência de estilo: os guards com `rawget` eram **todos** no-op pelo motivo do item
+  acima, e cada um deixou um mecanismo inteiro morto sem aviso — o `BUGFIX B22` (sobretaxa de mira
+  do recoil) nasceu inerte, o bônus de ferrolho nunca foi aplicado, o filtro de `CharacterEffectDefs`
+  nunca filtrou. Todos removidos no `BUGFIX B34`.
+  Definir global no arquivo continua permitido, desde que **fora de função** (escopo de arquivo,
+  no load) — é o mesmo limite do item acima.
 - Marcadores de rastreio no código: `---- PERF (Cx)`, `BUGFIX (Bn)` e `DEBUG (Dn)` —
   referenciam `PERF_CHANGES.md`, `WEIGHTS_AUDIT.md` e a seção 10 do `AI_SYSTEM_GUIDE.md`.
   Manter o padrão ao aplicar novas mudanças; conferir o maior número já usado antes de

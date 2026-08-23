@@ -85,7 +85,7 @@ local STUCK_CANDIDATOS = {
     "ManningEmplacement", ---- base: idem
     "PinnedDown", ---- mod *Pinned Down* (opcional)
     "Slowed", ---- base
-    "Suppressed", ---- base
+    "Suppressed" ---- base
 }
 
 local stuck_effects
@@ -93,9 +93,14 @@ local stuck_effects
 function RATOAI_GetStuckEffects()
     if not stuck_effects then
         stuck_effects = {}
-        local defs = rawget(_G, "CharacterEffectDefs")
+        ---- BUGFIX (B34): era `local defs = rawget(_G, "CharacterEffectDefs")`, que nao enxerga
+        ---- global nenhuma neste engine -- `defs` vinha nil sempre e o `not defs` deixava passar a
+        ---- lista inteira. O filtro nunca filtrou, e a lista resolvida MENTIA sobre o que esta
+        ---- valendo nesta instalacao, que e a unica coisa que ela existe para dizer.
+        ---- Acesso direto agora: esta funcao so roda em combate, muito depois do load, e a razao
+        ---- do lazy (os defs nao existirem quando o mod carrega) e coberta pelo proprio cache.
         for _, id in ipairs(STUCK_CANDIDATOS) do
-            if not defs or defs[id] then
+            if CharacterEffectDefs[id] then
                 stuck_effects[#stuck_effects + 1] = id
             end
         end
@@ -172,7 +177,7 @@ function AutoFire_CustomScoring(self, context)
     ---- O point blank continua sendo PRIORIDADE, e nao um numero. E regra tatica deliberada
     ---- ("colado, despeja o pente"), nao artefato do scoring -- e o resultado esperado
     ---- concordaria com ela de qualquer jeito, com 10 a 15 balas e sem penalidade de distancia.
-    ---- Deixar de fora mantem a flag mudando uma coisa so.
+    ---- Deixar de fora mantem a flag mudando uma coisa so. 
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
     else
@@ -440,7 +445,8 @@ function Pindown_CustomScoring(self, context)
     local close = RATOAI_GetCloseRange()
     if dist and close and (const.RATOAI.SnipeDistBonus or 0) > 0 then
         local tiles_alem = Max(0, (dist - close) / const.SlabSizeX)
-        local bonus = Min(const.RATOAI.SnipeDistBonusMax or 0, tiles_alem * const.RATOAI.SnipeDistBonus)
+        local bonus = Min(const.RATOAI.SnipeDistBonusMax or 0,
+                          tiles_alem * const.RATOAI.SnipeDistBonus)
         weight = MulDivRound(weight, 100 + bonus, 100)
     end
 
@@ -506,7 +512,7 @@ end
 ---- acao e desabilitada, e nao apenas despriorizada: um tiro que rende nunca deve concorrer com
 ---- nao atirar.
 ---------------------------------------------------------------------------------------------------
-function PrepareWeapon_CustomScoring(self, context)
+function PrepareWeapon_CustomScoring(self, context, bloqueador)
     local weight, disable, priority = self.Weight, false, self.Priority
     local unit = context.unit
 
@@ -515,13 +521,32 @@ function PrepareWeapon_CustomScoring(self, context)
         return 0, true, false
     end
 
+    if bloqueador then
+        local bloqueio = RATOAI_SignatureAvailableBefore(context, self, bloqueador)
+
+        if RATOAI_Debug then
+            context.dbg_expected = context.dbg_expected or {}
+            context.dbg_expected["R_PrepareWeapon"] = {
+                motivo = bloqueio and string.format("cede para %s (disponivel)", tostring(bloqueio)) or
+                    "nada acima disponivel -- preparar"
+            }
+        end
+
+        if bloqueio then
+            return 0, true, false
+        end
+    end
     ---- o teto do vies, usado pelos casos em que atirar rende ZERO. Interpolar de 0 ate o limiar
     ---- e o caso continuo; estes sao o extremo do mesmo eixo, nao uma regra separada.
     local bonus = const.RATOAI.PrepareWeaponBonus or 0
     local function Preparar(mult)
         local w = MulDivRound(weight, 100 + mult, 100)
         ---- ferrolho: o tiro de hoje deixa a arma por ciclar e encarece o tiro de amanha
-        if context.weapon and rawget(_G, "rat_canBolt") and rat_canBolt(context.weapon) then
+        ---- BUGFIX (B34): havia um `rawget(_G, "rat_canBolt")` no meio deste teste, e ele era nil
+        ---- mesmo com a funcao carregada -- o bonus de ferrolho NUNCA foi aplicado, e o
+        ---- `PrepareWeaponBoltBonus` era constante morta. O guard saiu em vez de ser consertado:
+        ---- `rat_canBolt` e do GBO3, que e dependencia dura. Ver SOURCE_AICalcAttacksandAim.lua.
+        if context.weapon and rat_canBolt(context.weapon) then
             w = MulDivRound(w, const.RATOAI.PrepareWeaponBoltBonus or 100, 100)
         end
         return Max(0, w), false, priority
@@ -571,12 +596,193 @@ function PrepareWeapon_CustomScoring(self, context)
 
     if RATOAI_Debug then
         context.dbg_expected = context.dbg_expected or {}
+        ---- DEBUG (D4): mesmo motivo do MGSetup_CustomScoring -- o numero so se interpreta
+        ---- sabendo contra quem ele foi medido.
         context.dbg_expected["R_PrepareWeapon"] = {
-            hits = hits, base = limiar, ratio = w,
+            hits = hits,
+            base = limiar,
+            ratio = w,
+            alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
             motivo = string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
-                                   hits % 100, limiar / 100, limiar % 100),
+                                   hits % 100, limiar / 100, limiar % 100)
         }
     end
 
     return w, d, pr
+end
+
+---------------------------------------------------------------------------------------------------
+---- PREPARAR A ARMA COMO ULTIMO RECURSO  (AIPrepareWeapon / R_PrepareWeapon)
+----
+---- Variante BOOLEANA da PrepareWeapon_CustomScoring, para quem tem uma acao MELHOR que preparar
+---- e quer preparar so quando ela nao da. Caso de uso: o HeavyGunner -- montar a MG e o que
+---- importa; se nao der para montar mas ainda der para atirar, que atire; se nao der nenhuma das
+---- duas, prepara a arma e comeca o proximo turno com a stance paga e min_aim ja em 1.
+----
+---- NAO ESTIMA NADA. Sem razao de CTH, sem acertos esperados, sem limiar: a pergunta e
+---- "alguma acao ACIMA de mim nesta lista esta DISPONIVEL?", e quem responde e o motor, pelo
+---- mesmo `action:IsAvailable(context, action_states[action])` que a AISelectAction acabou de
+---- calcular nesta passada. Zero conta nova e zero segunda copia da regra -- inclusive a regra de
+---- "da para montar a MG", que e cara (AIPrecalcConeTargetZones) e ja foi paga.
+----
+---- POR ISSO A ORDEM DA LISTA E QUE MANDA, e o AIPrepareWeapon tem de ficar por ULTIMO em
+---- `SignatureActions` (que e onde um fallback mora). O laco para quando encontra a si mesmo: o
+---- que vem antes bloqueia, o que vem depois e ignorado de proposito -- a AISelectAction so
+---- sobrescreve `action_states[action]` quando CHEGA naquela acao, e o context nao e limpo entre
+---- um "restart" e o proximo, entao ler adiante seria ler estado da passada anterior.
+----
+---- `bloqueador` (opcional): um `action_id` -- "MGSetup", por exemplo. Com ele, so aquela acao
+---- bloqueia; sem ele, qualquer acao acima bloqueia.
+----
+---- LIMITE CONHECIDO -- O ATAQUE PADRAO NAO E UMA SIGNATURE. Ele entra na AISelectAction como
+---- `base_weight` (`archetype.BaseAttackWeight`), fora da lista, e nenhum portao booleano daqui o
+---- enxerga. Para o gunner DESMONTADO isso e o caso normal e nao a excecao: o AIActionMGBurstFire
+---- so faz PrecalcAction com `StationedMachineGun` (AIActions.lua:868), entao desmontado ele
+---- NUNCA fica disponivel -- quem fuzila e o ataque padrao. Ou seja, "atirar mal x preparar" se
+---- resolve no Weight do AIPrepareWeapon contra o BaseAttackWeight do arquetipo, nao aqui.
+----
+---- E LEMBRAR QUE PREPARAR NO FIM DO TURNO JA ACONTECE SOZINHO: o RATOAI_TryEnterShootingStance
+---- (FUNCTION_EndTurnAIAction.lua) entra em shooting stance com o AP que sobrar, de graca. O que
+---- esta acao acrescenta e RESERVAR o turno para isso -- impedir que o AP vire um tiro ruim --,
+---- nao a stance em si.
+---------------------------------------------------------------------------------------------------
+function PrepareWeapon_Fallback_CustomScoring(self, context, bloqueador)
+    local unit = context and context.unit
+    if not unit then
+        return 0, true, false
+    end
+
+    ---- ja preparada, ou montado na MG / no emplacamento: nao ha o que preparar. Mesmo criterio
+    ---- do RATOAI_TryEnterShootingStance, de proposito -- se ele nao prepara nesses estados, esta
+    ---- acao tambem nao pode ganhar o turno para tentar.
+    if unit:HasStatusEffect("shooting_stance") or unit:HasStatusEffect("StationedMachineGun") or
+        unit:HasStatusEffect("ManningEmplacement") then
+        return 0, true, false
+    end
+
+    local bloqueio = RATOAI_SignatureAvailableBefore(context, self, bloqueador)
+
+    if RATOAI_Debug then
+        context.dbg_expected = context.dbg_expected or {}
+        context.dbg_expected["R_PrepareWeapon"] = {
+            motivo = bloqueio and string.format("cede para %s (disponivel)", tostring(bloqueio)) or
+                "nada acima disponivel -- preparar"
+        }
+    end
+
+    if bloqueio then
+        return 0, true, false
+    end
+
+    return self.Weight, false, self.Priority
+end
+
+---------------------------------------------------------------------------------------------------
+---- MONTAR A MG EM VEZ DE ATIRAR MAL EM PE  (AIActionMGSetup / MGSetup)
+----
+---- Ligar pelo editor: `CustomScoring` = MGSetup_CustomScoring na AIActionMGSetup do arquetipo
+---- (HeavyGunner e afins).
+----
+---- A MESMA PERGUNTA DO PrepareWeapon_CustomScoring, virada do avesso. La a comparacao era
+---- "atirar mal de quadril x preparar"; aqui e "atirar agora, de pe, x montar a MG". Montar deita
+---- a unidade e gasta o turno sem disparar -- so compensa quando o tiro que ela daria ESTE turno,
+---- do jeito que esta, ja seria ruim. Contra alvo perto o tiro de pe normalmente ja rende, e ai
+---- nao ha razao para trocar por um turno inteiro de preparacao.
+----
+---- MESMO ESTIMADOR do PrepareWeapon: RATOAI_ExpectedFor(context, context.default_attack, ...)
+---- no destino e no alvo que o posicionamento ja escolheu (context.dest_target, via GetDestArgs).
+---- Nao reestima CTH aqui, so compara o numero que a outra CustomScoring ja confia.
+----
+---- PERTO, NEM COMPARA. RATOAI_GetCloseRange (mesmo criterio do MobileAttack_CustomScoring e do
+---- Pindown_CustomScoring, nao o PointBlankRange mais apertado do AutoFire) desliga a acao direto.
+---- Sem este veto explicito o resultado dependeria da ORDEM das signature actions no arquetipo --
+---- o AISelectAction devolve a PRIMEIRA acao com priority (SOURCE_AISelectAction.lua:45) e nada
+---- aqui pode contar com o MGSetup vir depois do ataque padrao naquela lista.
+----
+---- JA MONTADA: outra pergunta. Com StationedMachineGun ou ManningEmplacement, esta CustomScoring
+---- roda para o ramo de GIRAR/DESMONTAR do AIActionMGSetup:PrecalcAction (AIActions.lua:810-841),
+---- nao para a decisao de montar -- o vies de "tiro inicial ruim" nao se aplica, e a funcao
+---- devolve o peso do preset sem opiniao.
+---------------------------------------------------------------------------------------------------
+function MGSetup_CustomScoring(self, context)
+    local weight, disable, priority = self.Weight, false, self.Priority
+    local unit = context.unit
+
+    if not unit or unit:HasStatusEffect("StationedMachineGun") or
+        unit:HasStatusEffect("ManningEmplacement") then
+        return weight, disable, priority
+    end
+
+    local upos, _, _, dist, target, _, _, attacker_pos = GetDestArgs(self, context)
+
+    if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then -- RATOAI_GetCloseRange() then
+        return 0, true, false
+    end
+
+    if not (upos and target) then
+        return weight, disable, priority ---- nada para comparar: peso do preset, sem opiniao
+    end
+
+    local hits = RATOAI_ExpectedFor(context, context.default_attack, upos, target, attacker_pos)
+    if not hits then
+        return weight, disable, priority ---- nao deu para responder
+    end
+
+    local limiar = const.RATOAI.MGSetupMaxHits or 0
+    if limiar <= 0 or hits >= limiar then
+        return weight, disable, priority ---- o tiro de pe ja rende; nao precisa inflar
+    end
+
+    ---- interpolacao linear, mesmo molde do Preparar() acima: quanto pior o tiro de agora,
+    ---- mais vale montar a MG.
+    local bonus = const.RATOAI.MGSetupBonus or 0
+    local mult = MulDivRound(limiar - hits, bonus, limiar)
+    weight = MulDivRound(weight, 100 + mult, 100)
+
+    if RATOAI_Debug then
+        context.dbg_expected = context.dbg_expected or {}
+        ---- DEBUG (D4): `alvo` e `dist` no cabecalho da linha. Esta CustomScoring nao escolhe
+        ---- alvo -- ela mede o que o `dest_target[upos]` entregou --, entao "rende 0.00" so quer
+        ---- dizer alguma coisa junto com CONTRA QUEM. Ver o mesmo marcador no RATOAI_ExpectedFor.
+        context.dbg_expected["MGSetup"] = {
+            hits = hits,
+            base = limiar,
+            ratio = weight,
+            alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
+            dist = dist,
+            motivo = string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
+                                   hits % 100, limiar / 100, limiar % 100)
+        }
+    end
+
+    return Max(0, weight), disable, priority
+end
+
+---- "Alguma acao ACIMA desta na lista de signatures esta disponivel agora?" Devolve o action_id
+---- (ou o nome da classe) da primeira que estiver, ou nil. Ver o cabecalho acima para o porque do
+---- "acima" e nao "qualquer".
+----
+---- Sobre `context.action_states`: a entrada de uma acao passa a existir no momento em que a
+---- AISelectAction chega nela -- VAZIA se o bias ou a CustomScoring desabilitaram (o PrecalcAction
+---- nem roda), preenchida se rodou. IsAvailable sobre a tabela vazia devolve false/nil em todas as
+---- classes do source (todas comecam por `action_state.has_ap`), entao "desabilitada" e
+---- "indisponivel" dao no mesmo aqui, que e exatamente o que se quer de um portao de fallback.
+function RATOAI_SignatureAvailableBefore(context, self_action, bloqueador)
+    local states = context.action_states
+    if not states then
+        return
+    end
+    for _, action in ipairs(AIGetSignatureActions(context) or empty_table) do
+        if action == self_action then
+            return
+        end
+        local state = states[action]
+        if state and (not bloqueador or action.action_id == bloqueador) then
+            ---- pcall: IsAvailable de uma acao de terceiro nao pode derrubar a escolha do turno
+            local ok, disponivel = pcall(action.IsAvailable, action, context, state)
+            if ok and disponivel then
+                return action.action_id or action.class
+            end
+        end
+    end
 end

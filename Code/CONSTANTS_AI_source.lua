@@ -9,8 +9,8 @@
 ---- global"). Ou seja, a condicao era SEMPRE verdadeira e o valor era resetado ao default em
 ---- todo load -- a intencao de "deixar o usuario pre-definir" nunca valeu um dia.
 ----
----- `const` e uma tabela comum: `const.RATOAI.X` le e escreve normal, no console e no DAP, e o
----- teste `== nil` volta a significar o que diz.
+---- --> Mensagem do Lucas: NÃO FAZER O TESTE == NIL. ISSO ME IMPEDE DE MODIFICAR OS VALORES AQUI E RECARREGAR O MOD.
+---- 
 ----
 ---- REGRA: nao criar global nova para constante nem para interruptor. Nem com rawget, nem sem.
 ---- Ficam de fora, e cada uma tem motivo proprio:
@@ -85,12 +85,10 @@ const.RATOAI = const.RATOAI or {}
 ---- parametro muda so a NOTA dos tiles (AIPolicyMGSetupPosScore), e o cone continua sendo
 ---- plantado no maximo. O B26 esta no mesmo barco.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.MGConeRangePct == nil then
-    const.RATOAI.MGConeRangePct = 70
-end
-if const.RATOAI.MGConeRangeTiles == nil then
-    const.RATOAI.MGConeRangeTiles = 0
-end
+
+const.RATOAI.MGConeRangePct = 60
+
+const.RATOAI.MGConeRangeTiles = 0
 
 ---------------------------------------------------------------------------------------------------
 ---- Alcance efetivo do cone da MG. Fonte UNICA para os dois lados -- a policy que pontua o tile
@@ -161,9 +159,8 @@ end
 ---- 0 o torna um otimizador puro, que converge para spray e nao e o que se quer.
 
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.AimReplanThreshold == nil then
-    const.RATOAI.AimReplanThreshold = 15
-end
+
+const.RATOAI.AimReplanThreshold = 15
 
 ---------------------------------------------------------------------------------------------------
 ---- VIES DE SHOOTING STANCE (const.RATOAI.StanceBias, em pontos percentuais)
@@ -176,9 +173,8 @@ end
 ---- preparada. Se as duas pontas preparam (ou nenhuma prepara) ele se cancela sozinho.
 ---- 0 desliga. Deliberadamente pequeno: e desempate, nao argumento.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.StanceBias == nil then
-    const.RATOAI.StanceBias = 8
-end
+
+const.RATOAI.StanceBias = 8
 
 ---------------------------------------------------------------------------------------------------
 ---- TERMOS DE PARTE DO CORPO (const.RATOAI.BodyPartEffectBonus, em pontos percentuais)
@@ -205,9 +201,15 @@ end
 ---- turno seguinte, que este estimador nao simula. Sao desempates, nao argumentos: nenhum deles
 ---- inverte sozinho uma diferenca grande de acertos esperados.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.BodyPartEffectBonus == nil then
-    const.RATOAI.BodyPartEffectBonus = {Head = 10, Neck = 20, Groin = 15, Arms = 20, Legs = 35, Torso = 0}
-end
+
+const.RATOAI.BodyPartEffectBonus = {
+    Head = 10,
+    Neck = 20,
+    Groin = 15,
+    Arms = 20,
+    Legs = 35,
+    Torso = 0
+}
 
 ---------------------------------------------------------------------------------------------------
 ---- SNIPE / PINDOWN (const.RATOAI.SnipeDistBonus, const.RATOAI.SnipeStuckBonus)
@@ -231,15 +233,12 @@ end
 ---- alcance, ignora cobertura baixa). Somar uma rampa por cima seria contar a mesma vantagem
 ---- duas vezes -- e o vies embutido no insumo e melhor que o coeficiente colado na saida.
 ---- Sobe para 2 ou 3 se em campo o snipe nunca disparar.
-if const.RATOAI.SnipeDistBonus == nil then
-    const.RATOAI.SnipeDistBonus = 0 ---- % por tile alem do close range
-end
-if const.RATOAI.SnipeDistBonusMax == nil then
-    const.RATOAI.SnipeDistBonusMax = 45 ---- teto do bonus de distancia
-end
-if const.RATOAI.SnipeStuckBonus == nil then
-    const.RATOAI.SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
-end
+
+const.RATOAI.SnipeDistBonus = 0 ---- % por tile alem do close range
+
+const.RATOAI.SnipeDistBonusMax = 45 ---- teto do bonus de distancia
+
+const.RATOAI.SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
 
 ---------------------------------------------------------------------------------------------------
 ---- TIRO LOCALIZADO SO COM STANCE
@@ -268,9 +267,8 @@ end
 ---- (a acao e melhor) e passa a ser qualitativa (a outra nao funciona) -- e vantagem qualitativa
 ---- nao deve virar numero grande, so o maior numero.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ExpectedRatioMax == nil then
-    const.RATOAI.ExpectedRatioMax = 300
-end
+
+const.RATOAI.ExpectedRatioMax = 300
 
 ---------------------------------------------------------------------------------------------------
 ---- PREPARAR ARMA EM VEZ DE ATIRAR MAL (RATOAI_PrepareWeapon*)
@@ -291,12 +289,30 @@ end
 ---- neste cenario com mais frequencia que as outras; (2) disparar deixa a arma por ciclar, e o
 ---- ciclo e cobrado do proximo tiro -- o tiro ruim de hoje encarece o tiro bom de amanha.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.PrepareWeaponMaxHits == nil then
-    const.RATOAI.PrepareWeaponMaxHits = 40
-end
-if const.RATOAI.PrepareWeaponBonus == nil then
-    const.RATOAI.PrepareWeaponBonus = 150
-end
-if const.RATOAI.PrepareWeaponBoltBonus == nil then
-    const.RATOAI.PrepareWeaponBoltBonus = 160
-end
+
+const.RATOAI.PrepareWeaponMaxHits = 40
+
+const.RATOAI.PrepareWeaponBonus = 150
+
+const.RATOAI.PrepareWeaponBoltBonus = 160
+
+---------------------------------------------------------------------------------------------------
+---- MONTAR A MG EM VEZ DE ATIRAR MAL EM PE (RATOAI_MGSetup*, MGSetup_CustomScoring)
+----
+---- Mesma ideia do PrepareWeapon* acima, virada para o artilheiro. `MaxHits` e o limiar de "tiro
+---- ruim" do ATAQUE PADRAO -- de pe, sem montar --, na mesma unidade (acertos esperados x100).
+---- Abaixo dele, montar a MG rende mais que atirar como esta e o peso do MGSetup e inflado; no
+---- limiar ou acima, o tiro de pe ja vale a pena e a acao nao ganha nada extra.
+----
+---- `Bonus` e o teto do peso extra, interpolado ate 0 no limiar (mesmo molde do
+---- PrepareWeaponBonus: 0 acertos -> x(1 + Bonus/100), MaxHits acertos -> x1.0).
+----
+---- Perto (RATOAI_GetCloseRange, o mesmo criterio do MobileAttack_CustomScoring e do
+---- Pindown_CustomScoring) a acao e desligada ANTES de qualquer conta: nesta faixa o tiro de pe
+---- quase sempre rende, e montar so tira a unidade do lugar onde ela e mais util.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.MGSetupMaxHits = 80
+
+const.RATOAI.MGSetupBonus = 150
+

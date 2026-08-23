@@ -175,6 +175,62 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 30
         }, {
+            ---------------------------------------------------------------------------
+            ---- TETO DE ALCANCE
+            ----
+            ---- Corta o alcance que ENTRA na rampa: com teto 20, um sniper de 36 tiles
+            ---- e tratado como se tivesse 20 -- pesa 100 no plato, cai ate 0 em 20, e
+            ---- alem de 20 nao conta mais. Um SMG de 16 nao muda nada, porque ja esta
+            ---- abaixo do teto.
+            ----
+            ---- Note que isto NAO so remove o inimigo distante: ele passa a cair mais
+            ---- RAPIDO em toda a faixa, porque a rampa inteira e reescalada para o teto.
+            ---- Se a intencao for so afundar a cauda longa e manter o gradiente de
+            ---- perto, use `FalloffCurve` -- os dois sao knobs diferentes.
+            ----
+            ---- Isto e vies de risco, nao mecanica do jogo: o sniper de 36 tiles acerta
+            ---- de 30 tiles tanto quanto antes. E a forma de dizer "so me preocupo com
+            ---- quem esta perto de mim AGORA".
+            ----
+            ---- ATENCAO: se a AIPolicyCustomSeekCover estiver na MESMA lista (ou seja,
+            ---- `CoverCancels` desligado aqui), ela continua com o alcance cheio e as
+            ---- duas passam a discordar de quem ameaca o tile. Com CoverCancels ligado
+            ---- (default) a Seek Cover ja deve estar fora da lista e nao ha conflito.
+            ---------------------------------------------------------------------------
+            id = "RangeCapTiles",
+            name = "Teto de alcance considerado (tiles)",
+            help = "Alcance maximo que qualquer inimigo pode ter aos olhos desta " ..
+                "policy. Quem tem arma mais longa e tratado como se tivesse este " ..
+                "alcance; alem dele, nao conta.\n" ..
+                "0 = desligado (default): vale o WeaponRange de cada arma.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 60
+        }, {
+            ---------------------------------------------------------------------------
+            ---- CURVATURA DA QUEDA
+            ----
+            ---- Suavizacao de cauda longa sem cortar ninguem: mantem 100 no plato e 0 no
+            ---- alcance, e afunda o meio. Com 100 (quadratica pura) o inimigo a meio
+            ---- alcance pesa 25 em vez de 50, e a 3/4 do alcance pesa 6 em vez de 25.
+            ----
+            ---- Preferivel ao `RangeCapTiles` quando a queixa e "inimigo longe pesa
+            ---- demais" mas voce nao quer um ponto de corte duro nem reescalar a rampa
+            ---- de quem esta perto: aqui o gradiente proximo fica quase intacto.
+            ---- Os dois se somam se voce ligar ambos.
+            ---------------------------------------------------------------------------
+            id = "FalloffCurve",
+            name = "Curvatura da queda (%)",
+            help = "0 = queda linear do plato ate o alcance (default). " ..
+                "100 = quadratica: a cauda longa vira quase nada e a ameaca se " ..
+                "concentra em quem esta perto. Valores no meio interpolam.\n" ..
+                "Nao muda o peso no plato (100) nem no limite do alcance (0).",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 100
+        }, {
             id = "MeleeRange",
             name = "Alcance corpo a corpo (tiles)",
             help = "Alcance usado para inimigos sem arma de fogo.",
@@ -195,8 +251,21 @@ DefineClass.AIPolicyThreatExposure = {
     }
 }
 
+---- O rotulo NAO e cosmetico: `AIScoreDest` grava `policy:GetEditorView()` no
+---- `score_details`, e a camada por policy do painel de debug SOMA entradas com o mesmo
+---- rotulo. Duas instancias com alcances diferentes precisam de rotulos diferentes.
 function AIPolicyThreatExposure:GetEditorView()
-    return "Threat Exposure"
+    local partes = {}
+    if (self.RangeCapTiles or 0) > 0 then
+        partes[#partes + 1] = string.format("teto %dt", self.RangeCapTiles)
+    end
+    if (self.FalloffCurve or 0) > 0 then
+        partes[#partes + 1] = string.format("curva %d%%", self.FalloffCurve)
+    end
+    if #partes == 0 then
+        return "Threat Exposure"
+    end
+    return "Threat Exposure (" .. table.concat(partes, ", ") .. ")"
 end
 
 ---- Saturacao efetiva. MaxThreat = 0 (default) usa a constante compartilhada, que e o
@@ -219,14 +288,24 @@ end
 ---- cobertura nao protege de corpo a corpo, entao o cancelamento nao pode valer para
 ---- quem vem no facao. Mesmo criterio que a AIPolicyCustomSeekCover usa para tirar
 ---- melee da media dela.
+---- 3o retorno: se o teto mordeu. So serve ao overlay -- sem ele nao da para saber se
+---- o "alcance" mostrado e o da arma ou o teto da policy.
 function AIPolicyThreatExposure:GetEnemyRange(enemy)
     local melee = self.MeleeRange * const.SlabSizeX
+    local range, is_firearm = melee, false
     local weapon = enemy:GetActiveWeapons()
     if weapon and IsKindOf(weapon, "Firearm") then
-        local range = (weapon.WeaponRange or 0) * const.SlabSizeX
-        return range > 0 and range or melee, true
+        local r = (weapon.WeaponRange or 0) * const.SlabSizeX
+        range, is_firearm = r > 0 and r or melee, true
     end
-    return melee, false
+    ---- teto: reescala a rampa inteira, nao so corta a ponta. Vale tambem para melee --
+    ---- um teto menor que MeleeRange encolhe o alcance do facao junto, que e o que
+    ---- "nada alem de X tiles me ameaca" quer dizer.
+    local cap = (self.RangeCapTiles or 0) * const.SlabSizeX
+    if cap > 0 and range > cap then
+        return cap, is_firearm, true
+    end
+    return range, is_firearm
 end
 
 ---- Confianca efetiva na cobertura contra UM inimigo, 0..100.
@@ -322,6 +401,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     end
     local plateau = (self.PlateauTiles or 0) * const.SlabSizeX
     local near = (self.CoverNearTiles or 0) * const.SlabSizeX
+    local curve = Clamp(self.FalloffCurve or 0, 0, 100)
 
     local threat = 0
 
@@ -339,8 +419,8 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(att_pos) then
                 local d = att_pos:Dist(target_pos)
-                local range, is_firearm = self:GetEnemyRange(enemy)
-                local ramp = RATOAI_ThreatRamp(d, range, plateau)
+                local range, is_firearm, capped = self:GetEnemyRange(enemy)
+                local ramp = RATOAI_ThreatRamp(d, range, plateau, curve)
 
                 ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
                 ---- contribuicao e a rampa crua, exatamente como antes.
@@ -360,16 +440,16 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                             near_note = string.format(" | COLADO: confianca %d%%", trust)
                         end
                         dbg[#dbg + 1] = string.format(
-                                            "  %s: %st / alcance %st -> peso %d" ..
+                                            "  %s: %st / alcance %st%s -> peso %d" ..
                                                 " | exposto %d%% -> contribui %d%s",
                                             tostring(enemy.session_id), tostring(tiles(d)),
-                                            tostring(tiles(range)), ramp, uncovered, contrib,
-                                            near_note)
+                                            tostring(tiles(range)), capped and " (teto)" or "",
+                                            ramp, uncovered, contrib, near_note)
                     else
-                        dbg[#dbg + 1] = string.format("  %s: %st / alcance %st -> peso %d",
+                        dbg[#dbg + 1] = string.format("  %s: %st / alcance %st%s -> peso %d",
                                                       tostring(enemy.session_id),
                                                       tostring(tiles(d)), tostring(tiles(range)),
-                                                      ramp)
+                                                      capped and " (teto)" or "", ramp)
                     end
                 end
             elseif dbg then
@@ -400,7 +480,11 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                                              ", caindo a %d%% dentro de %st",
                                                              Clamp(self.CoverTrustNear or 0, 0, 100),
                                                              tostring(tiles(near))) or "") or
-                                       "classico (so ameaca)", tostring(tiles(plateau)),
+                                       "classico (so ameaca)",
+                                   tostring(tiles(plateau)) ..
+                                       ((self.RangeCapTiles or 0) > 0 and
+                                           string.format(" | teto %dt", self.RangeCapTiles) or "") ..
+                                       (curve > 0 and string.format(" | curva %d%%", curve) or ""),
                                    tostring(stance or "-"))
         local tail = string.format("  SOMA %d / %d -> EvalDest %d", threat, saturation,
                                    threat > 0 and

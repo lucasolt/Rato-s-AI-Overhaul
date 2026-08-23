@@ -444,13 +444,15 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
     ---- devolve -1 quando ja se esta nela (dai o `Max(0, ...)`) e ja trata a perk `HitTheDeck`.
     ---- `dest_ap` ausente = tile fora do alcance de movimento.
     ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B33): as duas pontas da troca de postura saem do `rat_MGSetup_StanceAP` (GBO3), a
+    ---- mesma funcao que o `GetAPCost` usa por dentro, e o termo RECOLOCADO passa
+    ---- `ignore_free_move` -- o desconto de free move e do jogador, nao da IA, que ja perdeu o
+    ---- `FreeMove` no `AIPlayAttacks` quando o MGSetup executa. Ver AIPOLICYPOS_MGSetupAP.lua.
     if self.ReserveAPforSetup then
         local unit = context.unit
-        local cost = CombatActions.MGSetup:GetAPCost(unit, false) or 0
-        if not unit:HasStatusEffect("ManningEmplacement") then
-            cost = cost - Max(0, unit:GetStanceToStanceAP("Prone")) +
-                       Max(0, unit:GetStanceToStanceAP("Prone", StancesList[stance_idx]))
-        end
+        local cost = (CombatActions.MGSetup:GetAPCost(unit, false) or 0) -
+                         rat_MGSetup_StanceAP(unit) +
+                         rat_MGSetup_StanceAP(unit, StancesList[stance_idx], "ignore_free_move")
         if (context.dest_ap[dest] or 0) < cost then
             return 0
         end

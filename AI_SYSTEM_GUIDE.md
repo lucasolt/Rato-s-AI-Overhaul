@@ -1101,6 +1101,73 @@ disparo a disparo (de `cth_attacks_at` / `aims_at`).
 precalc então reaproveita o sorteio anterior. O `RandRange` continua sendo consumido
 mesmo congelado — pular a chamada dessincronizaria o fluxo de RNG da unidade.
 
+### 10.2 O overlay pontuava as ações num momento que o turno real não tem
+
+Marcador: `---- DEBUG (D3)`, em `IModeAIDebug:Process` (mod *Rato Dev*).
+
+O vanilla (`Lua/UI/IModeAIDebug.lua:117`) chama, nesta ordem:
+
+```lua
+context.behavior:Think(...)
+AIChooseSignatureAction(context)                       -- CustomScoring roda AQUI
+AIPrecalcDamageScore(context, {ai_destination}, ...)   -- alvo do destino só DEPOIS
+```
+
+O turno real (`AIPlayAttacks`, CombatAI.lua:216-232) faz **o contrário**: precalc do destino
+único primeiro, escolha da signature depois. E isso não é detalhe de ordem — toda
+`CustomScoring` lê `context.dest_target[upos]` pelo `GetDestArgs`, e o precalc de destino
+único **reescreve** esse alvo.
+
+Caso medido (LegionGunner:412, turno 1, destino 157800/177000):
+
+| | alvo | dist | CTH | resultado |
+|---|---|---|---|---|
+| `MGSetup_CustomScoring` (antes do precalc) | Barry | 24621 (20 tiles) | 0 | `hits = 0` → peso 250 |
+| página Alvo (depois do precalc) | Grizzly | 3600 (3 tiles) | 47 | 2 ataques, 2,1 acertos |
+
+As duas páginas do mesmo painel falavam de momentos diferentes. Pior: a 3 tiles o portão de
+`RATOAI_GetCloseRange` teria **desabilitado** a `MGSetup` — ou seja, o painel mostrava com peso
+inflado uma ação que o turno real nem teria listado. Um bug fantasma inteiro, só do observador.
+
+O `Process` do *Rato Dev* passou a ser cópia do vanilla com a ordem do `AIPlayAttacks`, mais dois
+detalhes que o painel não replicava: `dest_ap[dest] = dest_ap[dest] or unit.ActionPoints` e o
+`preferred_target` (no turno real o alvo do sweep tem preferência no recálculo —
+`SOURCE_AIPrecalcDamageScore.lua:520` dá `break` nele; passando `nil`, o painel re-escolhia do
+zero). **Limite conhecido:** o `AIPlayAttacks` remove o `FreeMove` antes de tudo isso e o painel
+não pode remover (seria mexer no estado da unidade fora do turno dela), então para destinos
+dentro da franquia de free move o `leftover_free` do `BUGFIX (B19)` desconta no painel e não no
+turno — diferença de até um tiro na contagem.
+
+### 10.3 Contra quem o resultado esperado foi medido
+
+Marcador: `---- DEBUG (D4)`.
+
+`RATOAI_ExpectedFor` **não escolhe alvo** — ele mede o que o `dest_target[upos]` entregou. Sem
+registrar quem foi, `razão 250 com 0.00 acerto` é indistinguível de `0.00 acerto contra o alvo
+errado`; recuperar isso custou uma sessão de DAP lendo `dbg.dist` e cruzando com
+`dest_target_dist`. Agora `dbg.alvo` sai junto de custo/balas/ataques, e as `CustomScoring` que
+montam a linha à mão (`MGSetup`, `PrepareWeapon`) gravam `alvo` (e `dist`, no MGSetup) direto na
+linha. A página Ações imprime `alvo: <id> (N tiles)` embaixo da razão.
+
+### 10.4 Desabilitada ≠ indisponível
+
+Marcador: `---- DEBUG (D5)`.
+
+São dois portões diferentes, param em pontos diferentes do laço do `AISelectAction`, e o painel
+só enxergava um deles:
+
+| estado | quem decide | `PrecalcAction` roda? | o que aparecia antes |
+|---|---|---|---|
+| **desabilitada** | bias, `disable_actions`, ou o 2º retorno da `CustomScoring` | não | **nada** — sumia da lista |
+| **indisponível** | `IsAvailable` (AP, munição, CTH, alvo) | sim | linha cinza com `false` |
+
+A ação desabilitada não era inserida em `dbg_available_actions`, então quem olhava via uma lista
+com um item a menos e nenhuma pista de que ele existia — e o `IndisponivelPorque` do painel não
+tinha `action_state` nenhum para ler (ele só poderia dizer `[não avaliada]`, que é verdade e é
+inútil). Agora as duas entram com `weight = false`, e `disabled_by` (`"CustomScoring"` ou
+`"bias"`) separa uma da outra; o painel escreve `desabilitada pela CustomScoring` /
+`desabilitada pelo bias` / `[falta: AP, munição, …]`. A telemetria carrega o mesmo campo em `off`.
+
 ---
 
 ## 11. Armadilhas e bugs do source (importantes para modding)

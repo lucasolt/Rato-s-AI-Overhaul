@@ -60,11 +60,13 @@ local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_
         return
     end
     local free = unit.free_move_ap or 0
-    ---- sobretaxa de mira do recoil, para 1 e 2 pilhas, no nivel 1. `-` = a funcao do
-    ---- GBO3 nao existe (mod antigo); `0` = existe e devolveu zero para esta arma.
-    ---- Sem isto nao da para separar "sem recoil" de "sem a funcao".
+    ---- sobretaxa de mira do recoil, para 1 e 2 pilhas, no nivel 1. `-` = nao houve funcao para
+    ---- consultar; `0` = consultou e deu zero para esta arma.
+    ---- BUGFIX (B34): o `rawget(_G, "Rat_GetRecoilAimCost")` que acompanhava este teste era sempre
+    ---- nil, entao `sc` era "-" SEMPRE -- a coluna do painel nunca mostrou sobretaxa nenhuma, o que
+    ---- escondia justamente o B22 morto. Ver RATOAI_RecoilAimSurcharge.
     local sc = "-"
-    if rawget(_G, "Rat_GetRecoilAimCost") and surcharge_fn then
+    if surcharge_fn then
         sc = string.format("%s/%s", tostring(surcharge_fn(1, 1)), tostring(surcharge_fn(2, 1)))
     end
     printf("[AIM] %s %s | ap=%s AP=%s free=%s start=%s limpo=%s | dist=%s | cost=%s stance=%s " ..
@@ -105,9 +107,19 @@ local function RATOAI_RecoilAimSurcharge(context, stacks, level, action)
     if level < 1 or (stacks or 0) < 1 then
         return 0
     end
-    if not rawget(_G, "Rat_GetRecoilAimCost") then
-        return 0 ---- GBO3 antigo, sem a funcao extraida: nao inventa custo
-    end
+    -----------------------------------------------------------------------------------------------
+    ---- BUGFIX (B34): aqui havia um portao `rawget(_G, "Rat_GetRecoilAimCost")` que devolvia nil
+    ---- MESMO com a funcao carregada -- neste engine as globais moram atras do `__index` do `_G`, e
+    ---- `rawget` por definicao nao consulta metatabela. A condicao era SEMPRE verdadeira e a funcao
+    ---- inteira devolvia 0 sempre: o BUGFIX B22 nasceu morto, e o planejador seguiu orcando mira
+    ---- pelo preco base enquanto a execucao cobrava a sobretaxa por cima.
+    ----
+    ---- O portao nao foi consertado, foi REMOVIDO. Ele existia para tolerar GBO3 antigo, e GBO3 e
+    ---- dependencia DURA (>= 3.51) -- a mesma razao pela qual `rat_close_range` (UTIL.lua) e
+    ---- `GetWeapon_StanceAP` (AIACTION_PrepareWeapon.lua) sao chamados nus. Um guard que nunca
+    ---- disparou tambem nunca protegeu ninguem; o que resta protegendo e o pcall abaixo, que e o
+    ---- que importa de verdade (a conta passa por componentes de arma e opcoes de mod).
+    -----------------------------------------------------------------------------------------------
     local by_action = context.__ratoai_recoil_aimcost
     if not by_action then
         by_action = {}

@@ -58,14 +58,22 @@ function AIPolicyMGSetupAP:EvalDest(context, dest, grid_voxel)
         end
     end
 
-    local setup_cost = CombatActions.MGSetup:GetAPCost(unit, false) or 0
-    if not unit:HasStatusEffect("ManningEmplacement") then
-        ---- Troca a mudanca de postura medida da postura ATUAL pela medida da postura DO DESTINO.
-        ---- `Unit:GetStanceToStanceAP(stance, override)` devolve -1 quando ja se esta nela (dai o
-        ---- `Max(0, ...)`) e ja trata a perk HitTheDeck.
-        setup_cost = setup_cost - Max(0, unit:GetStanceToStanceAP("Prone")) +
-                         Max(0, unit:GetStanceToStanceAP("Prone", StancesList[stance_idx]))
-    end
+    ---- Troca a mudanca de postura medida da postura ATUAL pela medida da postura DO DESTINO.
+    ---- As duas pontas saem do MESMO `rat_MGSetup_StanceAP` (GBO3) que o `GetAPCost` usa por
+    ---- dentro -- a formula tem guarda de emplacamento, HitTheDeck e free move, e escrever
+    ---- qualquer uma delas de novo aqui e como o B29d nasceu.
+    ----
+    ---- BUGFIX (B33): o termo RECOLOCADO passa `ignore_free_move`. O desconto de free move existe
+    ---- para o jogador (ver o cabecalho da funcao no GBO3); para a IA ele e miragem, porque o
+    ---- `AIPlayAttacks` (CombatAI.lua:202) faz `RemoveStatusEffect("FreeMove")` ANTES de escolher
+    ---- signature action. Esta policy roda no posicionamento, com o pool ainda cheio; quando o
+    ---- MGSetup for de fato executado o pool sera zero. Orcar com o desconto aprovaria tiles que a
+    ---- acao depois recusa -- exatamente o sintoma do B29d.
+    ---- O termo DESCONTADO nao leva a valvula de proposito: ele tem que reproduzir o que o
+    ---- `GetAPCost` embutiu agora, com free move e tudo, senao a subtracao nao cancela.
+    local setup_cost = (CombatActions.MGSetup:GetAPCost(unit, false) or 0) -
+                           rat_MGSetup_StanceAP(unit) +
+                           rat_MGSetup_StanceAP(unit, StancesList[stance_idx], "ignore_free_move")
 
     local ap = context.dest_ap[dest] or 0
 

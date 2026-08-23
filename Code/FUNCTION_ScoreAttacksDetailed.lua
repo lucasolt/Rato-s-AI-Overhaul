@@ -644,8 +644,14 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     if RATOAI_Debug then
         ---- `recoil` so aparece quando de fato participou da conta; nos demais casos o painel
         ---- mostra "-", que e a informacao correta (nao entra), e nao um numero inerte.
+        ---- DEBUG (D4): QUEM foi medido. O estimador nao escolhe alvo -- ele recebe o que o
+        ---- `dest_target[upos]` diz, e esse valor muda conforme QUANDO a CustomScoring roda
+        ---- (o precalc de destino unico do AIPlayAttacks reescreve o alvo daquele destino).
+        ---- Sem esta linha, "razao 250 com 0 acertos" e indistinguivel de "0 acertos contra
+        ---- o alvo errado": custou uma sessao de DAP para recuperar o alvo pelo `dist`.
         dbg = {cost = cost, shots = shots, attacks = attacks,
                recoil = usa_recoil and recoil_cth or nil,
+               alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
                ap = ap, dist = dist, aims = table.concat(aims, ",", 1, attacks)}
         local cths = {}
         for aim_lvl, v in pairs(cth_by_aim) do

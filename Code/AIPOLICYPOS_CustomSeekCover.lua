@@ -195,7 +195,15 @@ end
 ---- proximidade, sem comprar o efeito colateral do plato longo: plato ate effective
 ---- range apaga o gradiente de distancia em metade do alcance e infla o SOMA(w) em
 ---- ~1.67x, o que joga quase todo tile para cima da saturacao.
-function RATOAI_ThreatRamp(dist, range, plateau)
+---- `curve` (opcional, 0..100): curvatura da queda DEPOIS do plato. 0 (default) = a
+---- rampa linear de sempre; 100 = quadratica pura (peso^2/100); valores no meio
+---- interpolam entre as duas. Nao mexe nas duas pontas -- continua 100 no plato e 0 no
+---- alcance -- so afunda o meio: com 100, um inimigo a meio caminho pesa 25 em vez de
+---- 50, e a 3/4 do alcance pesa 6 em vez de 25.
+----
+---- E o mesmo idioma que a AIPolicyCustomWeaponRange ja usa no `WeightFalloff`
+---- ("quadratica" = MulDivRound(w, w, 100)), so que continuo em vez de liga/desliga.
+function RATOAI_ThreatRamp(dist, range, plateau, curve)
     if not dist or not range or range <= 0 or dist >= range then
         return 0
     end
@@ -204,12 +212,20 @@ function RATOAI_ThreatRamp(dist, range, plateau)
         ---- cobre tambem o caso dist <= 0 quando nao ha plato
         return 100
     end
+    local w
     if plateau > 0 then
         ---- `plateau >= range` nao chega aqui: dist < range <= plateau cairia no ramo
         ---- acima. A subtracao no denominador e sempre positiva.
-        return 100 - MulDivRound(dist - plateau, 100, range - plateau)
+        w = 100 - MulDivRound(dist - plateau, 100, range - plateau)
+    else
+        w = 100 - MulDivRound(dist, 100, range)
     end
-    return 100 - MulDivRound(dist, 100, range)
+    curve = curve or 0
+    if curve > 0 and w > 0 then
+        ---- w -> w - curve% * (w - w^2/100). Em curve = 100 sobra exatamente w^2/100.
+        w = w - MulDivRound(w - MulDivRound(w, w, 100), Min(curve, 100), 100)
+    end
+    return w
 end
 
 ---- O rotulo NAO e cosmetico: `AIScoreDest` grava `policy:GetEditorView()` no
