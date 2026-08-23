@@ -1,11 +1,17 @@
 function RATOAI_CUAEoptions()
     if IsMod_loaded("LDCUAE") then
-
         local night_pack = { -- Night Combat Package
             type = {{"Flare", 60}}, -- High probability illumination
             nightOnly = true, -- Night/underground exclusive
-            amount = 3 -- Two flare devices
+            amount = 3 -- Three flare devices
         }
+
+        -- Fumaca e gas sao raros de proposito: a IA ainda nao usa cortina nem area denial
+        -- bem o bastante para justificar o volume. As granadas de Smoke/Tear que o jogo ja
+        -- distribui por LootDef nao sao tocadas -- isto aqui so limita o que NOS adicionamos.
+        -- Efeito colateral util do dedup por tipo (Loadout.lua:98): se a unidade ja veio com
+        -- fumaca do loadout base, esta policy e pulada e nao empilha em cima.
+        local rare_gas = {type = {{"Smoke", 10}, {"Tear", 18}}, amount = 1}
 
         local role_table = {
 
@@ -20,28 +26,28 @@ function RATOAI_CUAEoptions()
                 extraWeapons = {{type = {{"Handgun", 70}, {"SMG", 100}}, size = 1}},
                 replacements = {MeleeWeapon = {discard = true}},
 
-                extraUtility = {{type = {{"Smoke", 33}, {"Flash", 66}, amount = 2}}}
+                extraUtility = {{type = {{"Explosive", 10}, {"Flash", 30}}, amount = 1}}
             },
             Soldier = {
                 weaponComponentsPriorities = {
                     AssaultRifle = {tag = "Tactical", prioritySlots = {"Muzzle", "Stock", "Barrel"}}
                 },
+
                 extraUtility = {
-                    night_pack, {type = {{"Smoke", 85}}, amount = 3},
-                    {type = {{"Explosive", 35}, {"Flash", 60}, {"Tear", 75}}, amount = 2}
+                    night_pack, {type = {{"Explosive", 40}, {"Flash", 50}}, amount = 2}, rare_gas
                 }
             },
             Commander = {
                 extraUtility = {
-                    night_pack, {type = {{"Smoke", 90}}, amount = 3},
-                    {type = {{"Explosive", 60}, {"Flash", 80}}, amount = 3}
+                    night_pack, {type = {{"Explosive", 50}, {"Flash", 80}}, amount = 2}, rare_gas
                 }
             },
             Demolitions = {
+                -- Granadeiro: volume ofensivo mantido, so o gas ficou raro.
                 extraUtility = {
-                    night_pack, {type = {{"Explosive", 65}, {"Timed", 100}}, amount = 4},
-                    {type = {{"Fire", 45}, {"Flash", 90}}, amount = 3},
-                    {type = {{"Smoke", 45}, {"Tear", 90}}, amount = 3}
+                    night_pack, {type = {{"Explosive", 70}, {"Timed", 100}}, amount = 3},
+                    {type = {{"Fire", 45}, {"Flash", 90}}, amount = 2},
+                    {type = {{"Smoke", 20}, {"Tear", 35}}, amount = 1}
                 }
 
             },
@@ -53,26 +59,19 @@ function RATOAI_CUAEoptions()
                     },
                     Handgun = {tag = "CloseQuarters", prioritySlots = {"Scope", "Barrel", "Side"}}
                 },
-                extraUtility = {
-                    night_pack, {type = {{"Flash", 90}}, amount = 3},
-                    {type = {{"Explosive", 35}, {"Tear", 55}, {"Fire", 75}}, amount = 2},
-                    {type = {{"Smoke", 60}}, amount = 2}
-                }
+                extraUtility = {night_pack, {type = {{"Flash", 40}, {"Explosive", 50}}, amount = 2}}
             },
 
             Stormer = {
                 weaponComponentsPriorities = {
                     Shotgun = {tag = "CloseQuarters", prioritySlots = {"Barrel", "Muzzle"}}
                 },
-                extraUtility = {
-                    night_pack, {type = {{"Fire", 45}, {"Tear", 90}}, amount = 3},
-                    {type = {{"Explosive", 35}, {"Smoke", 45}, {"Flash", 80}}, amount = 2}
-                }
+                extraUtility = {night_pack, {type = {{"Explosive", 20}, {"Fire", 50}}, amount = 2}}
 
             },
             Heavy = {
                 weaponComponentsPriorities = {
-                    MachineGun = {tag = "Tactical", prioritySlots = {"Scope", "Stock", "Side"}}
+                    MachineGun = {tag = "CloseQuarters", prioritySlots = {"Scope", "Stock", "Side"}}
                 }
             }
         }

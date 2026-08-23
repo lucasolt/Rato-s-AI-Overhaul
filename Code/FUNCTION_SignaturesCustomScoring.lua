@@ -17,6 +17,121 @@ local function PenaltyScale(cth, penalty)
     return MulDivRound(cth + (penalty or 0), 100, cth)
 end
 
+---------------------------------------------------------------------------------------------------
+---- PESO POR RESULTADO ESPERADO, COM PORTAO DE AP E FALLBACK  (RATOAI_ExpectedActionScore)
+----
+---- Substitui a modulacao por RAZAO DE CTH (o PenaltyScale acima, "quanto esta penalidade doi")
+---- pela razao entre os ACERTOS ESPERADOS da acao e os do ataque padrao ("quanto ela rende").
+---- Base 100 nos dois casos, entao os `Weight` dos presets continuam significando o mesmo.
+----
+---- TRES PORTOES, nesta ordem, e a ordem importa:
+----   1. sem destino ou sem alvo -> nao ha o que medir, peso passa intacto;
+----   2. `has_ap` do AIGetAttackArgs -> e a MESMA resposta que o IsAvailable vai usar daqui a
+----      pouco para reprovar a acao. Desabilitar aqui da o mesmo desfecho, mais cedo, e poupa os
+----      4 a 8 CalcChanceToHit do ExpectedFor. Sem este portao os dois lados se contradizem no
+----      painel: "razao 127" numa acao marcada "[falta: AP]", porque o ExpectedFor DEGRADA o
+----      plano quando falta AP (larga a stance, atira do quadril) e o IsAvailable nao degrada;
+----   3. razao nil (sem denominador confiavel) -> cai no PenaltyScale de sempre.
+----
+---- `fallback_penalty` e a penalidade que a formula antiga usava para AQUELA acao -- recoil na
+---- AutoFire, penalidade de tiro localizado no SingleShot. Ela so e consultada no caminho 3.
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- COMPENSACAO DE PARTE DO CORPO
+----
+---- Tiro localizado paga CTH e recebe outra coisa. A razao de acertos esperados ja cobra o preco
+---- (a penalidade entra pelo target_spot_group do CalcChanceToHit) mas nao credita nada em troca
+---- -- sem isto, mirar qualquer parte seria sempre pior que o torso, por construcao.
+----
+---- Dois fatores, e vale distinguir o que e medido do que e chute:
+----   damage_mod -- do preset do proprio jogo. Head +80, Legs -50. Multiplicar por ele converte
+----                 "acertos esperados" em "dano esperado", que e a moeda comparavel com o
+----                 ataque padrao (torso, damage_mod 0). Isto nao e aproximacao.
+----   efeito     -- RATOAI_BodyPartEffectBonus. Este e o grosseiro: critico, desarmar, Slowed,
+----                 ignorar armadura. Sem medicao limpa possivel, porque o valor esta no turno
+----                 seguinte e este estimador so simula um turno.
+---------------------------------------------------------------------------------------------------
+function RATOAI_BodyPartMul(body_part)
+    if not body_part or body_part == "Torso" then
+        return 100
+    end
+    local preset = Presets.TargetBodyPart.Default[body_part]
+    local mul = 100 + ((preset and preset.damage_mod) or 0)
+    local bonus = (RATOAI_BodyPartEffectBonus or empty_table)[body_part] or 0
+    mul = MulDivRound(mul, 100 + bonus, 100)
+    return Max(0, mul)
+end
+
+---------------------------------------------------------------------------------------------------
+---- EFEITOS DE "NAO CONSEGUE ESCAPAR" QUE EXISTEM NESTA INSTALACAO
+----
+---- Nem todo efeito da lista e do jogo base. `PinnedDown` vem do mod *Pinned Down*, que o design
+---- do Overhaul quase pressupoe -- mas so quase: e dependencia de DESIGN, nao de codigo, e quem
+---- joga pode nao ter baixado.
+----
+---- O filtro nao e por seguranca: `HasStatusEffect` com id inexistente devolve falso sem
+---- reclamar. E por legibilidade -- sem ele aquele ramo vira codigo morto silencioso e quem le
+---- nao consegue distinguir "nao dispara nunca" de "nao esta instalado". Com o filtro, a lista
+---- resolvida DIZ o que esta valendo nesta instalacao.
+----
+---- Nao checa id de mod de proposito: o efeito pode passar a vir de outra fonte, e o que importa
+---- e se ele existe, nao quem o trouxe.
+----
+---- Resolvido uma vez e cacheado -- os CharacterEffectDefs nao existem quando o mod carrega.
+---- Mesmo padrao do RATOAI_GetMaxCoverCTH em FUNCTION_ScoreAttacksDetailed.lua.
+---------------------------------------------------------------------------------------------------
+local STUCK_CANDIDATOS = {
+    "StationedMachineGun", ---- base: presa na arma montada
+    "ManningEmplacement", ---- base: idem
+    "PinnedDown", ---- mod *Pinned Down* (opcional)
+    "Slowed", ---- base
+    "Suppressed", ---- base
+}
+
+local stuck_effects
+
+function RATOAI_GetStuckEffects()
+    if not stuck_effects then
+        stuck_effects = {}
+        local defs = rawget(_G, "CharacterEffectDefs")
+        for _, id in ipairs(STUCK_CANDIDATOS) do
+            if not defs or defs[id] then
+                stuck_effects[#stuck_effects + 1] = id
+            end
+        end
+    end
+    return stuck_effects
+end
+
+function OnMsg.ModsReloaded()
+    stuck_effects = nil
+end
+
+local function ExpectedWeight(self, context, weight, upos, action, target, attacker_pos, body_part,
+                              dest_cth, fallback_penalty)
+    if not (upos and target and action) then
+        return weight, false
+    end
+
+    local _, has_ap = AIGetAttackArgs(context, action, body_part or "Torso", self.Aiming or "None",
+                                      target)
+    if not has_ap then
+        return 0, true
+    end
+
+    local ratio = RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part)
+    if ratio then
+        ---- zero acertos esperados nao e "peso baixo", e "nao faz sentido": desabilita e ainda
+        ---- poupa o PrecalcAction desta acao no AISelectAction.
+        if ratio <= 0 then
+            return 0, true
+        end
+        return MulDivRound(weight, ratio, 100), false
+    end
+
+    return MulDivRound(weight, PenaltyScale(dest_cth, fallback_penalty or 0), 100), false
+end
+
 local function GetDestArgs(self, context)
 
     local unit = context.unit
@@ -50,62 +165,22 @@ local function GetDestArgs(self, context)
 end
 
 function AutoFire_CustomScoring(self, context)
-    local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
     local weight, disable, priority = self.Weight, false, self.Priority
 
     local upos, unit, action, dist, target, dest_cth, dest_recoil, attacker_pos = GetDestArgs(self,
                                                                                               context)
-    ---- O point blank continua sendo PRIORIDADE, e nao um numero. E regra tatica
-    ---- deliberada ("colado, despeja o pente"), nao artefato do scoring -- e o resultado
-    ---- esperado concordaria com ela de qualquer jeito, com 10 balas e sem penalidade de
-    ---- distancia. Deixar de fora mantem a flag mudando uma coisa so.
+    ---- O point blank continua sendo PRIORIDADE, e nao um numero. E regra tatica deliberada
+    ---- ("colado, despeja o pente"), nao artefato do scoring -- e o resultado esperado
+    ---- concordaria com ela de qualquer jeito, com 10 a 15 balas e sem penalidade de distancia.
+    ---- Deixar de fora mantem a flag mudando uma coisa so.
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
     else
-        -------------------------------------------------------------------------------------------
-        ---- PORTAO DE AP, ANTES DE GASTAR O CALCULO.
-        ----
-        ---- O `has_ap` do AIGetAttackArgs e a MESMA resposta que o PrecalcAction vai usar daqui
-        ---- a pouco para reprovar a acao no IsAvailable -- ele custa um GetAPCost e nao consome
-        ---- RNG. Sem ele, dois problemas:
-        ----
-        ---- 1. DESPERDICIO. O RATOAI_ExpectedFor gasta 4 a 8 CalcChanceToHit para pontuar uma
-        ----    acao que sera descartada logo em seguida.
-        ---- 2. CONTRADICAO NO PAINEL. Os dois lados modelam o custo diferente: aqui o custo e nu
-        ----    (action:GetAPCost(unit), sem args) e o AICalcAttacksAndAim DEGRADA quando falta AP
-        ----    -- larga a shooting stance e devolve um plano do quadril. O IsAvailable pergunta
-        ----    com `args` montados (mira no maximo, alvo), entao o AP de stance ja esta dentro do
-        ----    custo e nao ha degradacao: e sim ou nao. Dai saia "razao 127" numa acao marcada
-        ----    "[falta: AP]" -- os dois certos, respondendo perguntas diferentes.
-        ----
-        ---- Desabilitar aqui e o MESMO desfecho que o IsAvailable daria, so que mais cedo e mais
-        ---- barato. Nao muda decisao nenhuma.
-        -------------------------------------------------------------------------------------------
-        if upos and target then
-            local _, has_ap = AIGetAttackArgs(context, action, "Torso", self.Aiming, target)
-            if not has_ap then
-                return 0, true, false
-            end
-        end
-
-        ---- RATOAI_ExpectedActionScore: peso pelo QUANTO RENDE em vez de quanto doi.
-        ---- Ver o cabecalho de RATOAI_ExpectedFor em FUNCTION_ScoreAttacksDetailed.lua.
-        ---- `nil` = nao deu para responder (sem destino, sem alvo, sem denominador);
-        ---- ai cai no caminho antigo, que e o mesmo de quando a flag esta desligada.
-        local ratio = RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
-        if ratio then
-            ---- zero acertos esperados nao e "peso baixo", e "nao faz sentido": desabilita
-            ---- e ainda poupa o PrecalcAction desta acao no AISelectAction.
-            if ratio <= 0 then
-                return 0, true, false
-            end
-            weight = MulDivRound(weight, ratio, 100)
-        elseif dest_recoil then
-            weight = MulDivRound(weight, PenaltyScale(dest_cth, dest_recoil), 100)
-        end
+        weight, disable = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
+                                         "Torso", dest_cth, dest_recoil)
     end
 
-    return Max(0, weight), weight < 0 and true or disable, priority
+    return Max(0, weight), disable, priority
 end
 
 function MobileAttack_CustomScoring(self, context)
@@ -143,22 +218,58 @@ function SingleShotTargeted_CustomScoring(self, context)
 
     local leg_mul = 125
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B31): o peso descrevia uma parte do corpo e o tiro saia em outra.
+    ----
+    ---- Aqui a parte era "a primeira `true` na ordem do `pairs`" sobre o set AttackTargeting.
+    ---- La no AIActionSingleTargetShot:PrecalcAction (AIActions.lua:733) a parte e sorteada com
+    ---- `table.weighted_rand(body_parts, "chance", InteractionRand(...))`. Com um set de duas
+    ---- partes, o peso podia falar da cabeca e a bala sair na perna -- e a penalidade de tiro
+    ---- localizado difere MUITO entre elas (Head -40, Legs -10), entao nao era erro de
+    ---- arredondamento.
+    ----
+    ---- Pior: `pairs` nao tem ordem garantida. Este peso alimenta o InteractionRand da escolha
+    ---- de acao, que entra no NetUpdateHash -- era fonte de desync, nao so de imprecisao.
+    ----
+    ---- Agora as duas pontas leem a MESMA lista (o AIGetAttackTargetingOptions, memoizado por
+    ---- turno) e o scoring assume a parte de maior peso, que e o resultado mais provavel do
+    ---- sorteio. Continua sendo uma aproximacao -- o sorteio pode cair noutra -- mas e uma
+    ---- aproximacao DETERMINISTICA da distribuicao certa, em vez de um valor arbitrario.
+    ---------------------------------------------------------------------------------------------
     local body_part = "Head"
 
     if IsKindOf(self, "AIActionPinDown") then
         body_part = self.AttackTargeting
-    else
-        for part, boleano in pairs(self.AttackTargeting) do
-            if boleano then
-                body_part = part
-                break
+    elseif target then
+        local opcoes = AIGetAttackTargetingOptions(unit, context, target, action,
+                                                   self.AttackTargeting)
+        local melhor = 0
+        for _, o in ipairs(opcoes or empty_table) do
+            local peso = o.chance or 0
+            if peso > melhor then
+                melhor, body_part = peso, o.id
             end
+        end
+        if melhor <= 0 then
+            body_part = "Torso"
         end
     end
 
     local leg_shot = body_part == "Legs"
 
     if upos and target then
+        ---------------------------------------------------------------------------------------
+        ---- A penalidade de tiro localizado continua sendo calculada, mas agora so como
+        ---- FALLBACK: e o que o ExpectedWeight usa quando nao ha denominador confiavel.
+        ---- No caminho normal quem manda e a razao de acertos esperados, e ela ja carrega esta
+        ---- penalidade por dentro -- o `body_part` chega ao target_spot_group do
+        ---- CalcChanceToHit, que e de onde a penalidade sai. Aplicar aqui E la seria contar
+        ---- duas vezes; por isso o valor entra so pelo parametro de fallback.
+        ----
+        ---- E ha o que a formula antiga NAO via e a nova ve: tiro localizado costuma exigir
+        ---- mira maxima, mira custa AP, e AP custa ataques. Uma penalidade de -20 num plano de
+        ---- tres tiros nao e a mesma coisa que -20 num plano de um tiro so.
+        ---------------------------------------------------------------------------------------
         local use, targeted_penal = hit_modifiers.TargetedShot:CalcValue(unit, target,
                                                                          Presets.TargetBodyPart
                                                                              .Default[body_part],
@@ -167,9 +278,19 @@ function SingleShotTargeted_CustomScoring(self, context)
                                                                          nil, nil, 3, false,
                                                                          attacker_pos,
                                                                          target:GetPos())
-        weight = MulDivRound(weight, PenaltyScale(dest_cth, use and targeted_penal or 0), 100)
+        local d
+        weight, d = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
+                                   body_part, dest_cth, use and targeted_penal or 0)
+        disable = disable or d
+
+        ---- credita o que o tiro localizado ganha, agora que a razao ja cobrou o que ele custa
+        weight = MulDivRound(weight, RATOAI_BodyPartMul(body_part), 100)
     end
 
+    ---- TERMO DE EFEITO, nao de acerto: continua multiplicando DEPOIS da razao. Tiro na perna
+    ---- em quem carrega arma de curto alcance vale pelo Slowed, nao pelo dano, e nada disso
+    ---- aparece em "acertos esperados". A razao mede o custo de acertar; este multiplicador
+    ---- mede o que o acerto compra. Camadas diferentes de proposito.
     if target and leg_shot then
         local target_weapon = target:GetActiveWeapons()
         if target_weapon and
@@ -178,7 +299,7 @@ function SingleShotTargeted_CustomScoring(self, context)
         end
     end
 
-    return Max(0, weight), weight < 0 and true or disable, priority
+    return Max(0, weight), disable, priority
 end
 
 function Overwatch_CustomScoring(self, context)
@@ -251,7 +372,6 @@ end
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 function Pindown_CustomScoring(self, context)
-    local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
     local weight, disable, priority = self.Weight, false, self.Priority
     -- if true then
     --    return weight, disable, priority
@@ -284,40 +404,68 @@ function Pindown_CustomScoring(self, context)
     local extra_aim_bonus_mul = (extra_aim * 12) + 100
     -----------
 
-    local pindown_score = 0
-    ---------
-    local cover_penal = 0
-    local use, cover_type, _
-    if unit and target then -- TODO: Make a special ratio for the cover. The more cover/cth ratio, the more chances to use overwatch
-        ---- BUGFIX (B2): RangeAttackTargetStanceCover:CalcValue devolve
-        ---- (use, value, name, metaText, type) -- o tipo e o 5o retorno, nao o 3o.
-        ---- Como estava, `cover_type` recebia o `name` (um objeto T()), a comparacao
-        ---- com "Cover" nunca dava verdadeira e o bonus por alvo em cobertura era
-        ---- sempre zero. Ver GBO3 Code/CTH_cover_prone.lua:94.
-        use, cover_penal, _, _, cover_type =
-            hit_modifiers.RangeAttackTargetStanceCover:CalcValue(unit, target, nil,
-                                                                 context.default_attack,
-                                                                 unit:GetActiveWeapons(), nil, nil,
-                                                                 1, false, attacker_pos,
-                                                                 target:GetPos())
-    end
-
-    if use and (cover_type or "") == "Cover" then
-        pindown_score = pindown_score + (cover_penal * -1)
-    end
-
-    weight = MulDivRound(weight, PenaltyScale(dest_cth, pindown_score), 100)
-
-    -----------------
-    if target and IsKindOf(target, "Unit") then
-        if target:HasStatusEffect("Slowed") then
-            weight = MulDivRound(weight, 120, 100)
-        end
-        if target:IsThreatened(nil, 'overwatch') or target:IsThreatened(nil, "melee") then
-            weight = MulDivRound(weight, 120, 100)
+    -----------------------------------------------------------------------------------------------
+    ---- SNIPE, NAO SUPRESSAO.
+    ----
+    ---- No GBO3 a acao `PinDown` nao suprime ninguem: ela estende bastante o alcance da arma e
+    ---- deixa o tiro muito acurado. O scoring que estava aqui era a leitura VANILLA -- dava bonus
+    ---- proporcional a cobertura do alvo, que e como se pontua supressao (vale a pena prender
+    ---- quem esta atras de cobertura justamente porque acertar e dificil). Para um snipe isso e o
+    ---- contrario do que se quer.
+    ----
+    ---- O QUE SUMIU E POR QUE NAO FAZ FALTA. O bloco removido chamava
+    ---- RangeAttackTargetStanceCover so para virar o sinal da penalidade de cobertura. Ele
+    ---- carregava o BUGFIX (B2) -- o `cover_type` vinha do 5o retorno e nao do 3o -- que fica
+    ---- registrado aqui porque a licao sobrevive a funcao: aquele CalcValue devolve
+    ---- (use, value, name, metaText, type).
+    ----
+    ---- O GANHO DE CTH DO SNIPE NAO PRECISA DE TERMO. Alcance estendido e acuracia aparecem
+    ---- sozinhos no CalcChanceToHit, portanto na razao de acertos esperados. Pontuar isso a mao
+    ---- seria contar duas vezes. O que sobra sao os dois vieses que a razao NAO ve:
+    -----------------------------------------------------------------------------------------------
+    if self.AttackTargeting == "Torso" then
+        ---- o localizado ja passou pelo ExpectedWeight la em cima, via
+        ---- SingleShotTargeted_CustomScoring; so o torso falta.
+        local d
+        weight, d = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
+                                   "Torso", dest_cth, 0)
+        if d then
+            return 0, true, false
         end
     end
-    -----------------
+
+    ---- 1. LONGE. A razao ja diz se o tiro rende; este vies diz que ESTE tipo de tiro e o de
+    ---- longa distancia. Rampa por tile alem do close range (o veto de perto ja aconteceu no
+    ---- inicio da funcao), com teto para nao virar argumento sozinho no fim do mapa.
+    local close = RATOAI_GetCloseRange()
+    if dist and close and (RATOAI_SnipeDistBonus or 0) > 0 then
+        local tiles_alem = Max(0, (dist - close) / const.SlabSizeX)
+        local bonus = Min(RATOAI_SnipeDistBonusMax or 0, tiles_alem * RATOAI_SnipeDistBonus)
+        weight = MulDivRound(weight, 100 + bonus, 100)
+    end
+
+    ---- 2. ALVO PRESO. Tiro caro e lento contra quem vai sair da linha e AP jogado fora.
+    ---- A lista vem do RATOAI_GetStuckEffects, que filtra pelos efeitos presentes nesta
+    ---- instalacao -- `PinnedDown` e do mod *Pinned Down*, dependencia de design e nao de codigo.
+    ---- Conferido no processo vivo: `Immobilized` e `Pinned` NAO existem neste jogo, apesar de
+    ---- parecerem obvios. Emplacement/MG sao os mais fortes (a unidade esta literalmente presa na
+    ---- arma), mas CONTAR condicoes em vez de pesar cada uma mantem isto no lugar de desempate
+    ---- que ele deve ocupar.
+    if target and IsKindOf(target, "Unit") and (RATOAI_SnipeStuckBonus or 0) > 0 then
+        local presos = 0
+        for _, ef in ipairs(RATOAI_GetStuckEffects()) do
+            if target:HasStatusEffect(ef) then
+                presos = presos + 1
+            end
+        end
+        ---- ameacado por overwatch/melee tambem prende: mover custa levar o tiro
+        if target:IsThreatened(nil, "overwatch") or target:IsThreatened(nil, "melee") then
+            presos = presos + 1
+        end
+        if presos > 0 then
+            weight = MulDivRound(weight, 100 + Min(3, presos) * RATOAI_SnipeStuckBonus, 100)
+        end
+    end
 
     weight = MulDivRound(weight, extra_aim_bonus_mul, 100)
 

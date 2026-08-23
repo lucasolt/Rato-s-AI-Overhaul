@@ -780,7 +780,6 @@ return {
 		id = "Soldier_copy",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackWeight = 150,
 		BaseMovementWeight = 50,
 		Behaviors = {
 			PlaceObj('StandardAI', {
@@ -858,15 +857,6 @@ return {
 				'action_id', "Overwatch",
 			}),
 			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "GroinShot",
-				'Weight', 80,
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Groin" ),
-			}),
-			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "Headshot",
 				'Weight', 120,
 				'OnActivationBiases', {
@@ -883,36 +873,13 @@ return {
 				'AttackTargeting', set( "Head" ),
 			}),
 			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "ArmShot",
+				'BiasId', "",
 				'Weight', 80,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "ArmShot",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
 				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Arms" ),
-			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "LegShot",
-				'Weight', 80,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "LegShot",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Legs" ),
+				'AttackTargeting', set( "Arms", "Groin", "Legs" ),
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow",
@@ -930,7 +897,6 @@ return {
 			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
-				'Weight', 200,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "FlareThrow",
@@ -939,7 +905,7 @@ return {
 					}),
 					PlaceObj('AIBiasModification', {
 						'BiasId', "FlareThrow",
-						'Value', -20,
+						'Value', -33,
 						'ApplyTo', "Team",
 					}),
 				},
@@ -2007,7 +1973,13 @@ return {
 				'Weight', 50,
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Normalization', "soft",
+						'SoftK', 100,
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'CoverTrust', 80,
+					}),
 				},
 				'TakeCoverChance', 0,
 			}),
@@ -2017,45 +1989,31 @@ return {
 				'Fallback', false,
 				'OptLocWeight', 20,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 250,
-						'Required', true,
+					PlaceObj('AIPolicyDealDamage', {
+						'Normalization', "soft",
+						'SoftK', 100,
+					}),
+					PlaceObj('AIPolicyEvadeEnemies', {
+						'Weight', 150,
 						'RangeBase', "Absolute",
-						'RangeMin', 10,
-						'RangeMax', 20,
+						'Range', 10,
 					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Weight', 200,
-					}),
-					PlaceObj('AIPolicyProximity', {
-						'MinScore', 2,
-					}),
+					PlaceObj('AIPolicyThreatExposure', nil),
 				},
 				'TakeCoverChance', 50,
-			}),
-			PlaceObj('HoldPositionAI', {
-				'Weight', 5,
-				'Comment', "ShootingStance",
-				'Fallback', false,
-				'Score', function (self, unit, proto_context, debug_data)
-					local score = getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
-					return MulDivRound(score, self.Weight, 100)
-				end,
-				'TakeCoverChance', 0,
 			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyWeaponRange', {
-				'Weight', 150,
+			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeBase', "Absolute",
-				'RangeMin', 10,
+				'RangeMin', 12,
 				'RangeMax', 20,
+				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyCustomSeekCover', {
 				'Weight', 150,
+				'AssumeCrouch', true,
 			}),
 		},
 		OptLocSearchRadius = 80,

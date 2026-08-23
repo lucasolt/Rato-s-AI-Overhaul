@@ -189,3 +189,108 @@ end
 if rawget(_G, "RATOAI_StanceBias") == nil then
     RATOAI_StanceBias = 8
 end
+
+---------------------------------------------------------------------------------------------------
+---- TERMOS DE PARTE DO CORPO (RATOAI_BodyPartEffectBonus, em pontos percentuais)
+----
+---- Tiro localizado SEMPRE paga CTH a mais e ganha outra coisa em troca. A parte NUMERICA dessa
+---- troca ja vem do jogo e nao precisa ser inventada -- `Presets.TargetBodyPart.Default[x]`
+---- carrega `damage_mod` e o scoring o aplica direto. Medido no processo vivo:
+----     Head  tohit -40  dmg  +80   armadura: Head
+----     Neck  tohit -40  dmg  +40   armadura: NENHUMA
+----     Groin tohit -20  dmg  +25   armadura: NENHUMA
+----     Arms  tohit -15  dmg  -25   armadura: nenhuma
+----     Legs  tohit -10  dmg  -50   armadura: Legs
+----     Torso tohit   0  dmg    0   armadura: Torso
+----
+---- Esta tabela e SO o resto -- o que o damage_mod nao expressa:
+----   Head  -- critico/execucao, alem do +80 de dano;
+----   Neck / Groin -- ignoram a cobertura de armadura, entao o dano passa mais inteiro do que o
+----                   damage_mod sozinho sugere;
+----   Arms  -- derrubar arma e estragar a mira do alvo, que vale mais que o -25 de dano custa;
+----   Legs  -- Slowed. Precisa ser o maior da tabela justamente porque o damage_mod (-50) e o
+----            pior de todos: sem este termo a IA nunca miraria perna.
+----
+---- GROSSEIROS DE PROPOSITO. Nao existe medicao limpa para "quanto vale desarmar" -- depende do
+---- turno seguinte, que este estimador nao simula. Sao desempates, nao argumentos: nenhum deles
+---- inverte sozinho uma diferenca grande de acertos esperados.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_BodyPartEffectBonus") == nil then
+    RATOAI_BodyPartEffectBonus = {
+        Head = 10,
+        Neck = 20,
+        Groin = 15,
+        Arms = 20,
+        Legs = 35,
+        Torso = 0,
+    }
+end
+
+---------------------------------------------------------------------------------------------------
+---- SNIPE / PINDOWN (RATOAI_SnipeDistBonus, RATOAI_SnipeStuckBonus)
+----
+---- ATENCAO ao nome: no GBO3 a acao `PinDown` NAO suprime. Ela estende bastante o alcance da arma
+---- e deixa o tiro muito acurado -- e um SNIPE. O scoring antigo tratava como supressao (bonus
+---- por alvo em cobertura), que e a leitura vanilla e esta errada aqui.
+----
+---- As duas condicoes em que ela compensa:
+----   1. LONGE -- onde o ataque normal ja perdeu acuracia e a extensao de alcance vale. O ganho
+----      de CTH em si NAO precisa de termo: ele aparece sozinho no CalcChanceToHit e portanto na
+----      razao de acertos esperados. Este bonus e so o vies de "e o tipo de tiro para longe".
+----   2. ALVO PRESO -- quem nao consegue sair da linha ate o proximo turno. Tiro caro e lento
+----      contra alvo que vai se mover e AP jogado fora.
+----
+---- Percentual por tile ALEM do close range, com teto. Zero desliga qualquer um dos dois.
+---------------------------------------------------------------------------------------------------
+---- DEFAULT ZERO, e a razao merece registro. Este bonus foi escrito ANTES do snipe passar a ser
+---- pontuado por resultado esperado, e virou redundante: a razao ja SOBE sozinha com a distancia,
+---- porque o ataque normal perde acuracia com o alcance e o snipe nao (mira maxima, +50% de
+---- alcance, ignora cobertura baixa). Somar uma rampa por cima seria contar a mesma vantagem
+---- duas vezes -- e o vies embutido no insumo e melhor que o coeficiente colado na saida.
+---- Sobe para 2 ou 3 se em campo o snipe nunca disparar.
+if rawget(_G, "RATOAI_SnipeDistBonus") == nil then
+    RATOAI_SnipeDistBonus = 0 ---- % por tile alem do close range
+end
+if rawget(_G, "RATOAI_SnipeDistBonusMax") == nil then
+    RATOAI_SnipeDistBonusMax = 45 ---- teto do bonus de distancia
+end
+if rawget(_G, "RATOAI_SnipeStuckBonus") == nil then
+    RATOAI_SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
+end
+
+---------------------------------------------------------------------------------------------------
+---- TIRO LOCALIZADO SO COM STANCE (RATOAI_TargetedNeedsStance)
+----
+---- Criterio de EFICIENCIA, nao limitacao de engine -- a distincao importa para quem for mexer
+---- nisto depois. Nada impede a unidade de mirar a cabeca do quadril; o que acontece e que a
+---- penalidade da parte do corpo (Head -40) empilha na penalidade de hipfire e o resultado nao
+---- compete com nada. Entao, se a unidade nao vai entrar em stance, nem se gasta o calculo.
+----
+---- Em false, o tiro localizado do quadril volta a ser avaliado e concorre pelo numero que
+---- realmente vale -- que e baixo. A diferenca pratica e "nao aparece" contra "aparece com peso
+---- ruim"; a segunda e mais honesta e a primeira e mais barata.
+----
+---- NAO se aplica ao PinDown: o custo dele ja embute a stance (GBO3 COMBAT_ACTIONS.lua:455),
+---- entao o teste de AP normal ja resolve.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_TargetedNeedsStance") == nil then
+    RATOAI_TargetedNeedsStance = true
+end
+
+---------------------------------------------------------------------------------------------------
+---- TETO DA RAZAO DE RESULTADO ESPERADO (RATOAI_ExpectedRatioMax)
+----
+---- A razao multiplica o `Weight` do preset, entao ela e um FATOR e nao uma nota -- sem teto, um
+---- denominador pequeno vira peso arbitrariamente grande. Duas situacoes reais:
+----   base = 0  -- ataque padrao nao rende nada (alvo longe demais, unidade ruim, CTH no chao).
+----                A acao especial vira a unica coisa util, e recebe o teto.
+----   base ~ 0  -- base 5 com hits 150 daria razao 3000; um preset de 200 viraria 6000 e
+----                dominaria o sorteio inteiro.
+----
+---- 300 = "vale ate tres vezes o ataque padrao". Acima disso a diferenca deixa de ser quantitativa
+---- (a acao e melhor) e passa a ser qualitativa (a outra nao funciona) -- e vantagem qualitativa
+---- nao deve virar numero grande, so o maior numero.
+---------------------------------------------------------------------------------------------------
+if rawget(_G, "RATOAI_ExpectedRatioMax") == nil then
+    RATOAI_ExpectedRatioMax = 300
+end

@@ -454,7 +454,10 @@ if rawget(_G, "RATOAI_LastExpected") == nil then
     RATOAI_LastExpected = {}
 end
 
-function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
+---- `body_part` (default "Torso"): a penalidade de tiro localizado entra pelo
+---- `target_spot_group` do CalcChanceToHit. Sem este parametro, medir um tiro na cabeca
+---- devolveria o numero de um tiro no torso -- justamente a penalidade que se quer pesar.
+function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part)
     local unit, weapon = context.unit, context.weapon
     if not (unit and weapon and action and upos) or not IsValidTarget(target) then
         return
@@ -470,7 +473,9 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     end
     ---- chave inclui o nivel forcado: o RATOAI_EnsureAimPlan avalia o MESMO ataque em
     ---- varios niveis, e sem isso a segunda avaliacao devolveria a primeira.
-    local key = tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force)
+    body_part = body_part or "Torso"
+    local key = tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
+                    body_part
     local cached = memo[key]
     if cached then
         return cached.hits, cached.attacks, cached.aim1, cached.stance
@@ -500,17 +505,75 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     ---- O laco do AIPrecalcDamageScore preenche os dois antes de chamar e limpa depois --
     ---- ou seja, aqui eles chegam nil. Reproduzir as MESMAS condicoes e o que mantem o
     ---- numerador comparavel com o denominador (dest_hit_score, que saiu daquele laco).
-    local prev_pos, prev_target = context.attacker_pos, context.current_target
-    context.attacker_pos, context.current_target = attacker_pos, target
-    local ok_calc, attacks, aims, paid_stance = pcall(AICalcAttacksAndAim, context, ap, dist,
-                                                      action, cost)
-    context.attacker_pos, context.current_target = prev_pos, prev_target
+    local ok_calc, attacks, aims, paid_stance
+
+    if action.id == "PinDown" then
+        -------------------------------------------------------------------------------------------
+        ---- O SNIPE NAO PASSA PELO PLANEJADOR. Duas razoes, e as duas sao medidas.
+        ----
+        ---- 1. SOMA DUPLA DE AP. Ao contrario de SingleShot/BurstFire/AutoFire -- cujo
+        ----    `GetAPCost(unit)` devolve o custo NU -- o PinDown do GBO3
+        ----    (COMBAT_ACTIONS.lua:455) monta o custo assim:
+        ----        ap = ActionPoints + stance_ap + cycling_ap + aim_ap + recoil_extra_cost
+        ----    ou seja, stance, mira E ferrolho JA ESTAO DENTRO. Entregar esse custo ao
+        ----    AICalcAttacksAndAim faz ele somar `stance_cost` e `bolting_cost` outra vez e ainda
+        ----    caminhar comprando niveis de mira.
+        ----    Medido (Kalyna / M76_1): base 2000 + stance 6000 + aim_ap 2000 = 10000 real, e o
+        ----    planejador chegava a 16000 -- 60% inflado. Com AP tipico o has_stance_ap falhava e
+        ----    o portao de mira abaixo zerava a acao: o snipe estava sendo DESABILITADO.
+        ----
+        ---- 2. NAO SAO N ATAQUES. "At the start of next turn, shoot the target... The attack will
+        ----    have max aim levels" -- e UM tiro, com mira maxima, disparado no turno SEGUINTE.
+        ----    Perguntar "quantos cabem no AP" nao faz sentido para ele.
+        ----
+        ---- Por isso o plano e escrito a mao: um ataque, mira maxima, e o unico teste de AP e se
+        ---- o custo (que ja e completo) cabe. `paid_stance` = true porque o snipe entra em stance
+        ---- por definicao, e o RATOAI_StanceBias deve credita-lo por isso.
+        -------------------------------------------------------------------------------------------
+        ok_calc = true
+        if ap >= cost then
+            local _, max_aim = unit:GetBaseAimLevelRange(action, target)
+            attacks, aims, paid_stance = 1, {Max(1, max_aim or 3)}, true
+        else
+            attacks, aims = 0, {}
+        end
+    else
+        local prev_pos, prev_target = context.attacker_pos, context.current_target
+        context.attacker_pos, context.current_target = attacker_pos, target
+        ok_calc, attacks, aims, paid_stance = pcall(AICalcAttacksAndAim, context, ap, dist, action,
+                                                    cost)
+        context.attacker_pos, context.current_target = prev_pos, prev_target
+    end
+
     if not ok_calc then
         return
     end
     attacks = attacks or 0
     if attacks <= 0 then
-        memo[key] = {hits = 0, attacks = 0}
+        memo[key] = {hits = 0, attacks = 0, motivo = "0 ataques cabem no AP"}
+        return 0, 0
+    end
+
+    -----------------------------------------------------------------------------------------------
+    ---- TIRO LOCALIZADO SEM STANCE: NAO E IMPOSSIVEL, E QUE NAO VALE A PENA OLHAR.
+    ----
+    ---- A distincao importa e a versao anterior deste comentario errava nela. Nada no jogo
+    ---- impede mirar a cabeca do quadril -- so fica ruim: a penalidade de parte do corpo (Head
+    ---- -40) empilha em cima da penalidade de hipfire, e sem stance o plano sai com mira 0.
+    ---- Nao e limitacao de engine, e criterio de EFICIENCIA: se a unidade nao vai entrar em
+    ---- stance, o tiro localizado nao e uma opcao que mereca ser pesada, e medir custa caro.
+    ----
+    ---- O PinDown NAO passa por aqui, e nao precisa: o custo dele ja inclui a stance
+    ---- (COMBAT_ACTIONS.lua:455), entao o proprio `ap >= cost` la em cima ja e o teste.
+    ----
+    ---- Sair AQUI, e nao depois: o AICalcAttacksAndAim e a parte barata (aritmetica de AP, sem
+    ---- CTH nenhuma). O caro vem abaixo -- get_recoil mais um CalcChanceToHit por nivel de mira.
+    ----
+    ---- `RATOAI_TargetedNeedsStance = false` volta a avaliar, e ai o tiro do quadril concorre
+    ---- pelo numero que ele realmente vale (baixo) em vez de nao concorrer.
+    -----------------------------------------------------------------------------------------------
+    if RATOAI_TargetedNeedsStance and body_part ~= "Torso" and (aims[1] or 0) < 1 then
+        memo[key] = {hits = 0, attacks = 0, motivo = "tiro localizado sem stance -- nao compensa"}
         return 0, 0
     end
 
@@ -521,8 +584,18 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     ---- quando a entrada e float -- medido no processo vivo: MulDivRound(1.5,100,100)
     ---- devolve 1.5, math.type "float". Este numero vira peso de acao, que vira roll
     ---- sincronizado, entao arredonda aqui.
+    ---- ONDE O RECOIL E LIDO -- e so nestes dois lugares:
+    ----   1. dentro da rajada, no RATOAI_BurstHits, que comeca com
+    ----      `if shots <= 1 then return Clamp(cth,0,100) end` -- num tiro unico ele nem e lido;
+    ----   2. entre ataques (recoil persistente), no bloco `if i > 1 ...` abaixo -- com um ataque
+    ----      so, nunca roda.
+    ---- Logo, com UMA bala e UM ataque o valor e calculado, arredondado, guardado e exibido sem
+    ---- nunca entrar em conta nenhuma. `get_recoil` passa por GetWepRecoil, GetRecoilOther,
+    ---- GetCaliberStrRecoil e GBO_GetROF -- nao e barato, e era pago a toa em toda acao de tiro
+    ---- unico. E no painel aparecia um "-99" que parecia explicar o numero e nao explicava nada.
     local recoil_cth = 0
-    if IsKindOf(weapon, "Firearm") then
+    local usa_recoil = shots > 1 or attacks > 1
+    if usa_recoil and IsKindOf(weapon, "Firearm") then
         local ok_r, r = pcall(get_recoil, unit, target, target:GetPos(), action, weapon, nil,
                               shots, nil, nil, nil, nil, nil, attacker_pos)
         recoil_cth = (ok_r and type(r) == "number") and cRound(r) or 0
@@ -531,7 +604,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     ---- `target` explicito no 5o parametro: sem ele o AIGetAttackArgs preenche
     ---- `args.target` com `context.dest_target[GetPackedPosAndStance(unit)]` -- o alvo da
     ---- posicao ATUAL da unidade, que nao e necessariamente o alvo que estamos pontuando.
-    local args = AIGetAttackArgs(context, action, "Torso", "None", target)
+    local args = AIGetAttackArgs(context, action, body_part, "None", target)
     args.step_pos = attacker_pos
     args.prediction = true
 
@@ -570,7 +643,10 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     ---- contagem de ataques que a conta antiga nao enxergava.
     local dbg
     if RATOAI_Debug then
-        dbg = {cost = cost, shots = shots, attacks = attacks, recoil = recoil_cth,
+        ---- `recoil` so aparece quando de fato participou da conta; nos demais casos o painel
+        ---- mostra "-", que e a informacao correta (nao entra), e nao um numero inerte.
+        dbg = {cost = cost, shots = shots, attacks = attacks,
+               recoil = usa_recoil and recoil_cth or nil,
                ap = ap, dist = dist, aims = table.concat(aims, ",", 1, attacks)}
         local cths = {}
         for aim_lvl, v in pairs(cth_by_aim) do
@@ -681,7 +757,10 @@ end
 ---- Base 100 de proposito: e a mesma forma do PenaltyScale que ela substitui, entao os
 ---- `Weight` dos presets continuam significando o que significavam.
 ---------------------------------------------------------------------------------------------------
-function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
+---- `body_part` so afeta o NUMERADOR. O denominador e sempre o ataque padrao no torso: a
+---- pergunta e "o tiro localizado rende mais ou menos que so atirar", e o ataque padrao da
+---- IA nao e localizado.
+function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part)
     if not RATOAI_ExpectedActionScore then
         return
     end
@@ -697,14 +776,15 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
     ---- sincronizada. O ExpectedFor nao toca em RNG nenhum.
     local base, _, _, base_stance = RATOAI_ExpectedFor(context, context.default_attack, upos,
                                                        target, attacker_pos)
-    if not base or base <= 0 then
+    if not base then
         base = context.dest_hit_score and context.dest_hit_score[upos]
         base_stance = nil
     end
-    if not base or base <= 0 then
-        return ---- sem denominador confiavel: quem chamou volta ao caminho antigo
+    if not base then
+        return ---- sem denominador nenhum: quem chamou volta ao caminho antigo
     end
-    local hits, _, _, act_stance = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
+    local hits, _, _, act_stance = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos,
+                                                     body_part)
     if not hits then
         return
     end
@@ -737,16 +817,42 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
         end
     end
 
-    local ratio = MulDivRound(hits, 100, base)
+    -----------------------------------------------------------------------------------------------
+    ---- DENOMINADOR ZERO OU MINUSCULO -- e o caso que MAIS importa, nao um caso de borda.
+    ----
+    ---- `base` = acertos esperados do ataque padrao. Ele chega a zero justamente nas situacoes em
+    ---- que uma acao especial e a unica coisa util: alvo longe demais para a arma, unidade ruim,
+    ---- CTH no chao. A versao anterior desistia ali (devolvia nil) e a acao caia no PenaltyScale
+    ---- antigo -- ou seja, a maquinaria nova se ausentava exatamente onde tinha mais a dizer.
+    ----
+    ---- E entre zero e "saudavel" existe a faixa perigosa: base 5 (0.05 acerto) com hits 150 da
+    ---- razao 3000, e um peso de preset 200 viraria 6000, dominando todo o sorteio. Divisao sem
+    ---- piso esperando um caso extremo.
+    ----
+    ---- Os dois se resolvem com o mesmo teto. Base zero vira "o maximo" -- que e a leitura certa:
+    ---- render alguma coisa contra render nada e a maior vantagem que existe, mas ela e
+    ---- QUALITATIVA e nao merece um numero arbitrariamente grande so porque a divisao permitiria.
+    -----------------------------------------------------------------------------------------------
+    local teto = RATOAI_ExpectedRatioMax or 300
+    local ratio
+    if base <= 0 then
+        ratio = (hits > 0) and teto or 0
+    else
+        ratio = Min(teto, MulDivRound(hits, 100, base))
+    end
 
     ---- DEBUG (D2): o par (acertos da acao, acertos do ataque padrao) que produziu a
     ---- razao. Sem isto, "por que a IA escolheu auto" nao tem resposta observavel.
     if RATOAI_Debug then
         local m = context.__ratoai_expected
-        local slot = m and m[tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force)]
+        local slot = m and m[tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) ..
+                             "@" .. (body_part or "Torso")]
         context.dbg_expected = context.dbg_expected or {}
-        context.dbg_expected[action.id or "?"] = {
+        local dbg_id = (body_part and body_part ~= "Torso") and
+                           (tostring(action.id) .. "/" .. body_part) or tostring(action.id)
+        context.dbg_expected[dbg_id] = {
             hits = hits, base = base, ratio = ratio, dbg = slot and slot.dbg,
+            motivo = slot and slot.motivo,
             stance = act_stance, base_stance = base_stance,
         }
 
@@ -796,7 +902,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos)
             rec.ap = context.dest_ap and context.dest_ap[upos]
             rec.dest_cth = context.dest_cth and context.dest_cth[upos]
             rec.target = IsKindOf(target, "Unit") and target.session_id or tostring(target)
-            rec.actions[action.id or "?"] = {
+            rec.actions[dbg_id] = {
                 hits = hits, ratio = ratio, dbg = slot and slot.dbg,
             }
         end
