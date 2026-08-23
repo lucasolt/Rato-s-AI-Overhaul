@@ -1168,6 +1168,45 @@ inútil). Agora as duas entram com `weight = false`, e `disabled_by` (`"CustomSc
 `"bias"`) separa uma da outra; o painel escreve `desabilitada pela CustomScoring` /
 `desabilitada pelo bias` / `[falta: AP, munição, …]`. A telemetria carrega o mesmo campo em `off`.
 
+### 10.5 A razão significa a mesma coisa na lista inteira
+
+Marcador: `---- DEBUG (D6)`. Conta única em `RATOAI_RatioBase100`
+(`FUNCTION_ScoreAttacksDetailed.lua`), com dois chamadores.
+
+**A convenção:** `ratio = valor_da_ação / valor_de_só_atirar × 100`. 100 = empate, 200 = a ação
+rende o dobro, 0 = não rende nada. Teto em `const.RATOAI.ExpectedRatioMax`.
+
+| | numerador | denominador |
+|---|---|---|
+| ações de tiro (`RATOAI_ExpectedRatio`) | `ExpectedFor(ação)` — **medido** | `ExpectedFor(ataque padrão)` |
+| `MGSetup` / `PrepareWeapon` (`RegistrarExpectedMG`) | o **limiar** — proxy | `ExpectedFor(ataque padrão)` |
+
+O limiar entra como numerador porque aquelas ações **não disparam** — não há o que medir — e ele
+é, por construção, *"quanto o tiro precisaria render para não valer a pena trocar por esta ação"*.
+Escrito ao contrário (como saiu na primeira versão), `0.31` de tiro contra limiar `0.80` dava
+razão 39, lido como "a ação é ruim", quando significa o oposto: montar rende ~2,6× mais.
+
+O teste de que a direção está certa é que **o corte em 100 cai exatamente em cima do portão que a
+própria função usa**: `hits >= limiar` → não infla / desabilita ⟺ `ratio ≤ 100`. Medido:
+
+| tiro de pé | limiar | razão | código |
+|---|---|---|---|
+| 0.31 | 0.80 | 258 | infla |
+| 0.79 | 0.80 | 101 | infla |
+| 0.80 | 0.80 | **100** | não infla |
+| 0.81 | 0.80 | 99 | não infla |
+| 0.00 | 0.80 | 300 (teto) | infla |
+
+`proxy = true` na linha marca que aquele numerador é uma constante e não uma medição — o painel
+escreve `limiar-proxy` ao lado. E `peso_base -> peso_final` é o **outro** número, o que de fato
+entra na roleta do `AISelectAction`; razão e peso deixaram de compartilhar campo.
+
+**Cor.** A escala do painel tem pivô em **100**, não em zero: carmim em 0 → amarelo em 100 → mint
+no teto, interpolado. A versão anterior era `ratio >= 100 and verde or ratio > 0 and amarelo or
+vermelho`, que pintava 1 e 99 da mesma cor e só deixava vermelho o zero exato. As três âncoras
+saem das rampas já existentes (`NEG_RAMP[5]`, `POS_RAMP[3]`, `POS_RAMP[5]`), então a paleta do
+painel continua sendo uma só.
+
 ---
 
 ## 11. Armadilhas e bugs do source (importantes para modding)

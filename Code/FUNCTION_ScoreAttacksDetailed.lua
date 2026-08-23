@@ -748,6 +748,44 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
 end
 
 ---------------------------------------------------------------------------------------------------
+---- A RAZAO, EM UM LUGAR SO
+----
+---- `num` = quanto a ACAO rende. `den` = quanto rende simplesmente atirar (o ataque padrao).
+---- Base 100: 100 = empate, 200 = a acao rende o dobro, 0 = a acao nao rende nada.
+----
+---- Existe como funcao porque ha DOIS chamadores com numeradores de natureza diferente, e a
+---- conta precisa ser a mesma nos dois para o painel poder colorir com um criterio so:
+----   * RATOAI_ExpectedRatio -- numerador MEDIDO (RATOAI_ExpectedFor da acao candidata);
+----   * RegistrarExpectedMG (FUNCTION_SignaturesCustomScoring) -- numerador PROXY: no MGSetup e
+----     no PrepareWeapon a acao nao dispara, entao nao ha o que medir, e quem faz as vezes do
+----     valor dela e o proprio LIMIAR (`MGSetupMaxHits` / `PrepareWeaponMaxHits`) -- que e, por
+----     construcao, "quanto o tiro precisaria render para NAO valer a pena trocar por esta
+----     acao". Com isso o corte em 100 cai exatamente em cima do portao que aquelas funcoes
+----     usam (`hits >= limiar` -> nao infla), e razao > 100 passa a significar a mesma coisa em
+----     toda a lista.
+----
+---- DENOMINADOR ZERO OU MINUSCULO -- e o caso que MAIS importa, nao um caso de borda.
+----
+---- O denominador chega a zero justamente nas situacoes em que uma acao especial e a unica
+---- coisa util: alvo longe demais para a arma, unidade ruim, CTH no chao. E entre zero e
+---- "saudavel" existe a faixa perigosa: den 5 (0.05 acerto) com num 150 da razao 3000, e um peso
+---- de preset 200 viraria 6000, dominando todo o sorteio. Divisao sem piso esperando um caso
+---- extremo.
+----
+---- Os dois se resolvem com o mesmo teto. Denominador zero vira "o maximo" -- que e a leitura
+---- certa: render alguma coisa contra render nada e a maior vantagem que existe, mas ela e
+---- QUALITATIVA e nao merece um numero arbitrariamente grande so porque a divisao permitiria.
+---------------------------------------------------------------------------------------------------
+function RATOAI_RatioBase100(num, den)
+    local teto = const.RATOAI.ExpectedRatioMax or 300
+    num, den = num or 0, den or 0
+    if den <= 0 then
+        return (num > 0) and teto or 0
+    end
+    return Min(teto, MulDivRound(num, 100, den))
+end
+
+---------------------------------------------------------------------------------------------------
 ---- Razao em base 100 entre o resultado desta acao e o do ataque padrao.
 ---- 100 = rende o mesmo que simplesmente atirar; 200 = rende o dobro; 0 = nao rende nada.
 ----
@@ -816,29 +854,11 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
         end
     end
 
-    -----------------------------------------------------------------------------------------------
-    ---- DENOMINADOR ZERO OU MINUSCULO -- e o caso que MAIS importa, nao um caso de borda.
-    ----
-    ---- `base` = acertos esperados do ataque padrao. Ele chega a zero justamente nas situacoes em
-    ---- que uma acao especial e a unica coisa util: alvo longe demais para a arma, unidade ruim,
-    ---- CTH no chao. A versao anterior desistia ali (devolvia nil) e a acao caia no PenaltyScale
-    ---- antigo -- ou seja, a maquinaria nova se ausentava exatamente onde tinha mais a dizer.
-    ----
-    ---- E entre zero e "saudavel" existe a faixa perigosa: base 5 (0.05 acerto) com hits 150 da
-    ---- razao 3000, e um peso de preset 200 viraria 6000, dominando todo o sorteio. Divisao sem
-    ---- piso esperando um caso extremo.
-    ----
-    ---- Os dois se resolvem com o mesmo teto. Base zero vira "o maximo" -- que e a leitura certa:
-    ---- render alguma coisa contra render nada e a maior vantagem que existe, mas ela e
-    ---- QUALITATIVA e nao merece um numero arbitrariamente grande so porque a divisao permitiria.
-    -----------------------------------------------------------------------------------------------
-    local teto = const.RATOAI.ExpectedRatioMax or 300
-    local ratio
-    if base <= 0 then
-        ratio = (hits > 0) and teto or 0
-    else
-        ratio = Min(teto, MulDivRound(hits, 100, base))
-    end
+    ---- O tratamento de `base` zero ou minusculo -- que e o caso que MAIS importa aqui, e nao um
+    ---- caso de borda -- esta no RATOAI_RatioBase100. Antes desta funcao existir, `base <= 0`
+    ---- devolvia nil e a acao caia no PenaltyScale antigo: a maquinaria nova se ausentava
+    ---- exatamente onde tinha mais a dizer.
+    local ratio = RATOAI_RatioBase100(hits, base)
 
     ---- DEBUG (D2): o par (acertos da acao, acertos do ataque padrao) que produziu a
     ---- razao. Sem isto, "por que a IA escolheu auto" nao tem resposta observavel.

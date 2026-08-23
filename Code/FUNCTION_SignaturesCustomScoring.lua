@@ -512,6 +512,56 @@ end
 ---- acao e desabilitada, e nao apenas despriorizada: um tiro que rende nunca deve concorrer com
 ---- nao atirar.
 ---------------------------------------------------------------------------------------------------
+---- DEBUG (D6): grava a linha do painel para MGSetup/PrepareWeapon num lugar so, chamado de
+---- TODO ramo que "respondeu" (mediu o tiro padrao e tem limiar). Tres coisas que sairam disto:
+----
+---- 1. `ratio` E `peso` SAO COISAS DIFERENTES, e o campo `ratio` era usado para as duas. No ramo
+----    "ja rende" ele guardava o PESO CRU do preset (150, 80, o que o editor tiver); no ramo
+----    interpolado, o PESO JA MULTIPLICADO (250). Nenhum dos dois respondia "quanto rende", que
+----    e o que o nome promete. Agora `ratio` e a razao, e `peso_base`/`peso_final` sao o peso.
+----
+---- 2. O NUMERADOR E O LIMIAR, e nao os acertos do tiro. Esta e a parte que faz a razao daqui
+----    significar o MESMO que a das acoes de tiro. La, `ratio = ExpectedFor(acao) / ExpectedFor(
+----    ataque padrao)`: numerador = quanto a ACAO rende, denominador = quanto rende so atirar.
+----    Aqui a acao nao dispara -- montar a MG, preparar a arma --, entao nao ha o que medir, e
+----    quem faz as vezes do valor dela e o LIMIAR: por construcao ele e "quanto o tiro
+----    precisaria render para NAO valer a pena trocar por esta acao".
+----    Logo `ratio = limiar / hits_padrao`, e nao o contrario. Com 0.31 de tiro contra limiar
+----    0.80 a razao e 258 ("montar rende 2,6x mais que atirar de pe"), nao 39.
+----    O teste de que esta na direcao certa: o corte em 100 cai EXATAMENTE em cima do portao que
+----    as duas funcoes ja usam (`hits >= limiar` -> nao infla / desabilita), entao "razao > 100"
+----    quer dizer a mesma coisa na lista inteira.
+----    `hits`/`base` seguem a mesma convencao das outras linhas -- `hits` = valor da ACAO,
+----    `base` = valor de so atirar --, e por isso o painel imprime "(0.80 vs padrao 0.31)" sem
+----    precisar de caso especial. `proxy = true` marca que aquele numerador e um limiar
+----    constante e nao uma medicao, que e a unica diferenca real entre as duas familias.
+----
+---- 3. O ramo "ja rende" NAO GRAVAVA NADA -- `return` antes do `if RATOAI_Debug`. A acao continua
+----    HABILITADA (nao e um `disable`), entao `dbg_expected[id]` ficava com o valor da ULTIMA
+----    chamada que passou pelo bloco de baixo: de um RESTART anterior no MESMO turno (o
+----    `AIActionMGSetup:PrecalcAction` devolve "restart" via MGPack, e o `context` -- e por
+----    tabela, o `dbg_expected` -- nao e limpo entre um restart e o proximo; o cabecalho do
+----    PrepareWeapon_Fallback_CustomScoring ja registrava esse risco para outro campo). O painel
+----    mostrava um numero de outra posicao/alvo como se fosse desta chamada.
+local function RegistrarExpectedMG(context, id, hits_padrao, limiar, peso_base, peso_final, target,
+                                   dist, motivo)
+    if not RATOAI_Debug then
+        return
+    end
+    context.dbg_expected = context.dbg_expected or {}
+    context.dbg_expected[id] = {
+        hits = limiar, ---- valor da ACAO (proxy) -- ver o item 2 acima
+        base = hits_padrao, ---- valor de simplesmente atirar
+        ratio = RATOAI_RatioBase100(limiar, hits_padrao),
+        proxy = true,
+        peso_base = peso_base,
+        peso_final = peso_final,
+        alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
+        dist = dist,
+        motivo = motivo
+    }
+end
+
 function PrepareWeapon_CustomScoring(self, context, bloqueador)
     local weight, disable, priority = self.Weight, false, self.Priority
     local unit = context.unit
@@ -552,7 +602,7 @@ function PrepareWeapon_CustomScoring(self, context, bloqueador)
         return Max(0, w), false, priority
     end
 
-    local upos, _, _, _, target, _, _, attacker_pos = GetDestArgs(self, context)
+    local upos, _, _, dist, target, _, _, attacker_pos = GetDestArgs(self, context)
 
     ---------------------------------------------------------------------------------------------
     ---- SEM ALVO NO DESTINO. O turno vai acabar sem ataque nenhum, e o AP que sobra nao tem uso
@@ -587,26 +637,26 @@ function PrepareWeapon_CustomScoring(self, context, bloqueador)
     end
 
     local limiar = const.RATOAI.PrepareWeaponMaxHits or 0
-    if limiar <= 0 or hits >= limiar then
+    if limiar <= 0 then
+        return 0, true, false ---- limiar desligado pela constante: atirar ganha, sem opiniao a dar
+    end
+
+    if hits >= limiar then
+        ---- DEBUG (D6): grava mesmo desabilitando -- ver o comentario de RegistrarExpectedMG.
+        ---- Sem isto o campo ficava com o valor de uma chamada anterior (ex.: de um RESTART no
+        ---- mesmo turno), e o motivo do disable ja aparece separado na pagina Acoes (DEBUG D5).
+        RegistrarExpectedMG(context, "R_PrepareWeapon", hits, limiar, weight, 0, target, dist,
+                           string.format("tiro de quadril rende %d.%02d, limiar %d.%02d -- atirar ganha",
+                                        hits / 100, hits % 100, limiar / 100, limiar % 100))
         return 0, true, false ---- o tiro de quadril rende o bastante; atirar ganha
     end
 
     ---- interpolacao linear: quanto mais perto de zero rende o tiro de agora, mais vale preparar
     local w, d, pr = Preparar(MulDivRound(limiar - hits, bonus, limiar))
 
-    if RATOAI_Debug then
-        context.dbg_expected = context.dbg_expected or {}
-        ---- DEBUG (D4): mesmo motivo do MGSetup_CustomScoring -- o numero so se interpreta
-        ---- sabendo contra quem ele foi medido.
-        context.dbg_expected["R_PrepareWeapon"] = {
-            hits = hits,
-            base = limiar,
-            ratio = w,
-            alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
-            motivo = string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
-                                   hits % 100, limiar / 100, limiar % 100)
-        }
-    end
+    RegistrarExpectedMG(context, "R_PrepareWeapon", hits, limiar, weight, w, target, dist,
+                       string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
+                                    hits % 100, limiar / 100, limiar % 100))
 
     return w, d, pr
 end
@@ -729,7 +779,15 @@ function MGSetup_CustomScoring(self, context)
     end
 
     local limiar = const.RATOAI.MGSetupMaxHits or 0
-    if limiar <= 0 or hits >= limiar then
+    if limiar <= 0 then
+        return weight, disable, priority ---- limiar desligado pela constante: nada a dizer
+    end
+
+    if hits >= limiar then
+        ---- DEBUG (D6): grava mesmo sem inflar -- ver o comentario de RegistrarExpectedMG.
+        RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, weight, target, dist,
+                           string.format("tiro de pe rende %d.%02d, limiar %d.%02d -- ja rende, sem inflar",
+                                        hits / 100, hits % 100, limiar / 100, limiar % 100))
         return weight, disable, priority ---- o tiro de pe ja rende; nao precisa inflar
     end
 
@@ -737,25 +795,13 @@ function MGSetup_CustomScoring(self, context)
     ---- mais vale montar a MG.
     local bonus = const.RATOAI.MGSetupBonus or 0
     local mult = MulDivRound(limiar - hits, bonus, limiar)
-    weight = MulDivRound(weight, 100 + mult, 100)
+    local peso_final = MulDivRound(weight, 100 + mult, 100)
 
-    if RATOAI_Debug then
-        context.dbg_expected = context.dbg_expected or {}
-        ---- DEBUG (D4): `alvo` e `dist` no cabecalho da linha. Esta CustomScoring nao escolhe
-        ---- alvo -- ela mede o que o `dest_target[upos]` entregou --, entao "rende 0.00" so quer
-        ---- dizer alguma coisa junto com CONTRA QUEM. Ver o mesmo marcador no RATOAI_ExpectedFor.
-        context.dbg_expected["MGSetup"] = {
-            hits = hits,
-            base = limiar,
-            ratio = weight,
-            alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
-            dist = dist,
-            motivo = string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
-                                   hits % 100, limiar / 100, limiar % 100)
-        }
-    end
+    RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, peso_final, target, dist,
+                       string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
+                                    hits % 100, limiar / 100, limiar % 100))
 
-    return Max(0, weight), disable, priority
+    return Max(0, peso_final), disable, priority
 end
 
 ---- "Alguma acao ACIMA desta na lista de signatures esta disponivel agora?" Devolve o action_id
