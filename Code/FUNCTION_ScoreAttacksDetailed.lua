@@ -409,7 +409,7 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
 end
 
 ---------------------------------------------------------------------------------------------------
----- RESULTADO ESPERADO DE UMA ACAO ALTERNATIVA  (flag RATOAI_ExpectedActionScore)
+---- RESULTADO ESPERADO DE UMA ACAO ALTERNATIVA
 ----
 ---- O PROBLEMA. As CustomScoring modulam o peso do preset por uma RAZAO DE CTH --
 ---- "que fracao da minha chance de acerto sobra depois desta penalidade" (o PenaltyScale
@@ -450,9 +450,11 @@ end
 ---- sprocall do AIPlayAttacks engoliu, mas a unidade perdeu a signature action).
 ---- Criar sempre, e nao so com RATOAI_Debug: a flag e recomputada no CombatStart
 ---- (UTIL.lua:40), depois deste load -- decidir aqui pela flag decidiria cedo demais.
-if rawget(_G, "RATOAI_LastExpected") == nil then
-    RATOAI_LastExpected = {}
-end
+---- Criada sempre, sem guarda: `rawget` no _G deste engine nunca acha global nenhuma (ver o
+---- cabecalho de CONSTANTS_AI_source.lua), entao a guarda antiga era decorativa -- e uma tabela
+---- de debug zerada a cada load e o que se quer de qualquer forma.
+---- Global e nao const.RATOAI de proposito: e deposito de DADOS, nao configuracao.
+RATOAI_LastExpected = {}
 
 ---- `body_part` (default "Torso"): a penalidade de tiro localizado entra pelo
 ---- `target_spot_group` do CalcChanceToHit. Sem este parametro, medir um tiro na cabeca
@@ -528,7 +530,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ----
         ---- Por isso o plano e escrito a mao: um ataque, mira maxima, e o unico teste de AP e se
         ---- o custo (que ja e completo) cabe. `paid_stance` = true porque o snipe entra em stance
-        ---- por definicao, e o RATOAI_StanceBias deve credita-lo por isso.
+        ---- por definicao, e o const.RATOAI.StanceBias deve credita-lo por isso.
         -------------------------------------------------------------------------------------------
         ok_calc = true
         if ap >= cost then
@@ -568,11 +570,8 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ----
     ---- Sair AQUI, e nao depois: o AICalcAttacksAndAim e a parte barata (aritmetica de AP, sem
     ---- CTH nenhuma). O caro vem abaixo -- get_recoil mais um CalcChanceToHit por nivel de mira.
-    ----
-    ---- `RATOAI_TargetedNeedsStance = false` volta a avaliar, e ai o tiro do quadril concorre
-    ---- pelo numero que ele realmente vale (baixo) em vez de nao concorrer.
     -----------------------------------------------------------------------------------------------
-    if RATOAI_TargetedNeedsStance and body_part ~= "Torso" and (aims[1] or 0) < 1 then
+    if body_part ~= "Torso" and (aims[1] or 0) < 1 then
         memo[key] = {hits = 0, attacks = 0, motivo = "tiro localizado sem stance -- nao compensa"}
         return 0, 0
     end
@@ -662,7 +661,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
 end
 
 ---------------------------------------------------------------------------------------------------
----- REPLANEJAMENTO DE MIRA POR RESULTADO  (flag RATOAI_AimReplan)
+---- REPLANEJAMENTO DE MIRA POR RESULTADO
 ----
 ---- O QUE ELE CONSERTA. `GetIdealAimLevels` escolhe o nivel de mira por distancia. Ele
 ---- nunca pergunta se DOIS ataques com mira baixa rendem mais que UM com mira alta --
@@ -688,9 +687,6 @@ end
 ---- tocado -- la o GetIdealAimLevels continua mandando sozinho.
 ---------------------------------------------------------------------------------------------------
 function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
-    if not RATOAI_AimReplan then
-        return
-    end
     local plan = context.__ratoai_aim_plan
     if plan and plan.upos == upos and plan.target == target then
         return plan.level
@@ -710,7 +706,7 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
         return
     end
 
-    local margem = RATOAI_AimReplanThreshold or 15
+    local margem = const.RATOAI.AimReplanThreshold or 15
     local best_level, best_hits = heur_level, base_hits
     local dbg_rows = RATOAI_Debug and {}
 
@@ -761,9 +757,6 @@ end
 ---- pergunta e "o tiro localizado rende mais ou menos que so atirar", e o ataque padrao da
 ---- IA nao e localizado.
 function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part)
-    if not RATOAI_ExpectedActionScore then
-        return
-    end
     ---- decide o nivel de mira do ataque padrao ANTES de medi-lo: o denominador tem que
     ---- ser o plano que a unidade vai de fato executar, nao o que a heuristica sugeria.
     RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
@@ -790,7 +783,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     end
 
     -----------------------------------------------------------------------------------------------
-    ---- VIES DE SHOOTING STANCE (RATOAI_StanceBias)
+    ---- VIES DE SHOOTING STANCE (const.RATOAI.StanceBias)
     ----
     ---- Terminar o turno preparado vale AP no turno SEGUINTE -- o proximo ataque nao paga
     ---- stance de novo, e o min_aim ja comeca em 1. Nada disso aparece em "acertos
@@ -807,7 +800,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     ---- LEVE de proposito, como pedido: o default de 8% nao vira desempate sozinho em
     ---- nada que nao esteja ja quase empatado.
     -----------------------------------------------------------------------------------------------
-    local bias = RATOAI_StanceBias or 0
+    local bias = const.RATOAI.StanceBias or 0
     if bias > 0 and not context.unit:HasStatusEffect("shooting_stance") then
         if act_stance then
             hits = MulDivRound(hits, 100 + bias, 100)
@@ -833,7 +826,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     ---- render alguma coisa contra render nada e a maior vantagem que existe, mas ela e
     ---- QUALITATIVA e nao merece um numero arbitrariamente grande so porque a divisao permitiria.
     -----------------------------------------------------------------------------------------------
-    local teto = RATOAI_ExpectedRatioMax or 300
+    local teto = const.RATOAI.ExpectedRatioMax or 300
     local ratio
     if base <= 0 then
         ratio = (hits > 0) and teto or 0

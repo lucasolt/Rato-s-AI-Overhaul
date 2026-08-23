@@ -1,3 +1,31 @@
+---------------------------------------------------------------------------------------------------
+---- CONSTANTES E INTERRUPTORES DO MOD -- todos vivem em `const.RATOAI`.
+----
+---- POR QUE NAO SAO MAIS GLOBAIS SOLTAS. O idioma antigo era
+----     if rawget(_G, "RATOAI_X") == nil then RATOAI_X = <default> end
+---- e ele NAO FUNCIONAVA. Medido no processo vivo: `rawget(_G, "RATOAI_LOSFixes")` devolve nil
+---- mesmo com o global definido, porque neste engine os globais moram atras do `__index` do _G
+---- (e o mesmo mecanismo que produz os "[mod] Ignored assert: Attempt to use an undefined
+---- global"). Ou seja, a condicao era SEMPRE verdadeira e o valor era resetado ao default em
+---- todo load -- a intencao de "deixar o usuario pre-definir" nunca valeu um dia.
+----
+---- `const` e uma tabela comum: `const.RATOAI.X` le e escreve normal, no console e no DAP, e o
+---- teste `== nil` volta a significar o que diz.
+----
+---- REGRA: nao criar global nova para constante nem para interruptor. Nem com rawget, nem sem.
+---- Ficam de fora, e cada uma tem motivo proprio:
+----   RATOAI_Debug       -- nao e constante, e estado recomputado no CombatStart, e e lido em
+----                         laco quente como `local dbg = RATOAI_Debug`. Ver UTIL.lua.
+----   RATOAI_LastExpected -- deposito de DADOS de debug, nao configuracao.
+---- (A valvula do debug, antes RATOAI_DebugForce, MUDOU para const.RATOAI.DebugForce -- ela era
+----  lida com rawget e portanto nunca enxergou nada digitado no console. Ver B32 em UTIL.lua.)
+---------------------------------------------------------------------------------------------------
+const.RATOAI = const.RATOAI or {}
+
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 -- const.AIDecisionThreshold = 80 -- targets/locations up to this percent of max scored target/location can be selected
 -- const.AIPointBlankTargetMod = 50 -- targets in point-blank range get +50% score
 -- const.AIFallbackWeight_OpenDoor = 100
@@ -13,32 +41,6 @@
 -- const.AIFriendlyFire_LOFConeFar = 300 * guic -- same as above for cone attacks (far side of the cone, positioned at AIFriendlyFire_MaxRange)
 -- const.AIFriendlyFire_ScoreMod = 50 -- % of damage score evaluation remanining when an ally is in danger
 -- const.AIShootAboveCTH = 0
----------------------------------------------------------------------------------------------------
----- INTERRUPTOR MESTRE DAS CORRECOES DE LOS
-----
----- `RATOAI_LOSFixes = false` no console devolve as tres intervencoes de linha de visao ao
----- comportamento anterior NA HORA -- sem recarregar mod, sem sair do combate. Existe para
----- fazer A/B de bug intermitente, que e o unico jeito de saber se um deles e a causa.
-----
----- O que ele desliga:
-----   B25   SOURCE_AIFindDestinations.lua        -- destino empacotado Prone p/ PrefStance=Prone
-----   B26   SOURCE_AIPrecalcConeTargetZones.lua  -- cone da MG medido deitado
-----   B27   AIPOLICYPOS_MGSetupPosScore.lua      -- portao de LOS + verificacao por inimigo
-----   B29c  AIPOLICYPOS_MGSetupPosScore.lua      -- raio que confirma o aliado no cone
-----   B29e  AIPOLICYPOS_MGSetupAP.lua            -- chave Prone na consulta ao cache de LOS
-----
----- Os interruptores individuais continuam valendo (RATOAI_PronePackDests,
----- RATOAI_ConeStanceLOS, e as propriedades RequireLOS / VerifyLOS da policy). O mestre tem
----- PRECEDENCIA: com ele em false, os individuais nao importam.
-----
----- O que ele NAO desliga: a policy em si (a nota por aglomerado no cone continua saindo, so
----- que por geometria pura, sem checar linha) e o reajuste de alvo pos-MGSetup do
----- REACTIONS_StopMGPackingUp.lua, que tem interruptor proprio (RATOAI_MGRetargetAfterSetup)
----- por ser bug de OUTRA familia -- alvo fora do cone, nao linha de visao.
----------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_LOSFixes") == nil then
-    RATOAI_LOSFixes = true
-end
 
 ---------------------------------------------------------------------------------------------------
 ---- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
@@ -63,18 +65,18 @@ end
 ---- Nao ha joelho: e ~1,2 ponto por tile. Entao o corte e escolha de projeto, nao um otimo que
 ---- da para derivar -- por isso e parametro, e por isso o default nao muda nada.
 ----
-----   RATOAI_MGConeRangePct    -- % do max_range do cone. 100 = comportamento de hoje.
+----   const.RATOAI.MGConeRangePct    -- % do max_range do cone. 100 = comportamento de hoje.
 ----                               60 no MG42 da ~23 tiles e derruba o teto de penalidade de
 ----                               -47 para -36, ainda cobrindo mais que o dobro do cone que o
 ----                               Grizzly plantou.
-----   RATOAI_MGConeRangeTiles  -- teto ABSOLUTO em tiles, aplicado depois da porcentagem.
+----   const.RATOAI.MGConeRangeTiles  -- teto ABSOLUTO em tiles, aplicado depois da porcentagem.
 ----                               0 = sem teto. Util para nivelar armas de WeaponRange
 ----                               diferente (RPD_1 = 44, MG42 = 38) num mesmo alcance de
 ----                               engajamento.
 ----
 ---- Piso fixo de 8 tiles, para nenhum ajuste transformar o cone em nada.
 ----
----- Os dois sao globais de propriedade: `RATOAI_MGConeRangePct = 60` no console vale na hora,
+---- Os dois sao globais de propriedade: `const.RATOAI.MGConeRangePct = 60` no console vale na hora,
 ---- sem recarregar mod, que e como se afina numero desse tipo.
 ----
 ---- >>> O LADO DA ACAO SO VALE COM O SOURCE_AIPrecalcConeTargetZones.lua REGISTRADO. <<<
@@ -83,11 +85,11 @@ end
 ---- parametro muda so a NOTA dos tiles (AIPolicyMGSetupPosScore), e o cone continua sendo
 ---- plantado no maximo. O B26 esta no mesmo barco.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_MGConeRangePct") == nil then
-    RATOAI_MGConeRangePct = 70
+if const.RATOAI.MGConeRangePct == nil then
+    const.RATOAI.MGConeRangePct = 70
 end
-if rawget(_G, "RATOAI_MGConeRangeTiles") == nil then
-    RATOAI_MGConeRangeTiles = 0
+if const.RATOAI.MGConeRangeTiles == nil then
+    const.RATOAI.MGConeRangeTiles = 0
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -115,12 +117,12 @@ function RATOAI_MGConeRange(unit, weapon, params)
         max_r = Min(max_r, Min(unit:GetSightRadius(), weapon:GetMaxRange()))
     end
 
-    local pct = RATOAI_MGConeRangePct or 100
+    local pct = const.RATOAI.MGConeRangePct or 100
     if pct > 0 and pct < 100 then
         max_r = MulDivRound(max_r, pct, 100)
     end
 
-    local cap = (RATOAI_MGConeRangeTiles or 0) * const.SlabSizeX
+    local cap = (const.RATOAI.MGConeRangeTiles or 0) * const.SlabSizeX
     if cap > 0 then
         max_r = Min(max_r, cap)
     end
@@ -133,27 +135,20 @@ function RATOAI_MGConeRange(unit, weapon, params)
 end
 
 ---------------------------------------------------------------------------------------------------
----- ESCOLHA DE ACAO POR RESULTADO ESPERADO (RATOAI_ExpectedActionScore)
+---- ESCOLHA DE ACAO POR RESULTADO ESPERADO
 ----
 ---- Liga o RATOAI_ExpectedRatio (FUNCTION_ScoreAttacksDetailed.lua) nas CustomScoring: em vez
 ---- de modular o peso do preset por uma razao de CTH ("quanto esta penalidade doi"), modula
 ---- pela razao entre os ACERTOS ESPERADOS da acao e os do ataque padrao ("quanto ela rende").
-----
----- Em false, cada CustomScoring volta byte a byte ao caminho antigo -- o ramo novo e um
----- `elseif` guardado, nao uma substituicao. Serve para comparar os dois lado a lado no mesmo
----- combate: `RATOAI_ExpectedActionScore = false` pelo console/DAP entre dois turnos.
 ----
 ---- Hoje so a AutoFire_CustomScoring usa. As outras (Pindown, Overwatch, SingleShotTargeted,
 ---- MobileAttack) continuam no PenaltyScale de proposito: elas pagam AP por efeito que nao e
 ---- dano -- supressao, interrupcao no turno inimigo, debuff de membro -- e acertos esperados
 ---- sozinho ordena mal essas tres. Ver a ressalva no cabecalho do RATOAI_ExpectedFor.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_ExpectedActionScore") == nil then
-    RATOAI_ExpectedActionScore = true
-end
 
 ---------------------------------------------------------------------------------------------------
----- REPLANEJAMENTO DE MIRA POR RESULTADO (RATOAI_AimReplan / RATOAI_AimReplanThreshold)
+---- REPLANEJAMENTO DE MIRA POR RESULTADO (const.RATOAI.AimReplanThreshold)
 ----
 ---- Liga o RATOAI_EnsureAimPlan: uma vez por turno, no destino e alvo ja escolhidos, o nivel de
 ---- mira do ataque padrao passa a ser escolhido pelos acertos esperados em vez de pela heuristica
@@ -164,19 +159,14 @@ end
 ---- CRITICO que a mira compra (o reset de pilhas de recoil do nivel 3 ele enxerga), entao errar
 ---- para o lado de mirar mais e o erro barato. Subir o numero deixa o replan mais conservador;
 ---- 0 o torna um otimizador puro, que converge para spray e nao e o que se quer.
-----
----- Em false, o GetIdealAimLevels volta a mandar sozinho e o ramo de sobrescrita do
----- AICalcAttacksAndAim nem e alcancado.
+
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_AimReplan") == nil then
-    RATOAI_AimReplan = true
-end
-if rawget(_G, "RATOAI_AimReplanThreshold") == nil then
-    RATOAI_AimReplanThreshold = 15
+if const.RATOAI.AimReplanThreshold == nil then
+    const.RATOAI.AimReplanThreshold = 15
 end
 
 ---------------------------------------------------------------------------------------------------
----- VIES DE SHOOTING STANCE (RATOAI_StanceBias, em pontos percentuais)
+---- VIES DE SHOOTING STANCE (const.RATOAI.StanceBias, em pontos percentuais)
 ----
 ---- Terminar o turno com a arma preparada vale AP no turno SEGUINTE: o proximo ataque nao paga
 ---- stance outra vez e o min_aim ja comeca em 1. "Acertos esperados" e um estimador de UM turno
@@ -186,12 +176,12 @@ end
 ---- preparada. Se as duas pontas preparam (ou nenhuma prepara) ele se cancela sozinho.
 ---- 0 desliga. Deliberadamente pequeno: e desempate, nao argumento.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_StanceBias") == nil then
-    RATOAI_StanceBias = 8
+if const.RATOAI.StanceBias == nil then
+    const.RATOAI.StanceBias = 8
 end
 
 ---------------------------------------------------------------------------------------------------
----- TERMOS DE PARTE DO CORPO (RATOAI_BodyPartEffectBonus, em pontos percentuais)
+---- TERMOS DE PARTE DO CORPO (const.RATOAI.BodyPartEffectBonus, em pontos percentuais)
 ----
 ---- Tiro localizado SEMPRE paga CTH a mais e ganha outra coisa em troca. A parte NUMERICA dessa
 ---- troca ja vem do jogo e nao precisa ser inventada -- `Presets.TargetBodyPart.Default[x]`
@@ -215,19 +205,12 @@ end
 ---- turno seguinte, que este estimador nao simula. Sao desempates, nao argumentos: nenhum deles
 ---- inverte sozinho uma diferenca grande de acertos esperados.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_BodyPartEffectBonus") == nil then
-    RATOAI_BodyPartEffectBonus = {
-        Head = 10,
-        Neck = 20,
-        Groin = 15,
-        Arms = 20,
-        Legs = 35,
-        Torso = 0,
-    }
+if const.RATOAI.BodyPartEffectBonus == nil then
+    const.RATOAI.BodyPartEffectBonus = {Head = 10, Neck = 20, Groin = 15, Arms = 20, Legs = 35, Torso = 0}
 end
 
 ---------------------------------------------------------------------------------------------------
----- SNIPE / PINDOWN (RATOAI_SnipeDistBonus, RATOAI_SnipeStuckBonus)
+---- SNIPE / PINDOWN (const.RATOAI.SnipeDistBonus, const.RATOAI.SnipeStuckBonus)
 ----
 ---- ATENCAO ao nome: no GBO3 a acao `PinDown` NAO suprime. Ela estende bastante o alcance da arma
 ---- e deixa o tiro muito acurado -- e um SNIPE. O scoring antigo tratava como supressao (bonus
@@ -248,37 +231,31 @@ end
 ---- alcance, ignora cobertura baixa). Somar uma rampa por cima seria contar a mesma vantagem
 ---- duas vezes -- e o vies embutido no insumo e melhor que o coeficiente colado na saida.
 ---- Sobe para 2 ou 3 se em campo o snipe nunca disparar.
-if rawget(_G, "RATOAI_SnipeDistBonus") == nil then
-    RATOAI_SnipeDistBonus = 0 ---- % por tile alem do close range
+if const.RATOAI.SnipeDistBonus == nil then
+    const.RATOAI.SnipeDistBonus = 0 ---- % por tile alem do close range
 end
-if rawget(_G, "RATOAI_SnipeDistBonusMax") == nil then
-    RATOAI_SnipeDistBonusMax = 45 ---- teto do bonus de distancia
+if const.RATOAI.SnipeDistBonusMax == nil then
+    const.RATOAI.SnipeDistBonusMax = 45 ---- teto do bonus de distancia
 end
-if rawget(_G, "RATOAI_SnipeStuckBonus") == nil then
-    RATOAI_SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
+if const.RATOAI.SnipeStuckBonus == nil then
+    const.RATOAI.SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
 end
 
 ---------------------------------------------------------------------------------------------------
----- TIRO LOCALIZADO SO COM STANCE (RATOAI_TargetedNeedsStance)
+---- TIRO LOCALIZADO SO COM STANCE
 ----
 ---- Criterio de EFICIENCIA, nao limitacao de engine -- a distincao importa para quem for mexer
 ---- nisto depois. Nada impede a unidade de mirar a cabeca do quadril; o que acontece e que a
 ---- penalidade da parte do corpo (Head -40) empilha na penalidade de hipfire e o resultado nao
 ---- compete com nada. Entao, se a unidade nao vai entrar em stance, nem se gasta o calculo.
-----
----- Em false, o tiro localizado do quadril volta a ser avaliado e concorre pelo numero que
----- realmente vale -- que e baixo. A diferenca pratica e "nao aparece" contra "aparece com peso
----- ruim"; a segunda e mais honesta e a primeira e mais barata.
+
 ----
 ---- NAO se aplica ao PinDown: o custo dele ja embute a stance (GBO3 COMBAT_ACTIONS.lua:455),
 ---- entao o teste de AP normal ja resolve.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_TargetedNeedsStance") == nil then
-    RATOAI_TargetedNeedsStance = true
-end
 
 ---------------------------------------------------------------------------------------------------
----- TETO DA RAZAO DE RESULTADO ESPERADO (RATOAI_ExpectedRatioMax)
+---- TETO DA RAZAO DE RESULTADO ESPERADO (const.RATOAI.ExpectedRatioMax)
 ----
 ---- A razao multiplica o `Weight` do preset, entao ela e um FATOR e nao uma nota -- sem teto, um
 ---- denominador pequeno vira peso arbitrariamente grande. Duas situacoes reais:
@@ -291,6 +268,35 @@ end
 ---- (a acao e melhor) e passa a ser qualitativa (a outra nao funciona) -- e vantagem qualitativa
 ---- nao deve virar numero grande, so o maior numero.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_ExpectedRatioMax") == nil then
-    RATOAI_ExpectedRatioMax = 300
+if const.RATOAI.ExpectedRatioMax == nil then
+    const.RATOAI.ExpectedRatioMax = 300
+end
+
+---------------------------------------------------------------------------------------------------
+---- PREPARAR ARMA EM VEZ DE ATIRAR MAL (RATOAI_PrepareWeapon*)
+----
+---- Situacao: sobra AP para UM tiro de quadril e mais nada. O tiro sai com mira 0, a penalidade de
+---- hipfire come a CTH, e o turno acaba com a arma despreparada -- entao o turno SEGUINTE tambem
+---- comeca pagando stance. Preparar agora troca um tiro ruim por um turno inteiro de tiros bons.
+----
+---- `MaxHits` e o limiar de "tiro ruim", em acertos esperados x100 (a mesma unidade do
+---- dest_hit_score): 40 = 0.40 acerto. Acima disso o tiro de quadril ja vale a pena e a acao e
+---- desabilitada -- preparar nunca deve competir com um tiro que rende.
+----
+---- `Bonus` e quanto o peso sobe quando o tiro de agora rende ZERO, interpolado linearmente ate 0
+---- no limiar. Com 150: 0.00 acerto -> x2.5 no peso; 0.40 acerto -> x1.0.
+----
+---- `BoltBonus` e o extra para arma de ferrolho. Dois motivos, e os dois sao mecanicos e nao de
+---- gosto: (1) o ferrolho entra no custo do disparo (AICalcAttacksAndAim:237-250), entao ela cai
+---- neste cenario com mais frequencia que as outras; (2) disparar deixa a arma por ciclar, e o
+---- ciclo e cobrado do proximo tiro -- o tiro ruim de hoje encarece o tiro bom de amanha.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.PrepareWeaponMaxHits == nil then
+    const.RATOAI.PrepareWeaponMaxHits = 40
+end
+if const.RATOAI.PrepareWeaponBonus == nil then
+    const.RATOAI.PrepareWeaponBonus = 150
+end
+if const.RATOAI.PrepareWeaponBoltBonus == nil then
+    const.RATOAI.PrepareWeaponBoltBonus = 160
 end

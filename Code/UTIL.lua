@@ -16,12 +16,17 @@
 ---- `local dbg = RATOAI_Debug` por chamada e nao pode pagar uma chamada de funcao.
 ---- So o momento da avaliacao mudou.
 ----
----- `RATOAI_DebugForce = true/false` no console trava o valor; nil (o default, por nao
----- existir) volta ao automatico. Sem essa valvula, ligar `RATOAI_Debug` a mao seria
+---- `const.RATOAI.DebugForce = true/false` no console trava o valor; nil (o default) volta
+---- ao automatico. Sem essa valvula, ligar `RATOAI_Debug` a mao seria
 ---- desfeito na proxima recomputacao -- e a recomputacao acontece no CombatStart,
 ---- exatamente quando se esta tentando depurar.
+---- BUGFIX (B32): a valvula estava quebrada pelo mesmo motivo do idioma antigo de constantes.
+---- `rawget(_G, "RATOAI_DebugForce")` NAO ve um global setado pelo console, porque neste engine
+---- os globais moram atras do `__index` do _G -- ou seja, digitar `RATOAI_DebugForce = true` no
+---- console nunca teve efeito nenhum. Agora mora em const.RATOAI, que e tabela comum e le e
+---- escreve normal. Ver o cabecalho de CONSTANTS_AI_source.lua.
 function RATOAI_RecomputeDebugFlag()
-    local forced = rawget(_G, "RATOAI_DebugForce")
+    local forced = const.RATOAI and const.RATOAI.DebugForce
     if forced ~= nil then
         RATOAI_Debug = forced and true or false
         return

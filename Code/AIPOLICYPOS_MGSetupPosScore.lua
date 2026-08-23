@@ -415,12 +415,11 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
     ---- Interruptor mestre (CONSTANTS_AI_source.lua). Em false, a policy volta a pontuar por
     ---- geometria pura -- que e o comportamento a comparar quando se esta cacando bug
     ---- intermitente.
-    local los_fixes = rawget(_G, "RATOAI_LOSFixes") ~= false
 
     local prone_idx = StancesList.Prone
     local prone_key = (stance_idx == prone_idx) and dest or stance_pos_pack(x, y, z, prone_idx)
 
-    if self.RequireLOS and los_fixes and g_AIDestEnemyLOSCache then
+    if self.RequireLOS and g_AIDestEnemyLOSCache then
         local los = g_AIDestEnemyLOSCache[prone_key]
         if los == nil then
             los = g_AIDestEnemyLOSCache[dest]
@@ -482,7 +481,7 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
     ---- Um raio por inimigo do anel, deitado, deste tile. Sem isto a contagem e geometria pura e
     ---- premia a borda de obstaculo: linha para um inimigo, credito por todos.
     ---------------------------------------------------------------------------------------------
-    if self.VerifyLOS and los_fixes then
+    if self.VerifyLOS then
         local seen = RATOAI_MGVerifyLOS(context, prone_key, ring_packed, self.MaxLOSChecks)
         if seen then
             local kept = 0
@@ -535,7 +534,7 @@ function AIPolicyMGSetupPosScore:EvalDest(context, dest, grid_voxel)
             end
         end
 
-        if nc > 0 and self.VerifyLOS and los_fixes then
+        if nc > 0 and self.VerifyLOS then
             local seen = RATOAI_MGVerifyLOS(context, prone_key, cand_packed, self.MaxLOSChecks,
                                             "ally")
             if seen then

@@ -18,7 +18,7 @@ local function PenaltyScale(cth, penalty)
 end
 
 ---------------------------------------------------------------------------------------------------
----- PESO POR RESULTADO ESPERADO, COM PORTAO DE AP E FALLBACK  (RATOAI_ExpectedActionScore)
+---- PESO POR RESULTADO ESPERADO, COM PORTAO DE AP E FALLBACK
 ----
 ---- Substitui a modulacao por RAZAO DE CTH (o PenaltyScale acima, "quanto esta penalidade doi")
 ---- pela razao entre os ACERTOS ESPERADOS da acao e os do ataque padrao ("quanto ela rende").
@@ -47,7 +47,7 @@ end
 ----   damage_mod -- do preset do proprio jogo. Head +80, Legs -50. Multiplicar por ele converte
 ----                 "acertos esperados" em "dano esperado", que e a moeda comparavel com o
 ----                 ataque padrao (torso, damage_mod 0). Isto nao e aproximacao.
-----   efeito     -- RATOAI_BodyPartEffectBonus. Este e o grosseiro: critico, desarmar, Slowed,
+----   efeito     -- const.RATOAI.BodyPartEffectBonus. Este e o grosseiro: critico, desarmar, Slowed,
 ----                 ignorar armadura. Sem medicao limpa possivel, porque o valor esta no turno
 ----                 seguinte e este estimador so simula um turno.
 ---------------------------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ function RATOAI_BodyPartMul(body_part)
     end
     local preset = Presets.TargetBodyPart.Default[body_part]
     local mul = 100 + ((preset and preset.damage_mod) or 0)
-    local bonus = (RATOAI_BodyPartEffectBonus or empty_table)[body_part] or 0
+    local bonus = (const.RATOAI.BodyPartEffectBonus or empty_table)[body_part] or 0
     mul = MulDivRound(mul, 100 + bonus, 100)
     return Max(0, mul)
 end
@@ -438,9 +438,9 @@ function Pindown_CustomScoring(self, context)
     ---- longa distancia. Rampa por tile alem do close range (o veto de perto ja aconteceu no
     ---- inicio da funcao), com teto para nao virar argumento sozinho no fim do mapa.
     local close = RATOAI_GetCloseRange()
-    if dist and close and (RATOAI_SnipeDistBonus or 0) > 0 then
+    if dist and close and (const.RATOAI.SnipeDistBonus or 0) > 0 then
         local tiles_alem = Max(0, (dist - close) / const.SlabSizeX)
-        local bonus = Min(RATOAI_SnipeDistBonusMax or 0, tiles_alem * RATOAI_SnipeDistBonus)
+        local bonus = Min(const.RATOAI.SnipeDistBonusMax or 0, tiles_alem * const.RATOAI.SnipeDistBonus)
         weight = MulDivRound(weight, 100 + bonus, 100)
     end
 
@@ -451,7 +451,7 @@ function Pindown_CustomScoring(self, context)
     ---- parecerem obvios. Emplacement/MG sao os mais fortes (a unidade esta literalmente presa na
     ---- arma), mas CONTAR condicoes em vez de pesar cada uma mantem isto no lugar de desempate
     ---- que ele deve ocupar.
-    if target and IsKindOf(target, "Unit") and (RATOAI_SnipeStuckBonus or 0) > 0 then
+    if target and IsKindOf(target, "Unit") and (const.RATOAI.SnipeStuckBonus or 0) > 0 then
         local presos = 0
         for _, ef in ipairs(RATOAI_GetStuckEffects()) do
             if target:HasStatusEffect(ef) then
@@ -463,7 +463,7 @@ function Pindown_CustomScoring(self, context)
             presos = presos + 1
         end
         if presos > 0 then
-            weight = MulDivRound(weight, 100 + Min(3, presos) * RATOAI_SnipeStuckBonus, 100)
+            weight = MulDivRound(weight, 100 + Min(3, presos) * const.RATOAI.SnipeStuckBonus, 100)
         end
     end
 
@@ -481,4 +481,102 @@ function GrenadeLaunchCustomScoring(self, context)
     end
 
     return weight, disable, priority
+end
+
+---------------------------------------------------------------------------------------------------
+---- PREPARAR A ARMA EM VEZ DE ATIRAR MAL  (AIPrepareWeapon / R_PrepareWeapon)
+----
+---- Ligar pelo editor: `CustomScoring` = PrepareWeapon_CustomScoring na AIPrepareWeapon do
+---- arquetipo. Sem isso a acao nao existe na pratica -- ela esta definida em
+---- AIACTION_PrepareWeapon.lua mas nao esta em SignatureActions de arquetipo nenhum.
+----
+---- A PERGUNTA QUE ELA RESPONDE. Sobrou AP para um tiro de quadril e mais nada. Vale atirar?
+---- Quase sempre nao: o tiro sai com mira 0, o hipfire come a CTH, e no fim do turno a arma
+---- continua despreparada -- entao o turno seguinte TAMBEM comeca pagando stance. Preparar troca
+---- um tiro ruim por um turno inteiro de tiros bons.
+----
+---- COMO ELA SABE QUE O TIRO SERIA RUIM. Nao ha estimativa nova aqui: e o mesmo
+---- RATOAI_ExpectedFor do ataque padrao que ja alimenta todas as outras razoes. Dele vem o
+---- `aim1` (o nivel de mira do primeiro disparo do plano) e os acertos esperados. `aim1 == 0` e,
+---- literalmente, "este plano e de quadril" -- e a decisao que o AICalcAttacksAndAim ja tomou ao
+---- ver que nao havia AP para a stance. Repetir esse teste com aritmetica propria seria a segunda
+---- copia da regra, que e o que este arquivo evita desde o B6.
+----
+---- POR QUE NAO E "SE PUDER, PREPARE". Preparar so vale quando atirar NAO vale. Acima do limiar a
+---- acao e desabilitada, e nao apenas despriorizada: um tiro que rende nunca deve concorrer com
+---- nao atirar.
+---------------------------------------------------------------------------------------------------
+function PrepareWeapon_CustomScoring(self, context)
+    local weight, disable, priority = self.Weight, false, self.Priority
+    local unit = context.unit
+
+    ---- ja preparada: nao ha o que preparar
+    if not unit or unit:HasStatusEffect("shooting_stance") then
+        return 0, true, false
+    end
+
+    ---- o teto do vies, usado pelos casos em que atirar rende ZERO. Interpolar de 0 ate o limiar
+    ---- e o caso continuo; estes sao o extremo do mesmo eixo, nao uma regra separada.
+    local bonus = const.RATOAI.PrepareWeaponBonus or 0
+    local function Preparar(mult)
+        local w = MulDivRound(weight, 100 + mult, 100)
+        ---- ferrolho: o tiro de hoje deixa a arma por ciclar e encarece o tiro de amanha
+        if context.weapon and rawget(_G, "rat_canBolt") and rat_canBolt(context.weapon) then
+            w = MulDivRound(w, const.RATOAI.PrepareWeaponBoltBonus or 100, 100)
+        end
+        return Max(0, w), false, priority
+    end
+
+    local upos, _, _, _, target, _, _, attacker_pos = GetDestArgs(self, context)
+
+    ---------------------------------------------------------------------------------------------
+    ---- SEM ALVO NO DESTINO. O turno vai acabar sem ataque nenhum, e o AP que sobra nao tem uso
+    ---- melhor: preparar agora significa que o PROXIMO turno comeca sem pagar stance e com
+    ---- min_aim ja em 1.
+    ---- Nao ha risco de a unidade "deixar de atirar por causa disto": esta e uma signature de
+    ---- NAO-movimento, escolhida depois de o destino estar fechado, e se houvesse alvo ele
+    ---- estaria em dest_target. E o AIPrepareWeapon:PrecalcAction ainda exige um inimigo
+    ---- conhecido (GetClosestEnemy ou um last_attack_pos) para virar disponivel -- sem ninguem
+    ---- para encarar, a acao cai sozinha no IsAvailable.
+    ---------------------------------------------------------------------------------------------
+    if not (upos and target) then
+        return Preparar(bonus)
+    end
+
+    local hits, attacks, aim1 = RATOAI_ExpectedFor(context, context.default_attack, upos, target,
+                                                   attacker_pos)
+    if not hits then
+        return weight, disable, priority ---- nao deu para responder: peso do preset, sem opiniao
+    end
+
+    ---- NENHUM ataque cabe no AP. Mesmo caso do anterior, por outro caminho: sobra AP, nao sai
+    ---- tiro. (`attacks == 0` tambem zera `aim1`, entao este teste tem de vir antes.)
+    if (attacks or 0) <= 0 then
+        return Preparar(bonus)
+    end
+
+    ---- o plano do turno NAO e de quadril: a unidade vai preparar e atirar, ou ja tem stance.
+    ---- Preparar como acao separada seria gastar o AP do proprio tiro.
+    if (aim1 or 0) > 0 then
+        return 0, true, false
+    end
+
+    local limiar = const.RATOAI.PrepareWeaponMaxHits or 0
+    if limiar <= 0 or hits >= limiar then
+        return 0, true, false ---- o tiro de quadril rende o bastante; atirar ganha
+    end
+
+    ---- interpolacao linear: quanto mais perto de zero rende o tiro de agora, mais vale preparar
+    local w, d, pr = Preparar(MulDivRound(limiar - hits, bonus, limiar))
+
+    if RATOAI_Debug then
+        context.dbg_expected = context.dbg_expected or {}
+        context.dbg_expected["R_PrepareWeapon"] = {
+            hits = hits, base = limiar, ratio = w,
+            motivo = string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
+                                   hits % 100, limiar / 100, limiar % 100),
+        }
+    end
+
+    return w, d, pr
 end

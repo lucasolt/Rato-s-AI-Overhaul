@@ -300,7 +300,6 @@ return {
 				'BiasId', "Standard",
 				'OptLocWeight', 80,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
 						'CoverTrust', 80,
@@ -365,6 +364,11 @@ return {
 				'action_id', "AutoFire",
 				'Aiming', "Remaining AP",
 				'AttackTargeting', set( "Torso" ),
+			}),
+			PlaceObj('AIPrepareWeapon', {
+				'CustomScoring', function (self, context)
+					return PrepareWeapon_CustomScoring(self, context)
+				end,
 			}),
 			PlaceObj('AIConeAttack', {
 				'BiasId', "Overwatch",
@@ -469,6 +473,12 @@ return {
 				'MinDist', 7000,
 				'LimitRange', true,
 				'MaxTargetRange', 35,
+			}),
+			PlaceObj('AIAttackSingleTarget', {
+				'CustomScoring', function (self, context)
+					return SingleShotTargeted_CustomScoring(self, context)
+				end,
+				'AttackTargeting', set( "Torso" ),
 			}),
 		},
 		TargetScoreRandomization = 10,
@@ -837,6 +847,11 @@ return {
 					return Pindown_CustomScoring(self, context)
 				end,
 			}),
+			PlaceObj('AIPrepareWeapon', {
+				'CustomScoring', function (self, context)
+					return PrepareWeapon_CustomScoring(self, context)
+				end,
+			}),
 			PlaceObj('AIActionPinDown', {
 				'BiasId', "PinDownAttack",
 				'Weight', 80,
@@ -932,6 +947,7 @@ return {
 		id = "RATOAI_Sniper",
 	}),
 	PlaceObj('ModItemAIArchetype', {
+		BaseAttackWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'Weight', 200,
@@ -947,7 +963,8 @@ return {
 						'SoftK', 100,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 80,
+						'Weight', 140,
+						'MaxThreat', 8,
 						'CoverTrust', 50,
 						'PlateauTiles', 0,
 						'MeleeRange', 10,
@@ -962,7 +979,8 @@ return {
 				'SignatureActions', {
 					PlaceObj('AIActionMGBurstFire', {
 						'CustomScoring', function (self, context)
-							return AutoFire_CustomScoring(self, context)
+							--return AutoFire_CustomScoring(self, context)
+							return self.Weight, self.Priority
 						end,
 						'Aiming', "Remaining AP",
 						'AttackTargeting', set( "Torso" ),
@@ -1038,17 +1056,16 @@ return {
 		},
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 150,
-				'Falloff', 6,
-			}),
-			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 80,
+				'Weight', 135,
+				'RangeMax', 30,
+				'Falloff', 4,
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 50,
+				'Weight', 25,
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyMGSetupPosScore', {
+				'Weight', 130,
 				'RequireLOS', false,
 				'AllyPenalty', 0,
 			}),

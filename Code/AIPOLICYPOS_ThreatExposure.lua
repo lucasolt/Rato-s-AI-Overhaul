@@ -1,3 +1,7 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 ---------------------------------------------------------------------------------------------------
 ---- AIPolicyThreatExposure
 ----
@@ -48,7 +52,7 @@ DefineClass.AIPolicyThreatExposure = {
             name = "Ameaca de saturacao",
             help = "Quantos inimigos colados equivalem a penalidade cheia. 3 = tres inimigos " ..
                 "a queima-roupa, ou seis a meio alcance.\n" ..
-                "0 = usar a constante compartilhada RATOAI_ThreatSaturation (recomendado). " ..
+                "0 = usar a constante compartilhada const.RATOAI.ThreatSaturation (recomendado). " ..
                 "Um valor proprio aqui SO faz sentido se a Seek Cover deste archetype " ..
                 "estiver com ThreatRelative = 0; caso contrario as duas normalizam " ..
                 "diferente e o cancelamento entre cobertura e exposicao quebra sem aviso.",
@@ -197,12 +201,12 @@ end
 
 ---- Saturacao efetiva. MaxThreat = 0 (default) usa a constante compartilhada, que e o
 ---- que mantem esta policy e a Seek Cover na MESMA normalizacao -- pre-requisito para o
----- cancelamento entre cobertura e exposicao. Ver o cabecalho de RATOAI_ThreatSaturation
+---- cancelamento entre cobertura e exposicao. Ver o cabecalho de const.RATOAI.ThreatSaturation
 ---- em AIPOLICYPOS_CustomSeekCover.lua.
 function AIPolicyThreatExposure:GetSaturation()
     local n = self.MaxThreat
     if not n or n <= 0 then
-        n = rawget(_G, "RATOAI_ThreatSaturation") or 3
+        n = const.RATOAI.ThreatSaturation or 3
     end
     return 100 * Max(1, n)
 end
@@ -274,13 +278,13 @@ end
 ---------------------------------------------------------------------------------------------------
 ---- DIAGNOSTICO
 ----
----- `RATOAI_ThreatDebug = true` no console faz cada destino guardar o passo a passo em
+---- `const.RATOAI.ThreatDebug = true` no console faz cada destino guardar o passo a passo em
 ---- context.dest_threat_exposure_debug[dest], que o DEBUG.lua mostra no rollover do
 ---- voxel. Desligado, custa uma leitura de global por destino e nada mais.
 ---- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_ThreatDebug") == nil then
-    RATOAI_ThreatDebug = false
+if const.RATOAI.ThreatDebug == nil then
+    const.RATOAI.ThreatDebug = false
 end
 
 local function tiles(d)
@@ -292,7 +296,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         return 0
     end
 
-    local dbg = RATOAI_ThreatDebug and {} or nil
+    local dbg = const.RATOAI.ThreatDebug and {} or nil
 
     ---- Portao de LOS. Distingue `false` (o motor CHECOU e ninguem ve) de `nil` (nunca
     ---- checou -- destino fora de all_destinations). Tratar nil como "sem LOS" zeraria

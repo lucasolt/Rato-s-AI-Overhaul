@@ -1,3 +1,7 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 ---------------------------------------------------------------------------------------------------
 ---- Override de AIFindDestinations (source: CombatAI.lua:645-717).
 ----
@@ -7,7 +11,7 @@
 ---- definiu. O WEIGHTS_AUDIT.md ja registrava isso na secao B8. Ou seja: quem roda hoje e o
 ---- AIFindDestinations do vanilla, sem nenhuma alteracao do mod.
 ----
----- Este arquivo repoe a funcao com UMA mudanca isolada (RATOAI_CrouchTrigger abaixo).
+---- Este arquivo repoe a funcao com UMA mudanca isolada (const.RATOAI.CrouchTrigger abaixo).
 ---- O AIFindOptimalLocation, que tambem esta comentado la, NAO foi reposto -- ele parecia
 ---- identico ao vanilla, mas isso nao foi diffado linha a linha.
 ----
@@ -38,18 +42,15 @@
 ----  a reserva existe so no orcamento do planejamento. Fechar essa folga exige sobrescrever
 ----  AIBehavior:EndMovement; ver o relatorio CROUCH_REPORT.md.)
 ---------------------------------------------------------------------------------------------------
-RATOAI_CrouchTrigger = rawget(_G, "RATOAI_CrouchTrigger") or "any_cover"
+const.RATOAI.CrouchTrigger = const.RATOAI.CrouchTrigger or "any_cover"
 
 ---------------------------------------------------------------------------------------------------
 ---- Empacotar o destino na PrefStance quando ela e Prone -- ver o bloco BUGFIX (B25) abaixo.
 ---- Global para dar como desligar no console se aparecer efeito colateral em campo.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_PronePackDests") == nil then
-    RATOAI_PronePackDests = true
-end
 
 local function RATOAI_WantsCrouch(cover_low, cover_high)
-    local mode = RATOAI_CrouchTrigger
+    local mode = const.RATOAI.CrouchTrigger
     if mode == "always" then
         return true
     end
@@ -125,11 +126,7 @@ function AIFindDestinations(unit, context)
     local prone_idx = StancesList.Prone
     local pref_idx = context.archetype and StancesList[context.archetype.PrefStance] or 0
 
-    ---- Interruptor mestre (CONSTANTS_AI_source.lua): RATOAI_LOSFixes = false desliga o passe
-    ---- junto com o B26 e os portoes da AIPolicyMGSetupPosScore, para A/B de bug intermitente.
-    local los_fixes = rawget(_G, "RATOAI_LOSFixes") ~= false
-    local prone_pass = los_fixes and (pref_idx == prone_idx) and RATOAI_PronePackDests and true or
-                           false
+    local prone_pass = (pref_idx == prone_idx)
 
     if prone_pass then
         for i, dest in ipairs(destinations) do

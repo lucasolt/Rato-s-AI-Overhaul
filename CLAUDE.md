@@ -76,6 +76,23 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
   inteiros: `MulDivRound(valor, pct, 100)`.
   Corolário: guardas do tipo `x = x - x % 1` ("tira a parte fracionária") são no-op depois
   de uma divisão inteira — não escreva, e desconfie das que encontrar.
+- **Constantes e interruptores vivem em `const.RATOAI`, nunca em global solta.**
+  O idioma antigo — `if rawget(_G, "RATOAI_X") == nil then RATOAI_X = <default> end` — **não
+  funcionava**: medido no processo vivo, `rawget(_G, ...)` devolve `nil` mesmo com o global
+  definido, porque neste engine os globais moram atrás do `__index` do `_G` (é o mesmo mecanismo
+  dos `[mod] Ignored assert: Attempt to use an undefined global`). A condição era sempre
+  verdadeira, o valor era resetado ao default em todo load, e o "deixe o usuário pré-definir"
+  nunca valeu um dia. Pior, valia para leitura também: a válvula `RATOAI_DebugForce` digitada no
+  console nunca foi enxergada (BUGFIX B32).
+  `const` é tabela comum — `const.RATOAI.X` lê e escreve normal, no console e no DAP, e o teste
+  `== nil` volta a significar o que diz. Definições ficam junto do código que afetam (com
+  `const.RATOAI = const.RATOAI or {}` no topo do arquivo); só os tunables gerais moram no
+  `CONSTANTS_AI_source.lua`.
+  Exceção única e documentada: `RATOAI_Debug` (estado recomputado no `CombatStart` e lido em laço
+  quente como `local dbg = RATOAI_Debug`) e `RATOAI_LastExpected` (depósito de dados, não config).
+- **Criar global em runtime é erro de execução.** O engine só permite no load — em runtime levanta
+  `Attempt to create a new global` e derruba a ação em curso. Global nova se declara no escopo do
+  arquivo; `rawset(_G, ...)` contorna o `__newindex` mas é gambiarra, não solução.
 - Marcadores de rastreio no código: `---- PERF (Cx)`, `BUGFIX (Bn)` e `DEBUG (Dn)` —
   referenciam `PERF_CHANGES.md`, `WEIGHTS_AUDIT.md` e a seção 10 do `AI_SYSTEM_GUIDE.md`.
   Manter o padrão ao aplicar novas mudanças; conferir o maior número já usado antes de

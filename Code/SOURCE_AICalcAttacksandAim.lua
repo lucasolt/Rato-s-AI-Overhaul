@@ -1,3 +1,7 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 local debug = false
 
 ---------------------------------------------------------------------------------------------------
@@ -15,10 +19,10 @@ local debug = false
 ---- limiar ser uma aproximacao honesta do ponto de virada (calculado em ~7-8 tiles para
 ---- as armas da amostra).
 ----
----- `RATOAI_HipfireMaxDist = 0` desliga e volta ao comportamento antigo (sempre preparar).
+---- `const.RATOAI.HipfireMaxDist = 0` desliga e volta ao comportamento antigo (sempre preparar).
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_HipfireMaxDist") == nil then
-    RATOAI_HipfireMaxDist = const.Weapons.PointBlankRange
+if const.RATOAI.HipfireMaxDist == nil then
+    const.RATOAI.HipfireMaxDist = const.Weapons.PointBlankRange
 end
 
 ---- numero de disparos que o laco `for i = 1, n` de fato executa
@@ -33,7 +37,7 @@ end
 ---- (AppData/Roaming/Jagged Alliance 3/logs/). A versao anterior eram 13 `print`
 ---- separados por par (destino, alvo) -- milhares de linhas por turno, ilegivel e caro.
 ----
----- `RATOAI_AimDebugUnit = "413"` (qualquer trecho do session_id) filtra para uma
+---- `const.RATOAI.AimDebugUnit = "413"` (qualquer trecho do session_id) filtra para uma
 ---- unidade so. Sem filtro, sai tudo.
 ----
 ---- Campos que respondem a pergunta do free move:
@@ -51,7 +55,7 @@ end
 local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                                    bolting_cost, min_aim, desired, has_stance, has_stance_ap,
                                    attacks, aims, surcharge_fn)
-    local filt = rawget(_G, "RATOAI_AimDebugUnit")
+    local filt = const.RATOAI.AimDebugUnit
     if filt and not tostring(unit.session_id):find(tostring(filt), 1, true) then
         return
     end
@@ -147,6 +151,10 @@ end
 ---- orcamento do default_attack e responderia sempre a mesma coisa.
 ---------------------------------------------------------------------------------------------------
 function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_override)
+
+    ---- o AP como ele CHEGOU, antes das mordidas de free move e ferrolho la embaixo. E o que o
+    ---- RATOAI_TryDegradeToSingleShot precisa para refazer o plano do zero.
+    local ap_in = ap
 
     ------- Fix for min aim
     local unit = context.unit
@@ -283,8 +291,8 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     ---- esta mesma funcao (`args.aim = aim[i]`), e com aim 0 fora de stance o custo real
     ---- cai em `GetHipfire_StanceAP`, que devolve 0. A conta fecha dos dois lados.
     -----------------------------------------------------------------------------------
-    if has_stance_ap and stance_cost > 0 and target_dist and (RATOAI_HipfireMaxDist or 0) > 0 and
-        target_dist <= RATOAI_HipfireMaxDist * const.SlabSizeX then
+    if has_stance_ap and stance_cost > 0 and target_dist and (const.RATOAI.HipfireMaxDist or 0) > 0 and
+        target_dist <= const.RATOAI.HipfireMaxDist * const.SlabSizeX then
         local n_prep = RATOAI_ShotsOf(Min(context.max_attacks, Max(0, ap - stance_cost) / cost))
         local n_hip = RATOAI_ShotsOf(Min(context.max_attacks, ap / cost))
         if n_hip > n_prep then
@@ -303,7 +311,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     local desired_aim_level = GetIdealAimLevels(context, target_dist, max_aim, min_aim)
 
     ---------------------------------------------------------------------------------------
-    ---- RATOAI_AimReplan: nivel desejado decidido por RESULTADO em vez de heuristica.
+    ---- Nivel desejado decidido por RESULTADO em vez de heuristica.
     ----
     ---- `GetIdealAimLevels` escolhe por distancia e nunca compara "N ataques com mira
     ---- baixa" contra "M ataques com mira alta". Medido em campo, o nivel otimo muda com
@@ -361,10 +369,19 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
                                 bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
                                 num_atks, aims)
         end
-        ---- 3o retorno (RATOAI_StanceBias): este plano PAGA a stance, ou seja a unidade
+        ---- 3o retorno (const.RATOAI.StanceBias): este plano PAGA a stance, ou seja a unidade
         ---- termina o turno preparada. Vale ate o proximo turno, e nenhum "acertos
         ---- esperados" deste turno enxerga isso. Backward compatible -- os chamadores
         ---- do source pegam so os dois primeiros.
+        ---- ZERO ataques na execucao: antes de desistir, tenta o tiro unico. Ver
+        ---- FUNCTION_CanDegradeToSingleShot.lua -- o AICreateContext decidiu isto com o AP de
+        ---- ANTES do movimento, e o destino pode ter custado mais do que ele previu.
+        if num_atks <= 0 and not action_override then
+            local a, b, c = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
+            if a then
+                return a, b, c
+            end
+        end
         return num_atks, aims, stance_cost > 0
     end
 
@@ -463,5 +480,13 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     end
 
     -- ic(#aims, aims)
+    ---- mesmo portao do outro ramo de retorno
+    if num_attacks <= 0 and not action_override then
+        local a, b, c = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
+        if a then
+            return a, b, c
+        end
+    end
+
     return num_attacks, aims, stance_cost > 0
 end

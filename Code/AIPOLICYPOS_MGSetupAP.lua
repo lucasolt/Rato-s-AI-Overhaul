@@ -43,12 +43,11 @@ function AIPolicyMGSetupAP:EvalDest(context, dest, grid_voxel)
         return 0
     end
 
-    local los_fixes = rawget(_G, "RATOAI_LOSFixes") ~= false
     local prone_idx = StancesList.Prone
     local prone_key = (stance_idx == prone_idx) and dest or stance_pos_pack(x, y, z, prone_idx)
 
     if self.CheckLOS and g_AIDestEnemyLOSCache then
-        local key = los_fixes and prone_key or dest
+        local key = prone_key
         local los = g_AIDestEnemyLOSCache[key]
         if los == nil then
             los = g_AIDestEnemyLOSCache[dest]

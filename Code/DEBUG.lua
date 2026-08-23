@@ -66,7 +66,7 @@ function IModeAIDebug:GetVoxelRolloverText()
 
     end
 
-    ---- so existe com RATOAI_SeekCoverDebug ligado
+    ---- so existe com const.RATOAI.SeekCoverDebug ligado
     local cover_dbg = self.ai_context.dest_custom_seek_cover_debug
     if dest and cover_dbg and cover_dbg[dest] then
         text = text .. "\n\nCustom Seek Cover Policy Debug:\n" .. cover_dbg[dest] .. "\n"
@@ -82,7 +82,7 @@ function IModeAIDebug:GetVoxelRolloverText()
                    cover_simple_dbg[dest] .. "\n"
     end
 
-    ---- so existe com RATOAI_ThreatDebug ligado
+    ---- so existe com const.RATOAI.ThreatDebug ligado
     local threat_dbg = self.ai_context.dest_threat_exposure_debug
     if dest and threat_dbg and threat_dbg[dest] then
         text = text .. "\n\nThreat Exposure Debug:\n" .. threat_dbg[dest] .. "\n"

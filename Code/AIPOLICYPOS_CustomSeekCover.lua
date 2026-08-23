@@ -1,3 +1,7 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 DefineClass.AIPolicyCustomSeekCover = {
     __parents = {"AIPositioningPolicy"},
     __generated_by_class = "ClassDef",
@@ -124,9 +128,9 @@ local medium_range_penalty_mul = 40
 ---------------------------------------------------------------------------------------------------
 ---- DIAGNOSTICO
 ----
----- `RATOAI_SeekCoverDebug = true` no console faz cada destino guardar o passo a passo em
+---- `const.RATOAI.SeekCoverDebug = true` no console faz cada destino guardar o passo a passo em
 ---- context.dest_custom_seek_cover_debug[dest], que o DEBUG.lua mostra no rollover do
----- voxel. Mesmo idioma do `RATOAI_ThreatDebug` da AIPolicyThreatExposure, de proposito:
+---- voxel. Mesmo idioma do `const.RATOAI.ThreatDebug` da AIPolicyThreatExposure, de proposito:
 ---- as duas policies so se leem juntas -- o que sobra entre elas vive na media ponderada,
 ---- e conferir a media exige ver os DOIS lados com os mesmos pesos na mao.
 ----
@@ -136,8 +140,8 @@ local medium_range_penalty_mul = 40
 ---- que fecha a conta. Agora e uma global lida por avaliacao, default desligada.
 ---- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_SeekCoverDebug") == nil then
-    RATOAI_SeekCoverDebug = false
+if const.RATOAI.SeekCoverDebug == nil then
+    const.RATOAI.SeekCoverDebug = false
 end
 
 ---- distancia em tiles, para o overlay
@@ -175,7 +179,7 @@ end
 ---- aparece em camada nenhuma do debug. Por isso e uma constante global e nao uma
 ---- propriedade duplicada nas duas classes.
 ---------------------------------------------------------------------------------------------------
--- RATOAI_ThreatSaturation = rawget(_G, "RATOAI_ThreatSaturation") or 3
+-- const.RATOAI.ThreatSaturation = const.RATOAI.ThreatSaturation or 3
 
 ---- `plateau` (opcional, unidades de mundo): distancia ate onde o peso fica em 100
 ---- antes de comecar a cair. Nil ou 0 = rampa linear pura, identica a de sempre.
@@ -252,7 +256,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- `false` = o motor checou e ninguem ve; `nil` = destino que nunca entrou na
     ---- batelada do AIUpdateDestLosCache, e nesse caso seguimos avaliando normalmente.
     if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false then
-        if RATOAI_SeekCoverDebug then
+        if const.RATOAI.SeekCoverDebug then
             self:StoreDebug(context, dest, "PORTAO LOS: nenhum inimigo enxerga este dest -> 0")
         end
         return score
@@ -288,7 +292,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- mesmo com debug desligado. Esta e uma politica OptLoc (20 usos em
     ---- items.lua), entao rodava sobre todos os destinos do raio de busca.
     ---- `debugforpos_simple` nao tinha sequer um uso ativo -- removida.
-    local dbg = RATOAI_SeekCoverDebug and {} or nil
+    local dbg = const.RATOAI.SeekCoverDebug and {} or nil
 
     for _, enemy in ipairs(tbl) do
         local visible = true
@@ -400,7 +404,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---------------------------------------------------------------------------------------
     local rel = Clamp(self.ThreatRelative or 0, 0, 100)
     if rel > 0 then
-        local saturation = 100 * Max(1, RATOAI_ThreatSaturation)
+        local saturation = 100 * Max(1, const.RATOAI.ThreatSaturation)
         local presence = Clamp(MulDivRound(total_weight, 100, saturation), 0, 100)
         ---- rel=0 -> fator 100 (nada muda); rel=100 -> fator = presence
         local factor = (100 - rel) + MulDivRound(rel, presence, 100)
@@ -436,7 +440,7 @@ function AIPolicyCustomSeekCover:FormatDebugHeader(context, ustance)
                          tostring(ustance), self.AssumeCrouch and " (AssumeCrouch)" or "",
                          self.BaseScore or 0, self.ThreatRelative or 0,
                          self.ScalePerDistance and "on" or "OFF (todo peso = 100)",
-                         100 * Max(1, RATOAI_ThreatSaturation), self.Weight or 100,
+                         100 * Max(1, const.RATOAI.ThreatSaturation), self.Weight or 100,
                          #(context.enemies or empty_table))
 end
 
@@ -464,7 +468,7 @@ function AIPolicyCustomSeekCover:GetCoverScore(context, enemy, unit, dest, targe
     local ramp = self.ScalePerDistance
     local weight = ramp and 0 or 100
 
-    ---- so para o overlay (RATOAI_SeekCoverDebug): alcance considerado e por que este
+    ---- so para o overlay (const.RATOAI.SeekCoverDebug): alcance considerado e por que este
     ---- inimigo pesou o que pesou. Nao participa de conta nenhuma.
     local dbg_range
     local why = valid_enemy and "sem cobertura" or "abatido/morto"

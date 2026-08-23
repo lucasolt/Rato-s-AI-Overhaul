@@ -42,14 +42,7 @@ function OnMsg.CombatActionEnd(unit)
         ---- (ClassDef-AI.generated.lua:33-34) e no items.lua so o `Brute` usa "restart" -- que
         ---- nao monta MG. Ainda assim o guarda esta explicito abaixo: em "restart", nao mexe.
         ----
-        ---- Desligar em campo: RATOAI_MGRetargetAfterSetup = false. NAO esta sob o
-        ---- RATOAI_LOSFixes de proposito -- e bug de outra familia (alvo fora do cone, nao
-        ---- linha de visao), e a ideia e poder testar um sem o outro.
         ---------------------------------------------------------------------------------------
-        if rawget(_G, "RATOAI_MGRetargetAfterSetup") == false then
-            return
-        end
-
         local context = unit.ai_context
         if not context or not context.dest_target then
             return

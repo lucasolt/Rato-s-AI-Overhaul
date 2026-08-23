@@ -1,15 +1,19 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 ---------------------------------------------------------------------------------------------------
 ---- DIAGNOSTICO DE ZONAS (granada / fumaca / gas)
 ----
----- `RATOAI_ZoneDebug = true` no console imprime, por AVALIACAO, uma linha por zona
+---- `const.RATOAI.ZoneDebug = true` no console imprime, por AVALIACAO, uma linha por zona
 ---- candidata com a composicao dela, e no fim qual venceu. Sem isso nao da para separar
 ---- "nao havia aliado ameacado" de "os pesos nao sao os que eu acho".
 ----
 ---- Lembre ao ler: os pontos candidatos saem SO de posicoes de inimigo (e pontos medios
 ---- entre elas) -- ver AICalcAOETargetPoints. Nenhuma zona nasce centrada num aliado.
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_ZoneDebug") == nil then
-    RATOAI_ZoneDebug = false
+if const.RATOAI.ZoneDebug == nil then
+    const.RATOAI.ZoneDebug = false
 end
 
 function AIActionBaseZoneAttack:EvalZones(context, zones)
@@ -26,7 +30,7 @@ function AIEvalZones(context, zones, min_score, enemy_score, team_score, self_sc
     for _, zone in ipairs(zones) do
         local score
         local selfmod = 0
-        local dbg_parts = RATOAI_ZoneDebug and {} or nil
+        local dbg_parts = const.RATOAI.ZoneDebug and {} or nil
         for _, unit in ipairs(zone.units) do
             local uscore = 0
             local dbg_why = ""
@@ -95,7 +99,7 @@ function AIEvalZones(context, zones, min_score, enemy_score, team_score, self_sc
         zone.score = score
     end
 
-    if RATOAI_ZoneDebug then
+    if const.RATOAI.ZoneDebug then
         printf("[ZONA] %s FIM: %d zonas candidatas | corte(min_score) %s | vencedora %s",
                tostring(context.unit.session_id), #zones, tostring(min_score),
                best_target and tostring(best_score) or "NENHUMA (nada passou do corte)")

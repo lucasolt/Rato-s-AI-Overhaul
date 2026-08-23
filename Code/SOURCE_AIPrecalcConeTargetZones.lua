@@ -1,3 +1,7 @@
+---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
+---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
+const.RATOAI = const.RATOAI or {}
+
 ---------------------------------------------------------------------------------------------------
 ---- Override de AIPrecalcConeTargetZones (source: CombatAI.lua:2040-2145).
 ----
@@ -69,12 +73,7 @@
 ---- numero do CTH. Enquanto houver linha deitado, o CTH medido em pe erra por poucos pontos;
 ---- quando NAO ha linha deitado, o LOF ja derruba o alvo antes do CTH.
 ----
----- Desligar em campo: RATOAI_ConeStanceLOS = false, ou RATOAI_LOSFixes = false (mestre,
----- desliga tambem o B25 e os portoes da AIPolicyMGSetupPosScore).
 ---------------------------------------------------------------------------------------------------
-if rawget(_G, "RATOAI_ConeStanceLOS") == nil then
-    RATOAI_ConeStanceLOS = true
-end
 
 function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stance)
     if context.target_locked then
@@ -126,9 +125,7 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     ---------------------------------------------------------------------------------------------
     ---- Interruptor mestre (CONSTANTS_AI_source.lua) + o proprio. Qualquer um em false e a
     ---- funcao volta a ser byte a byte o vanilla.
-    local los_fixes = rawget(_G, "RATOAI_LOSFixes") ~= false
-    local override = los_fixes and RATOAI_ConeStanceLOS and stance and stance ~= unit.stance and
-                         stance or nil
+    local override = (stance and stance ~= unit.stance) and stance or nil
     ---------------------------------------------------------------------------------------------
 
     for zi, pt in ipairs(target_pts) do
