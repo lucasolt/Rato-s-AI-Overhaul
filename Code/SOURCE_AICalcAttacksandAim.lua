@@ -224,7 +224,22 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         local unit_pos = unit and unit:GetPos()
         local attack_pos = context.attacker_pos
 
-        if context.AIisPlayingAttacks and unit:HasStatusEffect("shooting_stance") then
+        -------------------------------------------------------------------------------------
+        ---- DEBUG (D7): `__ratoai_stance_paid` -- "a stance JA foi paga nesta simulacao".
+        ----
+        ---- Existe para o ramo nao-sustentado do RATOAI_ExpectedRatio, que pergunta "e o ataque
+        ---- padrao com o AP que sobrou depois de UM disparo da candidata?". Aquele primeiro
+        ---- disparo ja pagou o GetWeapon_StanceAP; sem esta valvula, esta funcao cobraria a
+        ---- stance de novo no resto do turno e o AP sobraria menos do que sobra de verdade --
+        ---- um erro de varios AP, sistematicamente contra as acoes nao sustentadas.
+        ----
+        ---- Nao da para reaproveitar o teste de cima: ele depende do status effect REAL da
+        ---- unidade, e na hora do scoring a unidade ainda nao entrou em stance nenhuma -- ela
+        ---- entraria durante o turno simulado. E simulacao, nao estado.
+        -------------------------------------------------------------------------------------
+        if context.__ratoai_stance_paid then
+            has_stance = true
+        elseif context.AIisPlayingAttacks and unit:HasStatusEffect("shooting_stance") then
             has_stance = true
         elseif attack_pos and unit_pos then
             attack_pos = attack_pos:SetTerrainZ()
@@ -389,12 +404,25 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         ---- FUNCTION_CanDegradeToSingleShot.lua -- o AICreateContext decidiu isto com o AP de
         ---- ANTES do movimento, e o destino pode ter custado mais do que ele previu.
         if num_atks <= 0 and not action_override then
-            local a, b, c = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
+            local a, b, c, d = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
             if a then
-                return a, b, c
+                return a, b, c, d
             end
         end
-        return num_atks, aims, stance_cost > 0
+        -----------------------------------------------------------------------------------
+        ---- 4o retorno (DEBUG D7): o AP QUE SOBRA DEPOIS DO PRIMEIRO ATAQUE.
+        ----
+        ---- Existe para o RATOAI_ExpectedRatio poder pontuar uma signature NAO sustentada
+        ---- pelo turno que ela produz de verdade -- 1 ataque dela mais o que o ataque padrao
+        ---- fizer com o resto do AP --, em vez de N ataques dela, que e um turno que a
+        ---- AIPlayAttacks nao executa. Ver a propriedade SustainedAttack.
+        ----
+        ---- Neste ramo todos os disparos custam `cost` e a stance e cobrada uma vez so, entao
+        ---- o primeiro ataque consome `stance_cost + cost`. Quando nao ha AP para a stance o
+        ---- `stance_cost` ja foi zerado la em cima e a conta continua valendo.
+        ---- Max(0, ...) porque com num_atks == 0 a subtracao passaria do fim.
+        -----------------------------------------------------------------------------------
+        return num_atks, aims, stance_cost > 0, Max(0, ap - stance_cost - cost)
     end
 
     local remaining_ap = ap
@@ -429,6 +457,11 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     -- Record the first aim level
     local aims = {aim}
     remaining_ap = remaining_ap_after_first_atk
+
+    ---- 4o retorno (DEBUG D7): capturado AQUI, antes de o laco dos disparos seguintes comer o
+    ---- resto. Neste ramo o primeiro ataque ja pagou stance, rotacao, custo e os niveis de mira
+    ---- que comprou, entao `remaining_ap` NESTE PONTO e exatamente o que sobra depois dele.
+    local ap_after_first = remaining_ap
 
     -- Process subsequent attacks
     local index = 2
@@ -494,11 +527,11 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     -- ic(#aims, aims)
     ---- mesmo portao do outro ramo de retorno
     if num_attacks <= 0 and not action_override then
-        local a, b, c = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
+        local a, b, c, d = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
         if a then
-            return a, b, c
+            return a, b, c, d
         end
     end
 
-    return num_attacks, aims, stance_cost > 0
+    return num_attacks, aims, stance_cost > 0, Max(0, ap_after_first)
 end

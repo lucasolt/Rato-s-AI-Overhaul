@@ -20,8 +20,6 @@
 ---- (A valvula do debug, antes RATOAI_DebugForce, MUDOU para const.RATOAI.DebugForce -- ela era
 ----  lida com rawget e portanto nunca enxergou nada digitado no console. Ver B32 em UTIL.lua.)
 ---------------------------------------------------------------------------------------------------
-const.RATOAI = const.RATOAI or {}
-
 ---- garante a subtabela: este arquivo DEFINE valores nela. Idempotente, e imune a
 ---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
 const.RATOAI = const.RATOAI or {}

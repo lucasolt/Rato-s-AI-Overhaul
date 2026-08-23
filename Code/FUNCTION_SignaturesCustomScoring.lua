@@ -124,7 +124,11 @@ local function ExpectedWeight(self, context, weight, upos, action, target, attac
         return 0, true
     end
 
-    local ratio = RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part)
+    ---- DEBUG (D7): `self.SustainedAttack` decide COMO o numerador e montado -- N ataques da
+    ---- acao (ela vira o ataque padrao do turno) ou 1 ataque dela mais o padrao com o resto do
+    ---- AP. E a mesma propriedade que governa a execucao no SOURCE_AIPlayAttacks, de proposito.
+    local ratio = RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part,
+                                       self.SustainedAttack)
     if ratio then
         ---- zero acertos esperados nao e "peso baixo", e "nao faz sentido": desabilita e ainda
         ---- poupa o PrecalcAction desta acao no AISelectAction.
@@ -215,6 +219,14 @@ function MobileAttack_CustomScoring(self, context)
 end
 
 function SingleShotTargeted_CustomScoring(self, context)
+
+    local default_attack_id = context.default_attack and context.default_attack.id or ""
+    local is_default_attack = not IsKindOf(self, "AIActionPinDown") and
+                                  (not next(self.AttackTargeting) or self.AttackTargeting["Torso"]) and
+                                  (default_attack_id == self.action_id)
+    if is_default_attack then
+        return 0, true, false
+    end
     local hit_modifiers = Presets["ChanceToHitModifier"]["Default"]
     local weight, disable, priority = self.Weight, false, self.Priority
 
@@ -646,8 +658,9 @@ function PrepareWeapon_CustomScoring(self, context, bloqueador)
         ---- Sem isto o campo ficava com o valor de uma chamada anterior (ex.: de um RESTART no
         ---- mesmo turno), e o motivo do disable ja aparece separado na pagina Acoes (DEBUG D5).
         RegistrarExpectedMG(context, "R_PrepareWeapon", hits, limiar, weight, 0, target, dist,
-                           string.format("tiro de quadril rende %d.%02d, limiar %d.%02d -- atirar ganha",
-                                        hits / 100, hits % 100, limiar / 100, limiar % 100))
+                            string.format(
+                                "tiro de quadril rende %d.%02d, limiar %d.%02d -- atirar ganha",
+                                hits / 100, hits % 100, limiar / 100, limiar % 100))
         return 0, true, false ---- o tiro de quadril rende o bastante; atirar ganha
     end
 
@@ -655,8 +668,8 @@ function PrepareWeapon_CustomScoring(self, context, bloqueador)
     local w, d, pr = Preparar(MulDivRound(limiar - hits, bonus, limiar))
 
     RegistrarExpectedMG(context, "R_PrepareWeapon", hits, limiar, weight, w, target, dist,
-                       string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
-                                    hits % 100, limiar / 100, limiar % 100))
+                        string.format("tiro de quadril rende %d.%02d, limiar %d.%02d", hits / 100,
+                                      hits % 100, limiar / 100, limiar % 100))
 
     return w, d, pr
 end
@@ -786,8 +799,9 @@ function MGSetup_CustomScoring(self, context)
     if hits >= limiar then
         ---- DEBUG (D6): grava mesmo sem inflar -- ver o comentario de RegistrarExpectedMG.
         RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, weight, target, dist,
-                           string.format("tiro de pe rende %d.%02d, limiar %d.%02d -- ja rende, sem inflar",
-                                        hits / 100, hits % 100, limiar / 100, limiar % 100))
+                            string.format(
+                                "tiro de pe rende %d.%02d, limiar %d.%02d -- ja rende, sem inflar",
+                                hits / 100, hits % 100, limiar / 100, limiar % 100))
         return weight, disable, priority ---- o tiro de pe ja rende; nao precisa inflar
     end
 
@@ -798,8 +812,8 @@ function MGSetup_CustomScoring(self, context)
     local peso_final = MulDivRound(weight, 100 + mult, 100)
 
     RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, peso_final, target, dist,
-                       string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
-                                    hits % 100, limiar / 100, limiar % 100))
+                        string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
+                                      hits % 100, limiar / 100, limiar % 100))
 
     return Max(0, peso_final), disable, priority
 end

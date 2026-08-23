@@ -459,7 +459,11 @@ RATOAI_LastExpected = {}
 ---- `body_part` (default "Torso"): a penalidade de tiro localizado entra pelo
 ---- `target_spot_group` do CalcChanceToHit. Sem este parametro, medir um tiro na cabeca
 ---- devolveria o numero de um tiro no torso -- justamente a penalidade que se quer pesar.
-function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part)
+---- `ap_override` (DEBUG D7): orcamento a usar em vez do AP do destino. Serve ao ramo
+---- NAO-SUSTENTADO do RATOAI_ExpectedRatio, que precisa perguntar "e o ataque padrao com o AP
+---- que SOBROU depois de um disparo da candidata?". Sem o parametro daria para mexer no
+---- `dest_ap` antes de chamar, mas ai a mutacao vazaria para todo o resto do turno.
+function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part, ap_override)
     local unit, weapon = context.unit, context.weapon
     if not (unit and weapon and action and upos) or not IsValidTarget(target) then
         return
@@ -473,14 +477,24 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         memo = {upos = upos}
         context.__ratoai_expected = memo
     end
+
+    ---- Resolvido ANTES da chave de proposito: o AP faz parte da identidade do plano.
+    ---- Sem ele na chave, o denominador (ataque padrao com o AP inteiro) e o resto
+    ---- (ataque padrao com o AP que sobrou) colidiriam -- MESMA acao, MESMA mira, MESMO
+    ---- body_part -- e o segundo receberia o numero do primeiro em silencio.
+    local ap = ap_override or (context.dest_ap and context.dest_ap[upos]) or unit.ActionPoints or
+                   0
+
     ---- chave inclui o nivel forcado: o RATOAI_EnsureAimPlan avalia o MESMO ataque em
     ---- varios niveis, e sem isso a segunda avaliacao devolveria a primeira.
     body_part = body_part or "Torso"
     local key = tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
-                    body_part
+                    body_part .. "@" .. tostring(ap) .. "@" ..
+                    tostring(context.__ratoai_stance_paid)
     local cached = memo[key]
     if cached then
-        return cached.hits, cached.attacks, cached.aim1, cached.stance
+        return cached.hits, cached.attacks, cached.aim1, cached.stance, cached.ap_left,
+               cached.hits_first
     end
 
     ---- MESMA convencao de context.default_attack_cost (AICreateContext:
@@ -498,7 +512,6 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         shots = Max(1, weapon:GetAutofireShots(action) or 1)
     end
 
-    local ap = (context.dest_ap and context.dest_ap[upos]) or unit.ActionPoints or 0
     local dist = context.dest_target_dist and context.dest_target_dist[upos] and
                      context.dest_target_dist[upos][target]
 
@@ -507,7 +520,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- O laco do AIPrecalcDamageScore preenche os dois antes de chamar e limpa depois --
     ---- ou seja, aqui eles chegam nil. Reproduzir as MESMAS condicoes e o que mantem o
     ---- numerador comparavel com o denominador (dest_hit_score, que saiu daquele laco).
-    local ok_calc, attacks, aims, paid_stance
+    local ok_calc, attacks, aims, paid_stance, ap_left
 
     if action.id == "PinDown" then
         -------------------------------------------------------------------------------------------
@@ -532,18 +545,22 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ---- o custo (que ja e completo) cabe. `paid_stance` = true porque o snipe entra em stance
         ---- por definicao, e o const.RATOAI.StanceBias deve credita-lo por isso.
         -------------------------------------------------------------------------------------------
+        ---- `ap_left` = 0 de proposito: o snipe e UM tiro que consome o turno, e o custo
+        ---- dele ja inclui stance, mira e ferrolho (COMBAT_ACTIONS.lua:455). Nao ha "resto
+        ---- do AP" a modelar aqui, e fingir que ha faria o ramo nao-sustentado creditar
+        ---- ataques que nunca acontecem.
         ok_calc = true
         if ap >= cost then
             local _, max_aim = unit:GetBaseAimLevelRange(action, target)
-            attacks, aims, paid_stance = 1, {Max(1, max_aim or 3)}, true
+            attacks, aims, paid_stance, ap_left = 1, {Max(1, max_aim or 3)}, true, 0
         else
-            attacks, aims = 0, {}
+            attacks, aims, ap_left = 0, {}, ap
         end
     else
         local prev_pos, prev_target = context.attacker_pos, context.current_target
         context.attacker_pos, context.current_target = attacker_pos, target
-        ok_calc, attacks, aims, paid_stance = pcall(AICalcAttacksAndAim, context, ap, dist, action,
-                                                    cost)
+        ok_calc, attacks, aims, paid_stance, ap_left = pcall(AICalcAttacksAndAim, context, ap,
+                                                            dist, action, cost)
         context.attacker_pos, context.current_target = prev_pos, prev_target
     end
 
@@ -552,8 +569,12 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     end
     attacks = attacks or 0
     if attacks <= 0 then
-        memo[key] = {hits = 0, attacks = 0, motivo = "0 ataques cabem no AP"}
-        return 0, 0
+        ---- DEBUG (D7): `ap_left = ap`. Nenhum ataque desta acao saiu, entao o orcamento
+        ---- inteiro continua na mesa para o ataque padrao -- e o ramo nao-sustentado precisa
+        ---- disso para nao creditar zero ao turno todo so porque a candidata nao coube.
+        memo[key] = {hits = 0, attacks = 0, ap_left = ap, hits_first = 0,
+                     motivo = "0 ataques cabem no AP"}
+        return 0, 0, nil, nil, ap, 0
     end
 
     -----------------------------------------------------------------------------------------------
@@ -572,8 +593,9 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- CTH nenhuma). O caro vem abaixo -- get_recoil mais um CalcChanceToHit por nivel de mira.
     -----------------------------------------------------------------------------------------------
     if body_part ~= "Torso" and (aims[1] or 0) < 1 then
-        memo[key] = {hits = 0, attacks = 0, motivo = "tiro localizado sem stance -- nao compensa"}
-        return 0, 0
+        memo[key] = {hits = 0, attacks = 0, ap_left = ap, hits_first = 0,
+                     motivo = "tiro localizado sem stance -- nao compensa"}
+        return 0, 0, nil, nil, ap, 0
     end
 
     ---- Recoil POR BALA desta acao. O cache do PERF (C4) NAO serve: ele e do
@@ -611,6 +633,10 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     local cth_by_aim = {}
     local aim_cth_by_level = shots > 1 and {} or nil
     local hits, stacks = 0, 0
+    ---- DEBUG (D7): o rendimento do PRIMEIRO ataque, isolado. E o que o ramo nao-sustentado
+    ---- do RATOAI_ExpectedRatio credita a signature -- ela dispara uma vez so. Sai de graca:
+    ---- e a primeira iteracao do laco que ja existe, nao uma segunda avaliacao.
+    local hits_first = 0
 
     for i = 1, attacks do
         local aim_i = aims[i] or 0
@@ -631,9 +657,13 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
             eff_cth = eff_cth + MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
         end
 
-        hits = hits + RATOAI_BurstHits(eff_cth, shots, recoil_cth,
-                                       RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
-                                                       action, weapon))
+        local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth,
+                                           RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
+                                                           action, weapon))
+        if i == 1 then
+            hits_first = expandido
+        end
+        hits = hits + expandido
         stacks = (aim_i > 2) and 1 or (stacks + 1)
     end
 
@@ -661,9 +691,14 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         dbg.cth = table.concat(cths, " ")
     end
 
+    ---- DEBUG (D7): `ap_left` vem do 4o retorno do AICalcAttacksAndAim (AP depois do PRIMEIRO
+    ---- ataque) e `hits_first` da primeira iteracao do laco acima. Os dois existem para o ramo
+    ---- nao-sustentado do RATOAI_ExpectedRatio e nao custam avaliacao nenhuma a mais.
+    ap_left = ap_left or 0
     memo[key] = {hits = hits, attacks = attacks, dbg = dbg, aim1 = aims[1],
-                 stance = paid_stance and true or false}
-    return hits, attacks, aims[1], paid_stance
+                 stance = paid_stance and true or false, ap_left = ap_left,
+                 hits_first = hits_first}
+    return hits, attacks, aims[1], paid_stance, ap_left, hits_first
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -800,7 +835,41 @@ end
 ---- `body_part` so afeta o NUMERADOR. O denominador e sempre o ataque padrao no torso: a
 ---- pergunta e "o tiro localizado rende mais ou menos que so atirar", e o ataque padrao da
 ---- IA nao e localizado.
-function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part)
+---------------------------------------------------------------------------------------------------
+---- DEBUG (D7) -- A RAZAO PASSOU A COMPARAR TURNOS, E NAO ACOES
+----
+---- O QUE ESTAVA ERRADO. O numerador era `N x acao candidata`, com N vindo do
+---- AICalcAttacksAndAim sobre o AP INTEIRO. Mas a AIPlayAttacks (CombatAI.lua:255-310) executa a
+---- signature UMA vez, desconta 1 de max_attacks, e manda o resto do turno para o bloco "revert
+---- to basic attacks", que dispara o `context.default_attack`. Ou seja: o peso que elegia a acao
+---- foi calculado sobre um turno que nao ia acontecer.
+----
+---- O MESMO TERMO FALTANDO MORDIA DOS DOIS LADOS:
+----   acao barata e repetivel -> SUPERESTIMADA (contava N, executava 1);
+----   acao cara               -> SUBESTIMADA, porque o AP que sobrava virava zero em vez de
+----                              virar tiros normais. Isto ja estava registrado como limite
+----                              conhecido no cabecalho do RATOAI_ExpectedFor ("NAO MODELADO:
+----                              o AP que sobra ... esta sendo levemente subestimado aqui").
+----
+---- O MODELO AGORA:
+----   sustentada      numerador = N x acao                    (ela VIRA o ataque padrao do turno)
+----   nao sustentada  numerador = 1 x acao + k x padrao       (com o AP que sobrou do 1o disparo)
+----   denominador     sempre    = M x padrao com o AP inteiro (o turno de quem so atira)
+----
+---- Com isso a razao vira o que o nome sempre prometeu: "quanto o TURNO rende se eu escolher
+---- esta acao, contra quanto ele rende se eu so atirar". 100 = da no mesmo.
+----
+---- EFEITO COLATERAL QUE E PRECISO SABER: as razoes COMPRIMEM na direcao de 100, porque nos dois
+---- ramos a maior parte do turno passa a ser ataque padrao. Uma especial que valia o dobro por
+---- ataque, com custo igual e M=3, saia 200 e agora sai 133. Os `Weight` dos presets foram
+---- calibrados contra a escala antiga e precisam de uma passada.
+----
+---- `sustained` vem da propriedade SustainedAttack da signature (PATCH_AppendClass_source_classes)
+---- -- a MESMA que decide o comportamento na execucao (SOURCE_AIPlayAttacks). E de proposito que
+---- seja uma so: se o interruptor do score e o da execucao pudessem divergir, o estimador voltaria
+---- a descrever um turno que nao acontece, que e o defeito que isto conserta.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_part, sustained)
     ---- decide o nivel de mira do ataque padrao ANTES de medi-lo: o denominador tem que
     ---- ser o plano que a unidade vai de fato executar, nao o que a heuristica sugeria.
     RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
@@ -811,8 +880,8 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     ---- Refazer o precalc para corrigi-lo NAO e opcao -- ele consome RNG (RandRange por
     ---- alvo, InteractionRand na escolha) e uma chamada a mais desloca a sequencia
     ---- sincronizada. O ExpectedFor nao toca em RNG nenhum.
-    local base, _, _, base_stance = RATOAI_ExpectedFor(context, context.default_attack, upos,
-                                                       target, attacker_pos)
+    local base, base_atks, _, base_stance = RATOAI_ExpectedFor(context, context.default_attack,
+                                                               upos, target, attacker_pos)
     if not base then
         base = context.dest_hit_score and context.dest_hit_score[upos]
         base_stance = nil
@@ -820,10 +889,56 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     if not base then
         return ---- sem denominador nenhum: quem chamou volta ao caminho antigo
     end
-    local hits, _, _, act_stance = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos,
-                                                     body_part)
+    local hits, act_atks, _, act_stance, ap_left, hits_first =
+        RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part)
     if not hits then
         return
+    end
+
+    -----------------------------------------------------------------------------------------------
+    ---- O TURNO DA CANDIDATA, quando ela NAO e sustentada: um disparo dela mais o que o ataque
+    ---- padrao faz com o AP que sobrou. Ver o cabecalho desta funcao.
+    ----
+    ---- `resto` pode voltar nil (o ExpectedFor desiste quando nao consegue responder) -- ai o
+    ---- certo e creditar so o disparo da candidata, nunca o total antigo: cair de volta em
+    ---- `hits` seria reintroduzir os N ataques justamente no caminho de excecao.
+    ----
+    ---- O `hits_first` de uma acao que nao coube no AP e 0 e o `ap_left` e o orcamento inteiro,
+    ---- entao este ramo degenera sozinho para "o turno do ataque padrao" -- razao 100 -- em vez
+    ---- de zerar a acao. Correto: se a especial nao cabe, escolher ela nao muda nada do turno.
+    -----------------------------------------------------------------------------------------------
+    ---- DEBUG (D7): o AP do destino, so para a linha do painel poder mostrar de onde saiu cada
+    ---- contagem de ataques. Mesma resolucao que o ExpectedFor faz por dentro.
+    local ap_total = RATOAI_Debug and
+                         ((context.dest_ap and context.dest_ap[upos]) or context.unit.ActionPoints or
+                             0) or nil
+
+    local dbg_turno
+    if not sustained then
+        local um = hits_first or 0
+        local resto, resto_atks = 0, 0
+        if (ap_left or 0) > 0 then
+            ---- a candidata ja pagou a stance no disparo dela; o resto do turno nao paga de
+            ---- novo. Ver o marcador D7 em SOURCE_AICalcAttacksandAim.lua.
+            local prev_paid = context.__ratoai_stance_paid
+            context.__ratoai_stance_paid = act_stance and true or prev_paid
+            local r, ra = RATOAI_ExpectedFor(context, context.default_attack, upos, target,
+                                             attacker_pos, nil, ap_left)
+            resto, resto_atks = r or 0, ra or 0
+            context.__ratoai_stance_paid = prev_paid
+        end
+        if RATOAI_Debug then
+            ---- `n` = ataques que a candidata FARIA se repetisse (o modelo antigo);
+            ---- `k` = ataques do padrao com o AP que sobrou; `m` = ataques do denominador.
+            ---- Sao as tres contagens que fazem o sanity check do numero fechar na mao.
+            dbg_turno = {sustentado = false, sozinha = hits, primeiro = um, resto = resto,
+                         ap_left = ap_left, ap_total = ap_total, n = act_atks, k = resto_atks,
+                         m = base_atks}
+        end
+        hits = um + resto
+    elseif RATOAI_Debug then
+        dbg_turno = {sustentado = true, sozinha = hits, ap_total = ap_total, n = act_atks,
+                     m = base_atks}
     end
 
     -----------------------------------------------------------------------------------------------
@@ -848,6 +963,12 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     if bias > 0 and not context.unit:HasStatusEffect("shooting_stance") then
         if act_stance then
             hits = MulDivRound(hits, 100 + bias, 100)
+            ---- DEBUG (D7): o numerador do modelo ANTIGO leva o mesmo vies, senao o A/B do
+            ---- painel compararia um lado com bonus e o outro sem, e a diferenca exibida nao
+            ---- seria a da mudanca de modelo.
+            if dbg_turno and dbg_turno.sozinha then
+                dbg_turno.sozinha = MulDivRound(dbg_turno.sozinha, 100 + bias, 100)
+            end
         end
         if base_stance then
             base = MulDivRound(base, 100 + bias, 100)
@@ -873,6 +994,13 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
             hits = hits, base = base, ratio = ratio, dbg = slot and slot.dbg,
             motivo = slot and slot.motivo,
             stance = act_stance, base_stance = base_stance,
+            ---- DEBUG (D7): a decomposicao do numerador, para dar para ver a razao NOVA ao lado
+            ---- da ANTIGA. `sozinha` e o numerador do modelo velho (N ataques da candidata);
+            ---- `primeiro + resto` e o do novo. Sem isto a recalibragem dos Weight seria feita
+            ---- no escuro -- nao daria para separar "a acao piorou" de "a escala mudou".
+            turno = dbg_turno,
+            ratio_antigo = dbg_turno and dbg_turno.sozinha and
+                RATOAI_RatioBase100(dbg_turno.sozinha, base) or nil,
         }
 
         ---- ...e uma copia FORA do context. O ai_context e zerado no fim da execucao do

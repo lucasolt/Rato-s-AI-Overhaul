@@ -337,7 +337,6 @@ return {
 		SignatureActions = {
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "Autofire",
-				'Weight', 200,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return AutoFire_CustomScoring(self, context)
@@ -348,7 +347,7 @@ return {
 			}),
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "SuppressiveFire",
-				'Weight', 180,
+				'Weight', 150,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "SuppressiveFire",
@@ -365,6 +364,14 @@ return {
 				'Aiming', "Remaining AP",
 				'AttackTargeting', set( "Torso" ),
 			}),
+			PlaceObj('AIAttackSingleTarget', {
+				'CustomScoring', function (self, context)
+					return SingleShotTargeted_CustomScoring(self, context)
+				end,
+				'SustainedAttack', true,
+				'Aiming', "Remaining AP",
+				'AttackTargeting', set( "Torso" ),
+			}),
 			PlaceObj('AIPrepareWeapon', {
 				'CustomScoring', function (self, context)
 					return PrepareWeapon_CustomScoring(self, context)
@@ -372,6 +379,7 @@ return {
 			}),
 			PlaceObj('AIConeAttack', {
 				'BiasId', "Overwatch",
+				'Weight', 80,
 				'CustomScoring', function (self, context)
 					return Overwatch_CustomScoring(self, context)
 				end,
@@ -396,12 +404,11 @@ return {
 			}),
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "",
-				'Weight', 90,
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
 				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Arms", "Groin", "Head", "Legs" ),
+				'AttackTargeting', set( "Arms", "Groin", "Legs" ),
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow",
@@ -473,12 +480,6 @@ return {
 				'MinDist', 7000,
 				'LimitRange', true,
 				'MaxTargetRange', 35,
-			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'AttackTargeting', set( "Torso" ),
 			}),
 		},
 		TargetScoreRandomization = 10,
@@ -840,16 +841,16 @@ return {
 		OptLocSearchRadius = 100,
 		PrefStance = "Crouch",
 		SignatureActions = {
+			PlaceObj('AIPrepareWeapon', {
+				'CustomScoring', function (self, context)
+					return PrepareWeapon_CustomScoring(self, context)
+				end,
+			}),
 			PlaceObj('AIActionPinDown', {
 				'BiasId', "PinDownAttack",
 				'Weight', 80,
 				'CustomScoring', function (self, context)
 					return Pindown_CustomScoring(self, context)
-				end,
-			}),
-			PlaceObj('AIPrepareWeapon', {
-				'CustomScoring', function (self, context)
-					return PrepareWeapon_CustomScoring(self, context)
 				end,
 			}),
 			PlaceObj('AIActionPinDown', {
@@ -884,7 +885,7 @@ return {
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
-				'Aiming', "Remaining AP",
+				'Aiming', "Maximum",
 				'AttackTargeting', set( "Head" ),
 			}),
 			PlaceObj('AIAttackSingleTarget', {
@@ -893,7 +894,7 @@ return {
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
-				'Aiming', "Remaining AP",
+				'Aiming', "Maximum",
 				'AttackTargeting', set( "Arms", "Groin", "Legs" ),
 			}),
 			PlaceObj('AIActionThrowGrenade', {

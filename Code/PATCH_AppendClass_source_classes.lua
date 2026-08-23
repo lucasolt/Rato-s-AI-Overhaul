@@ -10,6 +10,47 @@ function OnMsg.ClassesGenerate(classdefs)
                     return self.Weight, false, self.Priority
                 end,
                 params = "self, context"
+            }, {
+                -------------------------------------------------------------------------------
+                ---- ATAQUE ALTERNATIVO x ACAO ESPECIAL
+                ----
+                ---- O vanilla so tem o segundo comportamento, e o embute na AIPlayAttacks
+                ---- (CombatAI.lua:255-262): a signature Execute UMA vez, `max_attacks` cai 1, e o
+                ---- resto do turno vai para o `context.default_attack` no bloco "revert to basic
+                ---- attacks". Faz sentido para o que a palavra "signature" descreve -- granada,
+                ---- montar a MG, preparar a arma, um golpe especial: coisas que se faz uma vez.
+                ----
+                ---- Neste mod as signatures tambem sao os MODOS DE TIRO (AutoFire, BurstFire,
+                ---- SingleShot localizado), e para essas o comportamento vanilla e incoerente
+                ---- duas vezes:
+                ----   1. A unidade "escolhe" atirar em rajada e no segundo disparo do MESMO turno
+                ----      volta para o que o GetDefaultAttackAction mandar, sem ter decidido nada.
+                ----   2. O scoring nao descreve isso. O RATOAI_ExpectedFor mede N ataques da acao
+                ----      candidata (`AICalcAttacksAndAim` com o custo DELA), entao o peso que
+                ----      elegeu a acao foi calculado sobre um turno que nao vai acontecer.
+                ----
+                ---- Ligado, a acao passa a ser o ataque padrao do resto do turno -- o laco de
+                ---- revert continua no mesmo modo de tiro, e ai a conta do scoring vira verdade.
+                ---- Ver RATOAI_SustainFiringMode em SOURCE_AIPlayAttacks.lua.
+                ----
+                ---- Default `false` = vanilla. So aparece no editor nas signatures de tiro
+                ---- (AIActionSingleTargetShot e derivadas, inclusive AIActionMGBurstFire): nas
+                ---- demais o Execute nao chama o sustain, e um interruptor visivel que nao faz
+                ---- nada e pior que interruptor nenhum.
+                -------------------------------------------------------------------------------
+                id = "SustainedAttack",
+                name = "Sustentar o modo de tiro no turno",
+                help = "Desligado (vanilla): a acao dispara UMA vez e o resto do turno usa o " ..
+                    "ataque padrao da arma -- comportamento de 'acao especial'.\n" ..
+                    "Ligado: a acao vira o ataque padrao do resto do turno, ou seja a unidade " ..
+                    "sustenta o modo de tiro que escolheu -- comportamento de 'ataque " ..
+                    "alternativo'. E o que o scoring por resultado esperado ja pressupoe: ele " ..
+                    "mede N ataques DESTA acao, nao 1 dela mais N-1 do padrao.",
+                editor = "bool",
+                default = false,
+                no_edit = function(self)
+                    return not IsKindOf(self, "AIActionSingleTargetShot")
+                end
             }
         }
     }
