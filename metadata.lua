@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 4115,
+	'version', 4228,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -42,7 +42,6 @@ return PlaceObj('ModDef', {
 		"Code/AIPOLICYPOS_Attack_StanceAP.lua",
 		"Code/AIPOLICYPOS_MGSetupAP.lua",
 		"Code/AIPOLICYPOS_SaveAP.lua",
-		"Code/AIPOLICYPOS_DontBeExposedAtCloserRange.lua",
 		"Code/AIPOLICYPOS_GrenadeRange.lua",
 		"Code/AIPOLICYPOS_AvoidDeathSpots.lua",
 		"Code/AIPOLICYPOS_AvoidThreatenedAreas.lua",
@@ -86,6 +85,8 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIPlayAttacks.lua",
 		"Code/SOURCE_AIPolicyDealDamage.lua",
 		"Code/SOURCE_AIFindDestinations.lua",
+		"Code/SOURCE_AIPrecalcConeTargetZones.lua",
+		"Code/FUNCTION_GunnerBehaviors.lua",
 		"UnitData/AdonisStormer_Elite_copy.lua",
 		"UnitData/AdonisSquadLeader_copy.lua",
 	},
@@ -99,8 +100,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787518033,
-	'code_hash', 4907512058575287743,
+	'saved', 1787534943,
+	'code_hash', -6402413321533132659,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",
@@ -124,17 +125,22 @@ return PlaceObj('ModDef', {
 		}),
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
+			'Id', "HeavyGunner_tentativa_behaviors",
+			'ClassDisplayName', "AI Archetype",
+		}),
+		PlaceObj('ModResourcePreset', {
+			'Class', "AIArchetype",
 			'Id', "HeavyGunner",
 			'ClassDisplayName', "AI Archetype",
 		}),
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
-			'Id', "HeavyGunner_copy",
+			'Id', "Skirmisher",
 			'ClassDisplayName', "AI Archetype",
 		}),
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
-			'Id', "Skirmisher",
+			'Id', "Skirmisher_copy",
 			'ClassDisplayName', "AI Archetype",
 		}),
 		PlaceObj('ModResourcePreset', {

@@ -78,15 +78,32 @@ const.RATOAI = const.RATOAI or {}
 ---- sem recarregar mod, que e como se afina numero desse tipo.
 ----
 ---- >>> O LADO DA ACAO SO VALE COM O SOURCE_AIPrecalcConeTargetZones.lua REGISTRADO. <<<
----- Ele nao esta na lista `code` do metadata.lua -- verificado no processo vivo, quem roda e o
----- `AIPrecalcConeTargetZones` do vanilla (`@Lua/Tactical/CombatAI.lua`). Sem registrar, o
----- parametro muda so a NOTA dos tiles (AIPolicyMGSetupPosScore), e o cone continua sendo
----- plantado no maximo. O B26 esta no mesmo barco.
+---- Ele ESTA na lista `code` do metadata.lua desde a v4151. Antes disso nao estava, e o que
+---- rodava era o `AIPrecalcConeTargetZones` do vanilla (`@Lua/Tactical/CombatAI.lua`) -- o
+---- parametro mudava so a NOTA dos tiles (AIPolicyMGSetupPosScore) e o cone continuava sendo
+---- plantado no maximo. O B26 e o B35 estavam no mesmo barco e acordaram junto com ele.
 ---------------------------------------------------------------------------------------------------
 
-const.RATOAI.MGConeRangePct = 60
+const.RATOAI.MGConeRangePct = 70
 
 const.RATOAI.MGConeRangeTiles = 0
+
+---------------------------------------------------------------------------------------------------
+---- DE ONDE O CONE E AVALIADO (BUGFIX B35, SOURCE_AIPrecalcConeTargetZones.lua)
+----
+---- true (default): quando a unidade ainda vai ANDAR, o cone e medido do DESTINO -- linha,
+---- alcance, LOF e CTH saem todos de la. E a unica leitura util antes do movimento: saber o
+---- que a unidade enxerga de onde ela esta prestes a sair nao decide nada.
+----
+---- false: volta ao vanilla, tudo medido da posicao atual. Serve para A/B no console sem
+---- recarregar mod -- ligue junto com `const.RATOAI.ZoneDebug` para ver a composicao das zonas
+---- dos dois jeitos.
+----
+---- Nao afeta a MG ja montada nem o ataque de abertura do UnitAwareness: esses dois nunca
+---- recebem posicao hipotetica. Ver o cabecalho do B35.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.ConeFromDest = true
 
 ---------------------------------------------------------------------------------------------------
 ---- Alcance efetivo do cone da MG. Fonte UNICA para os dois lados -- a policy que pontua o tile
@@ -292,7 +309,7 @@ const.RATOAI.PrepareWeaponMaxHits = 40
 
 const.RATOAI.PrepareWeaponBonus = 150
 
-const.RATOAI.PrepareWeaponBoltBonus = 160
+const.RATOAI.PrepareWeaponBoltBonus = 250
 
 ---------------------------------------------------------------------------------------------------
 ---- MONTAR A MG EM VEZ DE ATIRAR MAL EM PE (RATOAI_MGSetup*, MGSetup_CustomScoring)
@@ -305,12 +322,83 @@ const.RATOAI.PrepareWeaponBoltBonus = 160
 ---- `Bonus` e o teto do peso extra, interpolado ate 0 no limiar (mesmo molde do
 ---- PrepareWeaponBonus: 0 acertos -> x(1 + Bonus/100), MaxHits acertos -> x1.0).
 ----
+---- `Malus` e a MESMA rampa do outro lado do limiar, e existe para que o peso do preset vire o
+---- PONTO MEDIO da escala em vez do piso dela. Antes, "o tiro de pe ja rende" devolvia o peso
+---- cru -- exatamente o mesmo valor que "nao consegui responder". Os dois casos ficavam
+---- indistinguiveis no placar, e nao ha peso de preset que sirva para os dois: o que fosse alto
+---- o bastante para a acao existir quando ela vale, mantinha ela viva quando nao valia.
+----
+---- Agora a rampa e uma linha so com dobra no limiar:
+----     hits = 0            -> x(1 + Bonus/100)     ---- montar vale muito
+----     hits = MaxHits      -> x1.0                 ---- indiferente = peso do preset
+----     hits = 2 x MaxHits  -> x(1 - Malus/100)     ---- atirar de pe ja resolve
+---- e satura em 2 x MaxHits, um limiar inteiro para cada lado.
+----
+---- Malus = 100 ZERA a acao no saturado; use so se quiser que ela desapareca de vez quando o
+---- tiro de pe rende o dobro do limiar. Abaixo disso ela continua concorrendo, so que fraca.
+----
+---- QUEM NAO RESPONDEU CONTINUA NO MEIO. Sem alvo, sem destino, sem estimativa ou com o limiar
+---- desligado, a funcao devolve o peso do preset cru -- que agora significa "sem opiniao", e
+---- nao "nao vale a pena". Era esse o ponto.
+----
 ---- Perto (RATOAI_GetCloseRange, o mesmo criterio do MobileAttack_CustomScoring e do
 ---- Pindown_CustomScoring) a acao e desligada ANTES de qualquer conta: nesta faixa o tiro de pe
 ---- quase sempre rende, e montar so tira a unidade do lugar onde ela e mais util.
 ---------------------------------------------------------------------------------------------------
 
-const.RATOAI.MGSetupMaxHits = 80
+const.RATOAI.MGSetupMaxHits = 100
 
 const.RATOAI.MGSetupBonus = 150
+
+const.RATOAI.MGSetupMalus = 80
+
+---------------------------------------------------------------------------------------------------
+---- ATE ONDE VALE CHEGAR DEITADO (BUGFIX B36, SOURCE_AIFindDestinations.lua)
+----
+---- O B25 empacota TODO destino alcancavel na postura Prone quando o arquetipo prefere Prone --
+---- e ele precisa fazer isso, senao o cache de LOS mede a linha em pe e as policies premiam
+---- tiles onde de pe se ve e deitado nao. O efeito colateral e que o artilheiro atravessa o mapa
+---- rastejando: andar deitado e caro, e ele paga isso mesmo quando nao ha ninguem em quem atirar
+---- de la.
+----
+---- Este teto limita a conversao aos destinos com algum inimigo dentro do alcance. Fora dele o
+---- destino continua empacotado em pe -- que e a postura em que a unidade de fato vai estar --,
+---- entao a medicao de linha daqueles tiles tambem passa a ser a certa.
+----
+---- 0 = sem teto proprio: vale o alcance de checagem da arma (AIGetWeaponCheckRange), que para
+---- uma MG e 1,5 x WeaponRange, ~57 tiles no MG42. Isso ja corta o caso de atravessar o mapa,
+---- mas e generoso. Para apertar, baixe em tiles: 20-25 costuma ser onde montar a MG comeca a
+---- fazer sentido.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.PronePackTiles = 32
+
+---------------------------------------------------------------------------------------------------
+---- POSTURA DE DESTINO POR COBERTURA (BUGFIX B37, SOURCE_AIFindDestinations.lua)
+----
+---- Hoje a postura do destino sai de duas regras separadas: quem prefere Prone deita em tudo
+---- (B25, agora limitado pelo B36), e todo o resto agacha onde ha cobertura baixa
+---- (RATOAI_WantsCrouch). Quem termina o turno num tile ABERTO fica em pe -- que e a pior das
+---- tres posturas para levar tiro, e a unica que nao custa AP nenhum para adotar.
+----
+---- Com `ExposedProne` ligado, o tile aberto passa a empacotar Prone:
+----     cobertura baixa (e nao alta)  -> Crouch   (regra de sempre, inalterada)
+----     sem cobertura nenhuma         -> Prone    (novo)
+----     cobertura alta                -> em pe    (regra de sempre: ela ja protege de pe)
+----
+---- QUEM LIGA E O ARQUETIPO, nao esta constante. As duas properties moram no editor
+---- (PATCH_AppendClass_source_classes.lua):
+----     ExposedProne          -- bool, liga a regra para aquele arquetipo
+----     ExposedProneMinTiles  -- raio de exclusao em tiles: colado no inimigo nao se deita,
+----                              porque levantar custa AP e o campo de tiro deitado e pior
+----
+---- Esta constante e so a VALVULA MESTRA: `false` derruba a regra para todos sem recarregar
+---- mod, que e o que serve para A/B ao vivo no console. `true` (default) devolve a decisao aos
+---- arquetipos -- e como o default da property e false, ligar aqui sozinho nao muda nada.
+----
+---- NAO CONFUNDIR COM `PrefStance`. PrefStance e "que postura eu gosto de ter" e nao olha o
+---- tile; ExposedProne e "que postura este tile pede". Ver o cabecalho da property.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.ExposedProne = true
 

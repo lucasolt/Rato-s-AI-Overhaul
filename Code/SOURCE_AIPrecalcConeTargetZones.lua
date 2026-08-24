@@ -74,8 +74,46 @@ const.RATOAI = const.RATOAI or {}
 ---- quando NAO ha linha deitado, o LOF ja derruba o alvo antes do CTH.
 ----
 ---------------------------------------------------------------------------------------------------
+---- BUGFIX (B35): DE ONDE O CONE E AVALIADO.
+----
+---- O vanilla fixa a origem na posicao ATUAL da unidade, e diz por que:
+----     local attack_pos = unit:GetPos() -- make sure we're using the current position
+----                                      -- in case the unit has moved
+---- Isso esta certo para quem chama DEPOIS do movimento -- o AIPlayAttacks (CombatAI.lua:216-232)
+---- roda o PrecalcAction das signature actions ja no destino, e ali as duas posicoes coincidem.
+----
+---- Mas quem pergunta ANTES do movimento recebia uma resposta sobre um lugar onde a unidade nao
+---- vai estar. Sintoma medido: o painel de IA mostrava MGSetup "indisponivel -- sem alvo", e no
+---- turno real a unidade caminhava e montava a MG normalmente. Nenhum dos dois mentia; eles
+---- mediam de lugares diferentes.
+----
+---- PIOR QUE ISSO: a funcao ja estava MISTURANDO as duas origens. O nosso
+---- AICalcAOETargetPoints filtra os pontos candidatos pela distancia ate o DESTINO
+---- (SOURCE_AICalcAOETargetPoints.lua), enquanto attack_pos, os dois CheckLOS, o GetLoFData e o
+---- CalcChanceToHit mediam da ORIGEM. Antes de andar, portanto, ela mantinha um ponto por estar
+---- no alcance do destino e depois o matava por falta de linha da origem -- o pior dos dois
+---- mundos, e era o unico numero que aparecia na tela.
+----
+---- O CONSERTO: `attack_pos_override`. Quem sabe que a unidade ainda vai andar passa a posicao
+---- de onde o cone realmente vai ser plantado, e AS SEIS MEDICOES passam a sair de la.
+----
+---- QUEM PASSA, E QUEM NAO PASSA. So o AIActionBaseConeAttack:PrecalcAction sobrescrito no fim
+---- deste arquivo -- que e o caminho do MGSetup (ramo "montar") e do Overwatch como signature
+---- action. Os outros dois chamadores continuam recebendo `nil` e rodando byte a byte o vanilla,
+---- de proposito:
+----   * AIActionMGSetup:PrecalcAction, ramo JA MONTADA (AIActions.lua:810-841) -- a unidade esta
+----     presa na arma, nao vai a lugar nenhum; a posicao atual E a posicao de tiro.
+----   * UnitAwareness.lua:1090 (ataque de abertura ao ficar consciente) -- ali a unidade atira de
+----     onde esta, e o `ai_destination` do context pode ser de outro momento do turno. Adivinhar
+----     ali seria trocar um erro conhecido por um silencioso.
+----
+---- SEM OVERRIDE, NADA MUDA. `attack_pos_override` nil devolve exatamente o comportamento de
+---- antes, incluindo a forma-objeto do CheckLOS e a ausencia de step_pos -- que e o que o B26
+---- mediu. `const.RATOAI.ConeFromDest = false` no console desliga sem recarregar mod.
+---------------------------------------------------------------------------------------------------
 
-function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stance)
+function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stance,
+                                  attack_pos_override)
     if context.target_locked then
         return {}
     end
@@ -106,7 +144,14 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
         min_range, max_range = RATOAI_MGConeRange(unit, weapon, params)
     end
 
-    local target_pts = AICalcAOETargetPoints(context, min_range, max_range)
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B35): a origem hipotetica. `nil` = a posicao atual (vanilla).
+    ---- Calculada AQUI, antes do AICalcAOETargetPoints, porque o filtro de alcance dele tem de
+    ---- usar a mesma origem que as medicoes de linha la embaixo.
+    ---------------------------------------------------------------------------------------------
+    local hypo = (const.RATOAI.ConeFromDest ~= false) and attack_pos_override or nil
+
+    local target_pts = AICalcAOETargetPoints(context, min_range, max_range, nil, hypo)
     if additional_target_pt then
         target_pts[#target_pts + 1] = additional_target_pt
     end
@@ -115,7 +160,8 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     local zones = {}
     local cone_angle = params.cone_angle
     local targets = {}
-    local attack_pos = unit:GetPos() -- make sure we're using the current position in case the unit has moved
+    ---- BUGFIX (B35): com override, o apice do cone e o destino. Sem, e o vanilla.
+    local attack_pos = hypo or unit:GetPos()
     local units = table.copy(context.enemies)
     table.iappend(units, GetAllAlliedUnits(unit))
     local unit_sight = unit:GetSightRadius()
@@ -127,6 +173,13 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     ---- funcao volta a ser byte a byte o vanilla.
     local override = (stance and stance ~= unit.stance) and stance or nil
     ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B35): a forma-PONTO do CheckLOS nao tem objeto de onde ler postura, entao com
+    ---- origem hipotetica a postura passa a ser SEMPRE explicita. E a mesma forma que o proprio
+    ---- jogo usa para prever cone de posicao hipotetica (UnitOverwatch.lua:270,
+    ---- UnitActions.lua:2710). Sem `hypo`, os dois valores sao os de antes.
+    local los_src = hypo or unit
+    local los_stance = hypo and (stance or unit.stance) or override
+    ---------------------------------------------------------------------------------------------
 
     for zi, pt in ipairs(target_pts) do
         local dir = pt - attack_pos
@@ -136,8 +189,11 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
             zones[#zones + 1] = zone
 
             local angle = CalcOrientation(attack_pos, pt)
-            local los_any, los_targets = CheckLOS(units, unit, unit:GetDist(target_pos),
-                                                  override, cone_angle, angle)
+            ---- BUGFIX (B35): `unit:GetDist` mede da posicao atual; com origem hipotetica a
+            ---- distancia tem de sair do apice do cone, senao o alcance de LOS nao e o do cone.
+            local cone_dist = hypo and attack_pos:Dist(target_pos) or unit:GetDist(target_pos)
+            local los_any, los_targets = CheckLOS(units, los_src, cone_dist, los_stance,
+                                                  cone_angle, angle)
             if los_any then
                 for i, target_unit in ipairs(units) do
                     if los_targets[i] and IsValidTarget(target_unit) then
@@ -163,7 +219,7 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
     ---- quando a acao e da MG; sem isso um alvo alem do comprimento do cone passaria neste
     ---- segundo filtro, que e mais largo que o primeiro.
     local max_distance = Min(Min(unit_sight, weapon:GetMaxRange()), max_range)
-    local los_any, los_targets = CheckLOS(targets, unit, max_distance, override)
+    local los_any, los_targets = CheckLOS(targets, los_src, max_distance, los_stance)
     if not los_any then
         for _, zone in ipairs(zones) do
             table.iclear(zone.units)
@@ -183,13 +239,16 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
         obj = unit,
         action_id = context.default_attack.id,
         weapon = weapon,
-        stance = override or unit.stance, ---- BUGFIX (B26): sem sobrescrita = unit.stance (vanilla)
+        stance = los_stance or unit.stance, ---- BUGFIX (B26): sem sobrescrita = unit.stance (vanilla)
+        step_pos = hypo, ---- BUGFIX (B35): nil sem override = vanilla
         range = max_distance,
         target_spot_group = "Torso",
         prediction = true
     })
     local action = CombatActions[action_id]
-    local args = {target_spot_group = false}
+    ---- BUGFIX (B35): `step_pos` e lido pelo CalcChanceToHit como attacker_pos (Unit.lua:6991) e
+    ---- repassado a todo modificador. nil sem override = vanilla.
+    local args = {target_spot_group = false, step_pos = hypo}
     for i, attack_data in ipairs(targets_attack_data) do
         local target = targets[i]
         local chance_to_hit = 0
@@ -211,4 +270,87 @@ function AIPrecalcConeTargetZones(context, action_id, additional_target_pt, stan
         end
     end
     return zones
+end
+
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B35): a posicao de onde o cone vai ser plantado.
+----
+---- Devolve nil quando nao ha nada a corrigir -- sem destino escolhido (fase de selecao de
+---- behavior, onde `ai_destination` ainda nem existe) ou destino igual ao voxel onde a unidade ja
+---- esta (o caso do AIPlayAttacks, depois de andar). Nesses casos o chamador passa nil e a
+---- avaliacao roda byte a byte como o vanilla.
+----
+---- A COMPARACAO E POR VOXEL EMPACOTADO, nao por posicao visual. `unit:GetPos()` nao bate com o
+---- `stance_pos_unpack` do destino nem quando a unidade esta parada em cima dele -- o proprio
+---- B26 mediu isso ("o voxel empacotado nao e exatamente a posicao visual da unidade"). Comparar
+---- pontos visuais daria "vai se mexer" quase sempre, e o conserto passaria a agir onde nao
+---- devia. E o mesmo idioma do SOURCE_AIGetAttackArgs.lua:45-51.
+----
+---- Segundo retorno: a POSTURA do destino. O destino carrega postura empacotada junto, e a
+---- unidade vai chegar la nela. Quem tem postura propria a impor -- o MGSetup, que deita por
+---- definicao -- passa a dele e ignora esta.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ConeEvalPos(context)
+    ---- O movimento ja acabou (ou falhou, e ela ficou pelo caminho): onde ela esta E de onde ela
+    ---- vai atirar. Este guard e o que separa "ainda vai andar" de "ja andou" sem depender do
+    ---- movimento ter dado certo -- a comparacao de voxel abaixo sozinha diria "vai se mexer"
+    ---- para uma unidade que tentou chegar ao destino e nao conseguiu.
+    if context.AIisPlayingAttacks then
+        return
+    end
+    local dest = context.ai_destination
+    if not dest then
+        return
+    end
+    local upos = GetPackedPosAndStance(context.unit)
+    if not upos then
+        return
+    end
+    local ux, uy, uz = stance_pos_unpack(upos)
+    local dx, dy, dz, dstance_idx = stance_pos_unpack(dest)
+    if ux == dx and uy == dy and uz == dz then
+        return ---- ja esta la
+    end
+    return RATOAI_ValidatePosZ(point(dx, dy, dz)), StancesList[dstance_idx]
+end
+
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B35): unico chamador que passa a origem hipotetica.
+----
+---- Copia fiel de AIActionBaseConeAttack:PrecalcAction (AIActions.lua:187-207); a unica diferenca
+---- sao as tres linhas marcadas. Sobrescrever a BASE basta: o AIActionMGSetup:PrecalcAction chama
+---- `AIActionBaseConeAttack.PrecalcAction(self, ...)` por indexacao, entao pega esta versao.
+----
+---- `action_state.stance` tem precedencia sobre a postura do destino: quem a define e o MGSetup,
+---- que deita ao montar independentemente da postura em que o destino foi empacotado.
+---------------------------------------------------------------------------------------------------
+function AIActionBaseConeAttack:PrecalcAction(context, action_state)
+    if not IsKindOf(context.weapon, "Firearm") then
+        return
+    end
+
+    local caction = CombatActions[self.action_id]
+    if not caction or caction:GetUIState({context.unit}) ~= "enabled" then
+        return
+    end
+
+    local args, has_ap = AIGetAttackArgs(context, caction, nil, "None")
+    action_state.has_ap = has_ap
+    if not has_ap then
+        return
+    end
+
+    ---- BUGFIX (B35): as tres linhas ----------------------------------------------------------
+    local eval_pos, eval_stance = RATOAI_ConeEvalPos(context)
+    local zones = AIPrecalcConeTargetZones(context, self.action_id, nil,
+                                           action_state.stance or eval_stance, eval_pos)
+    --------------------------------------------------------------------------------------------
+
+    local zone, best_score = self:EvalZones(context, zones)
+    action_state.score = best_score
+    args.target_pos = zone and zone.target_pos
+    args.target = zone and zone.target_pos
+    action_state.args = args
+
+    g_LastSelectedZone = zone
 end

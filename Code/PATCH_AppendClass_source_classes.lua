@@ -77,7 +77,7 @@ function OnMsg.ClassesGenerate(classdefs)
                     "tokill = 100 significa \"daqui eu derrubo o alvo\". O teto passa a " ..
                     "ser o HP dele em vez de uma constante escolhida a dedo.",
                 editor = "choice",
-                default = "relative",
+                default = "soft",
                 items = function(self)
                     return {"relative", "cap", "soft", "tokill"}
                 end
@@ -99,7 +99,7 @@ function OnMsg.ClassesGenerate(classdefs)
                     "10->83. Nunca chega a 100, entao o Weight efetivo encolhe -- suba o " ..
                     "Weight ao ligar este modo.",
                 editor = "number",
-                default = 200,
+                default = 100,
                 min = 1,
                 max = 2000
             }, {
@@ -161,6 +161,54 @@ function OnMsg.ClassesGenerate(classdefs)
                     "margem de seguranca sobre o minimo necessario).",
                 editor = "bool",
                 default = true
+            }
+        }
+    }
+
+    -------------------------------------------------------------------------------------------
+    ---- POSTURA DE DESTINO POR COBERTURA  (BUGFIX B37, SOURCE_AIFindDestinations.lua)
+    ----
+    ---- NAO E A MESMA COISA QUE `PrefStance`, e a diferenca importa:
+    ----
+    ----   PrefStance  = "que postura eu GOSTO de ter". E uma preferencia constante, e o motor a
+    ----                 usa em dois lugares: o AIBuildArchetypePaths empacota o destino nela
+    ----                 quando sobra AP para chegar assim, e o AIBehavior:TakeStance a adota no
+    ----                 fim do turno se ja estiver no destino. Nao olha o tile.
+    ----
+    ----   ExposedProne = "que postura ESTE TILE pede". Olha a cobertura do voxel e decide por
+    ----                 destino: com cobertura, agacha (regra de sempre); aberto, deita.
+    ----
+    ---- Convivem: o PrefStance continua mandando em tudo que nao seja tile aberto. Nos
+    ---- arquetipos com PrefStance = Prone esta property nao tem efeito nenhum -- o B25 ja deita
+    ---- em tudo o que estiver ao alcance, e as duas conversoes se excluem para nao cobrar a
+    ---- mudanca de postura duas vezes.
+    -------------------------------------------------------------------------------------------
+    AppendClass.AIArchetype = {
+        properties = {
+            {
+                category = "Strategy",
+                id = "ExposedProne",
+                name = "Prone When Exposed",
+                help = "No tile SEM cobertura nenhuma, empacota o destino deitado em vez de em " ..
+                    "pe. Tile com cobertura continua seguindo a regra de agachar." .. "\n" ..
+                    "Sem efeito quando Stance Preference = Prone (essa ja deita em tudo).",
+                editor = "bool",
+                default = false
+            }, {
+                category = "Strategy",
+                id = "ExposedProneMinTiles",
+                name = "Prone Exclusion Radius",
+                help = "Distancia ate o inimigo mais proximo abaixo da qual NAO se deita, em " ..
+                    "tiles. Deitado colado no inimigo e armadilha: levantar custa AP, o campo " ..
+                    "de tiro e pior e a unidade fica presa." .. "\n" .. "0 = deita a qualquer " ..
+                    "distancia.",
+                editor = "number",
+                default = 8,
+                min = 0,
+                max = 30,
+                no_edit = function(self)
+                    return not self.ExposedProne
+                end
             }
         }
     }

@@ -33,8 +33,8 @@ function RATOAI_EndTurnAIAction(unit)
     end
 
     RATOAI_EndTurnCycleWeapon(unit)
-    RATOAI_TryChangeStance(unit)
-    RATOAI_TryEnterShootingStance(unit)
+    -- RATOAI_TryChangeStance(unit)
+    -- RATOAI_TryEnterShootingStance(unit)
 
     ---- Make sure we are not saving AP that we spent in the actions in this function
     local ap = unit.ActionPoints

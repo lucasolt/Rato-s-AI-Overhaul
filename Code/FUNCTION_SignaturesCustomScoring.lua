@@ -181,14 +181,16 @@ function AutoFire_CustomScoring(self, context)
     ---- O point blank continua sendo PRIORIDADE, e nao um numero. E regra tatica deliberada
     ---- ("colado, despeja o pente"), nao artefato do scoring -- e o resultado esperado
     ---- concordaria com ela de qualquer jeito, com 10 a 15 balas e sem penalidade de distancia.
-    ---- Deixar de fora mantem a flag mudando uma coisa so. 
-    if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
-        priority = true
-    else
-        weight, disable = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
-                                         "Torso", dest_cth, dest_recoil)
-    end
+    ---- Deixar de fora mantem a flag mudando uma coisa so. TESTANDO SEM ISSO
+    -- if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
+    --     priority = true
+    -- else
+    --     weight, disable = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
+    --                                      "Torso", dest_cth, dest_recoil)
+    -- end
 
+    weight, disable = ExpectedWeight(self, context, weight, upos, action, target, attacker_pos,
+                                     "Torso", dest_cth, dest_recoil)
     return Max(0, weight), disable, priority
 end
 
@@ -778,9 +780,9 @@ function MGSetup_CustomScoring(self, context)
 
     local upos, _, _, dist, target, _, _, attacker_pos = GetDestArgs(self, context)
 
-    if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then -- RATOAI_GetCloseRange() then
-        return 0, true, false
-    end
+    -- if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then -- RATOAI_GetCloseRange() then
+    --    return 0, true, false
+    -- end
 
     if not (upos and target) then
         return weight, disable, priority ---- nada para comparar: peso do preset, sem opiniao
@@ -791,31 +793,34 @@ function MGSetup_CustomScoring(self, context)
         return weight, disable, priority ---- nao deu para responder
     end
 
-    local limiar = const.RATOAI.MGSetupMaxHits or 0
-    if limiar <= 0 then
+    ---------------------------------------------------------------------------------------------
+    ---- A RAMPA, DOS DOIS LADOS DO LIMIAR.
+    ----
+    ---- Uma linha so, com dobra no limiar. Abaixo dele o peso sobe (montar vale); acima dele o
+    ---- peso DESCE (atirar de pe ja resolve), saturando um limiar inteiro adiante.
+    ----
+    ---- O lado de baixo nao mudou. O de cima existe porque antes ele devolvia o peso cru -- o
+    ---- mesmo valor que os tres `return` de "nao consegui responder" la em cima. Os dois casos
+    ---- eram indistinguiveis no placar, e nenhum peso de preset servia para ambos. Agora o peso
+    ---- do preset e o MEIO da escala: quem nao respondeu fica nele, e quem respondeu se move.
+    ----
+    ---- A CURVA MORA NO RATOAI_MGSetupRamp (FUNCTION_GunnerBehaviors.lua), e nao aqui, porque a
+    ---- escolha de BEHAVIOR usa a mesma referencia. Duas contas separadas da mesma pergunta e
+    ---- como elas divergem -- mesmo motivo do RATOAI_MGConeRange e do RATOAI_CoverCTH.
+    ---------------------------------------------------------------------------------------------
+    local mult, limiar = RATOAI_MGSetupRamp(hits)
+    if not mult then
         return weight, disable, priority ---- limiar desligado pela constante: nada a dizer
     end
-
-    if hits >= limiar then
-        ---- DEBUG (D6): grava mesmo sem inflar -- ver o comentario de RegistrarExpectedMG.
-        RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, weight, target, dist,
-                            string.format(
-                                "tiro de pe rende %d.%02d, limiar %d.%02d -- ja rende, sem inflar",
-                                hits / 100, hits % 100, limiar / 100, limiar % 100))
-        return weight, disable, priority ---- o tiro de pe ja rende; nao precisa inflar
-    end
-
-    ---- interpolacao linear, mesmo molde do Preparar() acima: quanto pior o tiro de agora,
-    ---- mais vale montar a MG.
-    local bonus = const.RATOAI.MGSetupBonus or 0
-    local mult = MulDivRound(limiar - hits, bonus, limiar)
-    local peso_final = MulDivRound(weight, 100 + mult, 100)
+    local peso_final = Max(0, MulDivRound(weight, 100 + mult, 100))
 
     RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, peso_final, target, dist,
-                        string.format("tiro de pe rende %d.%02d, limiar %d.%02d", hits / 100,
-                                      hits % 100, limiar / 100, limiar % 100))
+                        string.format("tiro de pe rende %d.%02d, limiar %d.%02d -- %s %d%%",
+                                      hits / 100, hits % 100, limiar / 100, limiar % 100,
+                                      mult >= 0 and "inflado" or "reduzido",
+                                      mult >= 0 and mult or -mult))
 
-    return Max(0, peso_final), disable, priority
+    return peso_final, disable, priority
 end
 
 ---- "Alguma acao ACIMA desta na lista de signatures esta disponivel agora?" Devolve o action_id

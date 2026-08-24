@@ -37,7 +37,7 @@ DefineClass.AIPolicyThreatExposure = {
             id = "visibility_mode",
             name = "Visibility Mode",
             editor = "choice",
-            default = "team",
+            default = "self",
             items = function(self)
                 return {"self", "team", "all"}
             end
@@ -141,7 +141,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo colado.\n" .. "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
                 "So tem efeito com `CoverCancels` ligado.",
             editor = "number",
-            default = 8,
+            default = 12,
             min = 0,
             max = 30
         }, {
@@ -155,7 +155,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
                 "cheia, como se fosse corpo a corpo.\n" .. "So tem efeito com CoverNearTiles > 0.",
             editor = "number",
-            default = 0,
+            default = 40,
             min = 0,
             max = 100
         }, {
@@ -480,8 +480,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                                              ", caindo a %d%% dentro de %st",
                                                              Clamp(self.CoverTrustNear or 0, 0, 100),
                                                              tostring(tiles(near))) or "") or
-                                       "classico (so ameaca)",
-                                   tostring(tiles(plateau)) ..
+                                       "classico (so ameaca)", tostring(tiles(plateau)) ..
                                        ((self.RangeCapTiles or 0) > 0 and
                                            string.format(" | teto %dt", self.RangeCapTiles) or "") ..
                                        (curve > 0 and string.format(" | curva %d%%", curve) or ""),
