@@ -112,13 +112,20 @@ end
 ---- Tabela unica com os pesos do Soldier -- preencha AQUI, a mao. E a fonte de verdade: nao e
 ---- lida do items.lua, e sim aplicada por cima dele (via RATOAI_ApplyArchetypeWeights, mais
 ---- abaixo). Os outros arquetipos derivam dela, nunca do Archetypes.Soldier carregado.
+
+
+--- Pacote Burst = 200 k, 300 w
+--- Pacote single = 80k, 200 w
+
+
+----- DESATUALIZADO
 local RATOAI_SoldierWeights = {
     Behaviors = {
         StandardAI = {
 			-- OptLocWeight = 100,
             EndTurn = {
-                AIPolicyDealDamage = { 150, 50 }, -- soft 190, tokill
-                AIPolicyThreatExposure = 200,
+                AIPolicyDealDamage = { 150, 50 }, -- soft 220, tokill
+                AIPolicyThreatExposure = 220,
             },
         },
     },
@@ -135,13 +142,13 @@ local RATOAI_SniperWeights = {
 		StandardAI = {
 			-- OptLocWeight = 100,
 			EndTurn = {
-				AIPolicyDealDamage = { 200, 40 }, -- soft 50, tokill
-				AIPolicyThreatExposure = 150,
+				AIPolicyDealDamage = { 200}, -- soft 50
+				AIPolicyThreatExposure = 150, -- curva 40%
 			},
 		},
 	},
 	OptLoc = {
-		AIPolicyHighGround = 150, --- z = 8
+		AIPolicyHighGround = 100, --- z = 8
 		AIPolicyLosToEnemy = 50,
 		AIPolicyCustomWeaponRange = 100,
 	},
