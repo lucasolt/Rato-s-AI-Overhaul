@@ -84,7 +84,7 @@ const.RATOAI = const.RATOAI or {}
 ---- plantado no maximo. O B26 e o B35 estavam no mesmo barco e acordaram junto com ele.
 ---------------------------------------------------------------------------------------------------
 
-const.RATOAI.MGConeRangePct = 70
+const.RATOAI.MGConeRangePct = 75
 
 const.RATOAI.MGConeRangeTiles = 0
 
@@ -371,7 +371,7 @@ const.RATOAI.MGSetupMalus = 80
 ---- fazer sentido.
 ---------------------------------------------------------------------------------------------------
 
-const.RATOAI.PronePackTiles = 20
+const.RATOAI.PronePackTiles = 26
 
 ---------------------------------------------------------------------------------------------------
 ---- POSTURA DE DESTINO POR COBERTURA (BUGFIX B37, SOURCE_AIFindDestinations.lua)

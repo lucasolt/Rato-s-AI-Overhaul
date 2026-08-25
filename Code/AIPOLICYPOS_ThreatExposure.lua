@@ -155,9 +155,81 @@ DefineClass.AIPolicyThreatExposure = {
                 "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
                 "cheia, como se fosse corpo a corpo.\n" .. "So tem efeito com CoverNearTiles > 0.",
             editor = "number",
-            default = 50,
+            default = 40,
             min = 0,
             max = 100
+        }, {
+            ---------------------------------------------------------------------------
+            ---- POSTURA DO DESTINO ABATE AMEACA  (espelha o GBO3)
+            ----
+            ---- Diferente de tudo que esta acima, isto NAO e vies de risco -- e mecanica
+            ---- do jogo que a policy estava ignorando. O CTH_cover_prone.lua do GBO3
+            ---- reescreve o RangeAttackTargetStanceCover para dar ao alvo agachado ou
+            ---- deitado uma penalidade de CTH que CRESCE COM A DISTANCIA:
+            ----
+            ----   Prone  = PronePenalty  x min(d, ProneMaxTiles)  / ProneMaxTiles
+            ----   Crouch = CrouchPenalty x min(d, CrouchMaxTiles) / CrouchMaxTiles
+            ----   abaixo de 1.5 tiles, nada -- colado, deitar nao adianta
+            ----
+            ---- Com os numeros atuais do GBO3 (Cover -35, Prone -30, Crouch -12): deitado
+            ---- a 24+ tiles vale 86% de uma cobertura cheia; agachado a 26+ tiles vale
+            ---- 34%. De perto os dois tendem a zero -- que e a razao de a rampa existir.
+            ----
+            ---- NAO SOMA COM COBERTURA, e a prioridade e a mesma do jogo: se
+            ---- RATOAI_CoverCTH diz que a cobertura se aplica neste tile, ela manda e a
+            ---- postura nao entra. A postura so pega o tile SEM cobertura util -- que e
+            ---- justamente o tile aberto onde a IA precisava de um motivo para deitar.
+            ----
+            ---- (No GBO3 o Prone e testado ANTES da cobertura e retorna primeiro; aqui
+            ---- cobertura vem primeiro nos dois casos, de proposito. Cobertura cheia -35
+            ---- e mais forte que o Prone -30 em qualquer distancia, entao dar prioridade
+            ---- a ela e o resultado conservador -- a IA nunca superestima o tile.)
+            ---------------------------------------------------------------------------
+            id = "StanceCancels",
+            name = "Postura do destino abate a ameaca",
+            help = "Agachar/deitar no destino reduz a ameaca que chega nele, com o " ..
+                "efeito CRESCENDO com a distancia (colado nao adianta nada). Espelha o " ..
+                "RangeAttackTargetStanceCover do GBO3.\n" ..
+                "Nao soma com cobertura: onde ha cobertura util, ela tem prioridade e a " ..
+                "postura nao entra.",
+            editor = "bool",
+            default = true
+        }, {
+            ---- Mesmo papel do CoverTrust, para a outra fonte de abatimento: 100 = a IA
+            ---- acredita na postura exatamente como o jogo a paga. Abaixo disso ela
+            ---- desconta -- util porque deitar tem custo de AP para desfazer, e um tile
+            ---- so bom deitado e um tile do qual e caro sair.
+            id = "StanceTrust",
+            name = "Confianca na postura (%)",
+            help = "So com `StanceCancels` ligado. 100 = a postura vale o que o GBO3 paga " ..
+                "em CTH. Abaixo disso a IA desconta o beneficio (deitar prende a unidade: " ..
+                "levantar custa AP no turno seguinte). 0 = postura nao vale nada.",
+            editor = "number",
+            default = 90,
+            min = 0,
+            max = 100
+        }, {
+            ---- Espelham os `max_dist` hardcoded do CTH_cover_prone.lua (24 e 26 tiles).
+            ---- Se aqueles mudarem no GBO3, mude estes junto -- sao o mesmo numero, e nao
+            ---- ha como ler de la (estao dentro do corpo da CalcValue, nao no preset).
+            id = "ProneMaxTiles",
+            name = "Distancia de saturacao do Prone (tiles)",
+            help = "Distancia em que deitado rende o PronePenalty CHEIO; abaixo dela o " ..
+                "beneficio cai linearmente ate zero. Espelha o max_dist = 24 do " ..
+                "CTH_cover_prone.lua do GBO3 -- mantenha os dois iguais.",
+            editor = "number",
+            default = 24,
+            min = 1,
+            max = 60
+        }, {
+            id = "CrouchMaxTiles",
+            name = "Distancia de saturacao do Crouch (tiles)",
+            help = "Idem para agachado. Espelha o max_dist = 26 do CTH_cover_prone.lua " ..
+                "do GBO3.",
+            editor = "number",
+            default = 26,
+            min = 1,
+            max = 60
         }, {
             ---- Ver o cabecalho de RATOAI_ThreatRamp em AIPOLICYPOS_CustomSeekCover.lua
             ---- para o porque. Resumo: a rampa linear a partir do zero contradiz a curva
@@ -171,7 +243,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "Cuidado: plato maior infla o SOMA(w) e satura mais cedo; se subir muito " ..
                 "aqui, suba a saturacao junto.",
             editor = "number",
-            default = 4,
+            default = 6,
             min = 0,
             max = 30
         }, {
@@ -227,7 +299,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "concentra em quem esta perto. Valores no meio interpolam.\n" ..
                 "Nao muda o peso no plato (100) nem no limite do alcance (0).",
             editor = "number",
-            default = 20,
+            default = 020,
             min = 0,
             max = 100
         }, {
@@ -261,6 +333,9 @@ function AIPolicyThreatExposure:GetEditorView()
     end
     if (self.FalloffCurve or 0) > 0 then
         partes[#partes + 1] = string.format("curva %d%%", self.FalloffCurve)
+    end
+    if self.StanceCancels then
+        partes[#partes + 1] = "postura"
     end
     if #partes == 0 then
         return "Threat Exposure"
@@ -325,33 +400,156 @@ function AIPolicyThreatExposure:GetCoverTrust(dist)
     return Clamp(near_trust + MulDivRound(trust - near_trust, dist, near), 0, 100)
 end
 
+---------------------------------------------------------------------------------------------------
+---- RAMPA DE POSTURA
+----
+---- Parte da mitigacao por postura que NAO depende do inimigo: quanto agachar/deitar
+---- neste destino chega a valer no alcance cheio, e onde a rampa satura. Constante para
+---- o destino inteiro, entao o EvalDest resolve isto UMA vez e o laco por inimigo so faz
+---- a interpolacao linear -- os ResolveValue ficam fora do caminho quente.
+----
+---- A mitigacao e expressa na MESMA moeda da cobertura ("% de uma cobertura cheia"),
+---- dividindo pelo mesmo `Cover` que o GetUncovered usa. E o que permite as duas se
+---- substituirem sem trocar de escala.
+----
+---- Retorna: mitigacao no alcance cheio (0..100), distancia de saturacao, distancia
+---- minima abaixo da qual o jogo nao paga nada. 0 quando nao ha o que aplicar.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:GetStanceRamp(stance)
+    if not self.StanceCancels or (stance ~= "Crouch" and stance ~= "Prone") then
+        return 0
+    end
+    local preset = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover
+    local full = preset:ResolveValue("Cover")
+    if not full or full == 0 then
+        return 0
+    end
+
+    local pen, max_tiles
+    if stance == "Prone" then
+        pen, max_tiles = preset:ResolveValue("PronePenalty"), self.ProneMaxTiles or 24
+    else
+        pen, max_tiles = preset:ResolveValue("CrouchPenalty"), self.CrouchMaxTiles or 26
+    end
+    if not pen or pen == 0 or max_tiles <= 0 then
+        return 0
+    end
+
+    ---- ambos negativos (penalidades de CTH), entao a razao sai positiva
+    local mitig = Clamp(MulDivRound(pen, 100, full), 0, 100)
+    mitig = MulDivRound(mitig, Clamp(self.StanceTrust or 100, 0, 100), 100)
+
+    ---- 1.5 tiles: o mesmo corte do CTH_cover_prone.lua. MulDivRound em vez de
+    ---- `1.5 * SlabSizeX` porque literal decimal vira float e float vaza pro NetUpdateHash.
+    return mitig, max_tiles * const.SlabSizeX, MulDivRound(3, const.SlabSizeX, 2)
+end
+
 ---- Fracao da ameaca deste inimigo que a cobertura NAO neutraliza, 0..100.
 ---- Usa RATOAI_CoverCTH -- a mesma funcao da AIPolicyCustomSeekCover, de proposito: as
 ---- duas nao podem divergir na leitura de cobertura, e esta e a unica forma de garantir
 ---- isso sem duplicar a conta.
----- 2o retorno: a confianca efetiva usada. So serve ao overlay -- sem ela nao da para
----- distinguir "nao ha cobertura neste tile" de "ha, mas o cara esta colado". Vem nil
----- nos casos em que cobertura nem chegou a ser consultada.
-function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm, dist)
-    ---- cobertura nao para corpo a corpo: ameaca inteira, sem desconto
+----
+---- COBERTURA TEM PRIORIDADE, POSTURA E O FALLBACK. `RATOAI_CoverCTH` devolve
+---- `use = false` exatamente no caso em que o jogo NAO aplica cobertura (o
+---- `value < exposed_value` la dentro) -- ou seja, o ponto em que o
+---- RangeAttackTargetStanceCover do GBO3 cai no ramo de Crouch. Encaixar a postura ai e
+---- reproduzir a prioridade do jogo, nao inventar uma.
+----
+---- 2o retorno: a confianca efetiva usada (so overlay). 3o: qual fonte abateu --
+---- "cobertura", "postura" ou nil.
+function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm, dist,
+                                             stance_mitig, stance_max_d, stance_min_d)
+    ---- nem cobertura nem postura param corpo a corpo: o RangeAttackTargetStanceCover
+    ---- inteiro exige `IsKindOf(weapon1, "Firearm")`. Ameaca cheia, sem desconto.
     if not is_firearm then
         return 100
     end
-    local use, value = RATOAI_CoverCTH(att_pos, target_pos, stance)
-    if not use then
-        return 100
-    end
+
+    dist = dist or att_pos:Dist(target_pos)
+
     local full = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue(
                      "Cover")
-    if not full or full == 0 then
+    local use, value = RATOAI_CoverCTH(att_pos, target_pos, stance)
+    if use and full and full ~= 0 then
+        local trust = self:GetCoverTrust(dist)
+        local cover = Clamp(MulDivRound(value or 0, 100, full), 0, 100)
+        cover = MulDivRound(cover, trust, 100)
+        return 100 - cover, trust, "cobertura"
+    end
+
+    ---- sem cobertura util: a postura assume. `stance_mitig` chega pronto do EvalDest;
+    ---- o fallback existe so para quem chamar este metodo de fora.
+    if not stance_mitig then
+        stance_mitig, stance_max_d, stance_min_d = self:GetStanceRamp(stance)
+    end
+    if not stance_mitig or stance_mitig <= 0 or dist < (stance_min_d or 0) then
         return 100
     end
-    ---- `dist` chega pronto do EvalDest (ja calculado la); o fallback existe so para
-    ---- quem chamar este metodo de fora, e nao paga Dist() no caminho quente.
-    local trust = self:GetCoverTrust(dist or att_pos:Dist(target_pos))
-    local cover = Clamp(MulDivRound(value or 0, 100, full), 0, 100)
-    cover = MulDivRound(cover, trust, 100)
-    return 100 - cover, trust
+
+    ---- linear ate a saturacao, exatamente como o GBO3: perto vale pouco, longe vale tudo
+    local mitig = MulDivRound(stance_mitig, Min(dist, stance_max_d), stance_max_d)
+    return 100 - Clamp(mitig, 0, 100), nil, "postura"
+end
+
+---------------------------------------------------------------------------------------------------
+---- HOOK: STATUS EFFECTS QUE ENFRAQUECEM A AMEACA DE UM INIMIGO
+----
+---- Um inimigo suprimido, cego ou com a mira arruinada continua entrando na conta de
+---- ameaca com o peso inteiro -- a rampa so sabe distancia e alcance. Este hook e onde
+---- isso se corrige, sem tocar no resto da policy.
+----
+---- USO SIMPLES -- preencha a tabela, no console ou em qualquer arquivo do mod:
+----
+----   const.RATOAI.ThreatEffectMods.Suppressed = 40   -- suprimido ameaca 40% do normal
+----   const.RATOAI.ThreatEffectMods.Blinded    = 10
+----   const.RATOAI.ThreatEffectMods.Inaccurate = 70
+----
+---- Chave = id do CharacterEffect; valor = PERCENTUAL da ameaca que sobra (0 = inofensivo,
+---- 100 = sem efeito, >100 tambem vale se algum efeito deve AGRAVAR a ameaca). Efeitos
+---- simultaneos MULTIPLICAM: suprimido (40) + cego (10) = 4% da ameaca.
+----
+---- Deixei a tabela VAZIA de proposito: chutar ids de efeito daria um mecanismo que
+---- parece ligado e nao faz nada -- o erro que o BUGFIX B34 limpou. Vazia, o hook custa
+---- um `next()` por inimigo e devolve 100.
+----
+---- USO AVANCADO: troque a funcao inteira. Ela e global de escopo de arquivo, entao
+---- `RATOAI_ThreatEnemyFactor = function(enemy, context) ... end` num arquivo carregado
+---- DEPOIS deste substitui a logica (ex.: olhar municao, arma quebrada, moral).
+---- Contrato: devolver percentual >= 0; 100 = ameaca intacta.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
+
+function RATOAI_ThreatEnemyFactor(enemy, context)
+    local mods = const.RATOAI.ThreatEffectMods
+    if not mods or next(mods) == nil then
+        return 100
+    end
+
+    ---- Status effect nao muda entre destinos dentro da mesma avaliacao, e esta funcao
+    ---- roda uma vez POR DESTINO por inimigo. Sem cache seria um HasStatusEffect por
+    ---- efeito registrado, por inimigo, por destino -- milhares de consultas por turno.
+    local cache = context and context.__ratoai_threat_factor
+    if cache then
+        local hit = cache[enemy]
+        if hit then
+            return hit
+        end
+    elseif context then
+        cache = {}
+        context.__ratoai_threat_factor = cache
+    end
+
+    local factor = 100
+    for effect_id, pct in pairs(mods) do
+        if enemy:HasStatusEffect(effect_id) then
+            factor = MulDivRound(factor, Max(0, pct), 100)
+        end
+    end
+
+    if cache then
+        cache[enemy] = factor
+    end
+    return factor
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -395,10 +593,21 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- BAIXA para quem esta de pe (Cover.lua:283).
     local cancels = self.CoverCancels
     local stance
-    if cancels then
+    if cancels or self.StanceCancels then
         local _, _, _, stance_idx = stance_pos_unpack(dest)
         stance = StancesList[stance_idx]
     end
+
+    ---- constante do destino: resolvida UMA vez, fora do laco por inimigo.
+    ---- So vale com CoverCancels ligado -- desligado, esta policy e a classica (ameaca
+    ---- crua) e quem credita protecao e a AIPolicyCustomSeekCover, por fora. Abater aqui
+    ---- por postura reintroduziria o desalinhamento de clamp entre as duas que o proprio
+    ---- CoverCancels existe para resolver (ver o cabecalho daquela property).
+    local stance_mitig, stance_max_d, stance_min_d
+    if cancels then
+        stance_mitig, stance_max_d, stance_min_d = self:GetStanceRamp(stance)
+    end
+
     local plateau = (self.PlateauTiles or 0) * const.SlabSizeX
     local near = (self.CoverNearTiles or 0) * const.SlabSizeX
     local curve = Clamp(self.FalloffCurve or 0, 0, 100)
@@ -424,11 +633,22 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
 
                 ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
                 ---- contribuicao e a rampa crua, exatamente como antes.
-                local uncovered, trust = 100, nil
+                local uncovered, trust, fonte = 100, nil, nil
                 if cancels and ramp > 0 then
-                    uncovered, trust = self:GetUncovered(att_pos, target_pos, stance, is_firearm, d)
+                    uncovered, trust, fonte = self:GetUncovered(att_pos, target_pos, stance,
+                                                                is_firearm, d, stance_mitig,
+                                                                stance_max_d, stance_min_d)
                 end
                 local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
+
+                ---- hook: status effect do inimigo enfraquece a ameaca dele. Depois do
+                ---- abatimento por cobertura/postura porque sao coisas independentes --
+                ---- um cara cego atras de mim me ameaca pouco pelos dois motivos.
+                local fator = RATOAI_ThreatEnemyFactor(enemy, context)
+                if fator ~= 100 then
+                    contrib = MulDivRound(contrib, fator, 100)
+                end
+
                 threat = threat + contrib
 
                 if trace then
@@ -439,12 +659,17 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                         if trust and near > 0 and d < near then
                             near_note = string.format(" | COLADO: confianca %d%%", trust)
                         end
+                        if fator ~= 100 then
+                            near_note = near_note ..
+                                            string.format(" | status: ameaca x%d%%", fator)
+                        end
                         trace[#trace + 1] = string.format(
                                             "  %s: %st / alcance %st%s -> peso %d" ..
-                                                " | exposto %d%% -> contribui %d%s",
+                                                " | exposto %d%% (%s) -> contribui %d%s",
                                             tostring(enemy.session_id), tostring(tiles(d)),
                                             tostring(tiles(range)), capped and " (teto)" or "",
-                                            ramp, uncovered, contrib, near_note)
+                                            ramp, uncovered, tostring(fonte or "nada"), contrib,
+                                            near_note)
                     else
                         trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d",
                                                       tostring(enemy.session_id),
@@ -468,7 +693,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         local saturation = self:GetSaturation()
         local head = string.format("inimigos em context.enemies: %d | saturacao %d %s " ..
                                        "| Penalty %d | Weight %d\n" ..
-                                       "modo: %s | plato %st | stance %s",
+                                       "modo: %s | plato %s | stance %s",
                                    #(context.enemies or empty_table), saturation,
                                    (not self.MaxThreat or self.MaxThreat <= 0) and "(compartilhada)" or
                                        "(MaxThreat proprio)", self.Penalty, self.Weight or 100,
@@ -480,7 +705,12 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                                              ", caindo a %d%% dentro de %st",
                                                              Clamp(self.CoverTrustNear or 0, 0, 100),
                                                              tostring(tiles(near))) or "") or
-                                       "classico (so ameaca)", tostring(tiles(plateau)) ..
+                                       "classico (so ameaca)", tostring(tiles(plateau)) .. "t" ..
+                                       ((stance_mitig or 0) > 0 and
+                                           string.format(
+                                               " | postura %s abate ate %d%% em %st",
+                                               tostring(stance), stance_mitig,
+                                               tostring(tiles(stance_max_d))) or "") ..
                                        ((self.RangeCapTiles or 0) > 0 and
                                            string.format(" | teto %dt", self.RangeCapTiles) or "") ..
                                        (curve > 0 and string.format(" | curva %d%%", curve) or ""),

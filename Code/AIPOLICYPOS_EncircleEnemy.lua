@@ -672,3 +672,49 @@ function RATOAI_DbgEncircle(unit, margin_tiles)
                         MulDivRound(plan.f_line_mid, 1, const.SlabSizeX),
                         MulDivRound(plan.f_line_gap, 1, const.SlabSizeX)))
 end
+
+---------------------------------------------------------------------------------------------------
+---- RECALCULO MANUAL DO PLANO, pelo console
+----
+---- O plano so se recalcula sozinho quando o turno MUDA (RATOAI_GetEncirclePlan compara
+---- plan.turn com g_Combat.current_turn) -- e de proposito, ver secao 5 do cabecalho: se
+---- recalculasse a cada Think, a primeira unidade a andar giraria o eixo para as
+---- proximas. Fora do fluxo normal da IA (moveu unidade pelo editor, testando cenario,
+---- depurando no meio do turno) essa protecao vira o contrario do que voce quer -- o
+---- plano fica velho e voce nao tem como forcar. Esta funcao e essa valvula.
+----
+---- Aceita uma unidade (ou usa a selecionada) SO para achar o time -- o plano e por time,
+---- nao por unidade. Ignora o slot em cache e reconstroi na hora, com as posicoes ATUAIS.
+----
+---- Nao apaga cache por-unidade (context.__encircle_params, dentro de AIPolicyEncircleEnemy:
+---- GetUnitParams): aquele vive no ai_context de cada unidade, que este arquivo nao tem
+---- como alcancar daqui. Sem problema para o uso do console -- serve para inspecionar o
+---- plano ANTES do turno da IA rodar; se voce recalcular no MEIO do turno de uma unidade
+---- que ja pensou, ela so ve o plano novo na proxima vez que pensar.
+---------------------------------------------------------------------------------------------------
+function RATOAI_RecalcEncirclePlan(unit, redraw)
+    unit = unit or (IsKindOf(SelectedObj, "Unit") and SelectedObj)
+    if not unit or not unit.team then
+        print("RATOAI_RecalcEncirclePlan: passe uma unidade (ou selecione uma) com time valido")
+        return false
+    end
+
+    local turn = g_Combat and g_Combat.current_turn or 0
+    local plan = RATOAI_BuildEncirclePlan(unit, unit.team, turn)
+    g_RATOAI_EncirclePlan = plan
+
+    if not plan.valid then
+        print("RATOAI_RecalcEncirclePlan: sem plano valido (falta aliado ou inimigo vivo " ..
+              "conhecido, ou os dois centroides estao mais perto que a separacao minima)")
+        return plan
+    end
+
+    print(string.format(
+              "RATOAI_RecalcEncirclePlan: recalculado -- %d aliados, %d inimigos, separacao %dt",
+              plan.n_units, plan.n_enemies, MulDivRound(plan.sep, 1, const.SlabSizeX)))
+
+    if redraw ~= false then
+        RATOAI_DbgEncircle(unit)
+    end
+    return plan
+end

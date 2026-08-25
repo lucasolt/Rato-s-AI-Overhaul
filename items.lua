@@ -333,8 +333,9 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 110,
-				'Falloff', 6,
+				'RangeMin', 20,
+				'RangeMax', 35,
+				'Falloff', 12,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -350,7 +351,10 @@ return {
 				'DownhillMax', 0,
 				'Reference', "enemies",
 			}),
-			PlaceObj('AIPolicyTakeCover', nil),
+			PlaceObj('AIPolicyTakeCover', {
+				'Weight', 50,
+				'visibility_mode', "team",
+			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -517,6 +521,7 @@ return {
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
 			PlaceObj('StandardAI', {
+				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 300,
@@ -602,6 +607,9 @@ return {
 				'FlankMarginTiles', 8,
 				'ForwardLookaheadTiles', 0,
 				'WingFraction', 80,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -706,6 +714,7 @@ return {
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
+				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
@@ -715,7 +724,7 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
 						'CoverTrust', 100,
-						'FalloffCurve', 40,
+						'FalloffCurve', 0,
 					}),
 					PlaceObj('AIPolicyEvadeEnemies', {
 						'Weight', 1,
@@ -731,15 +740,21 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 125,
 				'RangeMin', 20,
-				'RangeMax', 40,
-				'Falloff', 4,
+				'RangeMax', 35,
+				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
 			PlaceObj('AIPolicyHighGround', {
+				'DownhillMax', 30,
 				'Reference', "enemies",
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'Weight', 50,
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -752,33 +767,13 @@ return {
 			}),
 			PlaceObj('AIActionPinDown', {
 				'BiasId', "PinDownAttack",
-				'Weight', 80,
-				'CustomScoring', function (self, context)
-					return Pindown_CustomScoring(self, context)
-				end,
-			}),
-			PlaceObj('AIActionPinDown', {
-				'BiasId', "PinDownAttack",
-				'Weight', 80,
-				'CustomScoring', function (self, context)
-					return Pindown_CustomScoring(self, context)
-				end,
-				'AttackTargeting', "Head",
-			}),
-			PlaceObj('AIConeAttack', {
-				'BiasId', "Overwatch",
 				'Weight', 50,
 				'CustomScoring', function (self, context)
-					return Overwatch_CustomScoring(self, context)
+					return Pindown_CustomScoring(self, context)
 				end,
-				'team_score', 0,
-				'min_score', 150,
-				'enemy_cover_mod', 80,
-				'action_id', "Overwatch",
 			}),
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "Headshot",
-				'Weight', 120,
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
@@ -869,6 +864,8 @@ return {
 			}),
 		},
 		Comment = "Keywords: Explosives",
+		ExposedProne = true,
+		ExposedProneMinTiles = 16,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
 				'RangeBase', "Melee",
@@ -1037,7 +1034,7 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 75,
+				'Weight', 50,
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
 				'Weight', 50,
@@ -1045,7 +1042,9 @@ return {
 			}),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 40,
-				'DownhillMax', 40,
+				'FullBonusDz', 4,
+				'DownhillMax', 30,
+				'Reference', "enemies",
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 150,
@@ -1053,6 +1052,9 @@ return {
 				'RangeMin', 6,
 				'RangeMax', 18,
 				'Falloff', 4,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1342,6 +1344,9 @@ return {
 				'RangeMin', 12,
 				'RangeMax', 20,
 				'Falloff', 6,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1765,6 +1770,9 @@ return {
 			PlaceObj('AIPolicyStayNearAllies', {
 				'TargetDist', "average",
 			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
+			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -1811,11 +1819,10 @@ return {
 				end,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyLosToEnemy', {
+						'Weight', 300,
 						'Invert', true,
 					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 180,
-					}),
+					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
 					}),
@@ -1827,12 +1834,16 @@ return {
 				'Fallback', false,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 600,
+						'Weight', 300,
+						'SoftK', 150,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
 						'RangeBase', "Absolute",
 						'RangeMin', 0,
 						'RangeMax', 5,
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 175,
 					}),
 				},
 				'TakeCoverChance', 0,
