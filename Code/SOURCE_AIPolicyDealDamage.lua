@@ -68,6 +68,9 @@
 ----             normalizador varia um pouco entre destinos por motivo alheio a posicao;
 ----             (b) um inimigo ferido faz todo tile parecer melhor -- comportamento
 ----             correto (finalizar), mas e mudanca de ranking que nao vem da posicao.
+----             `Categorical` (property, default off) troca o gradiente por binario: 100
+----             se da pra derrubar daqui, 0 se nao da -- quase matar deixa de valer mais
+----             que nem chegar perto.
 ----
 ---- Nao normalize pelo melhor tile DO TURNO (score = 100 x h / melhor_h). E tentador
 ---- porque se auto-escala e elimina a constante, mas quebra a comparacao com a ameaca:
@@ -84,7 +87,11 @@ function AIPolicyDealDamage:GetEditorView()
     elseif modo == "soft" then
         detalhe = string.format("suave K=%d", self.SoftK or 200)
     elseif modo == "tokill" then
-        detalhe = self.KillIsEnough and "para derrubar" or "para derrubar, sem teto"
+        if self.Categorical then
+            detalhe = "para derrubar, categorico"
+        else
+            detalhe = self.KillIsEnough and "para derrubar" or "para derrubar, sem teto"
+        end
     else
         detalhe = string.format("teto %d", self.MaxHits or 200)
     end
@@ -267,9 +274,15 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
         if IsValid(target) and dmg then
             ---- `needed` na MESMA escala de `hits` (acertos x100): HP/dano x 100
             local needed = Max(1, MulDivRound(Max(1, target.HitPoints or 1), 100, dmg))
-            score = MulDivRound(hits, 100, needed)
-            if self.KillIsEnough then
-                score = Min(100, score)
+            if self.Categorical then
+                ---- sem gradiente: ou da pra derrubar daqui, ou o tile nao vale nada
+                ---- pra esta policy
+                score = hits >= needed and 100 or 0
+            else
+                score = MulDivRound(hits, 100, needed)
+                if self.KillIsEnough then
+                    score = Min(100, score)
+                end
             end
         end
         ---- sem alvo valido ou sem estimativa de dano: cai no `cap` em vez de zerar a

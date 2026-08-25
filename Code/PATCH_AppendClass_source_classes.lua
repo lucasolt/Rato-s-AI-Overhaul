@@ -158,7 +158,18 @@ function OnMsg.ClassesGenerate(classdefs)
                 help = "So no modo `tokill`. Ligado, o score satura quando os acertos " ..
                     "esperados bastam para derrubar o alvo -- overkill nao vale nada. " ..
                     "Desligado, continua crescendo (util se voce quiser que ela prefira " ..
-                    "margem de seguranca sobre o minimo necessario).",
+                    "margem de seguranca sobre o minimo necessario). Sem efeito se " ..
+                    "`Categorical` estiver ligado.",
+                editor = "bool",
+                default = false
+            }, {
+                id = "Categorical",
+                name = "Categorico: mata ou nada  [tokill]",
+                help = "So no modo `tokill`. Ligado, o score deixa de ser gradiente: 100 " ..
+                    "se os acertos esperados bastam para derrubar o alvo, 0 caso contrario " ..
+                    "-- nao ha diferenca entre quase matar e nem chegar perto. Anula " ..
+                    "`KillIsEnough` (o teto deixa de fazer sentido com so dois valores " ..
+                    "possiveis).",
                 editor = "bool",
                 default = true
             }

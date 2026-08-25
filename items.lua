@@ -320,6 +320,8 @@ return {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 50,
 						'Normalization', "tokill",
+						'KillIsEnough', false,
+						'Categorical', true,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
@@ -342,7 +344,7 @@ return {
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'DepthTiles', 4,
 				'ForwardLookaheadTiles', 4,
-				'WingFraction', 80,
+				'WingFraction', 60,
 			}),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 50,
@@ -914,6 +916,9 @@ return {
 						'Effect', "disable",
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'self_score_mod', -1000,
 				'EnemyPreparedAttackScore', 100,
 				'MinDist', 6000,
@@ -1251,6 +1256,8 @@ return {
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 50,
 						'Normalization', "tokill",
+						'KillIsEnough', false,
+						'Categorical', true,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 170,
@@ -1324,7 +1331,7 @@ return {
 				'Weight', 150,
 				'FlankMarginTiles', 8,
 				'ForwardLookaheadTiles', 0,
-				'MinSeparationTiles', 1,
+				'WingFraction', 80,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1359,6 +1366,9 @@ return {
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "ExplosiveGrenadeThrow",
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'min_score', 130,
 				'enemy_cover_mod', 50,
 				'EnemyPreparedAttackScore', 250,
@@ -1366,6 +1376,9 @@ return {
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AOEGrenadeThrow",
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'EnemyPreparedAttackScore', 120,
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "teargas", "toxicgas" ),
@@ -1460,10 +1473,6 @@ return {
 				'RangeMax', 18,
 				'Falloff', 4,
 			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 75,
-				'visibility_mode', "team",
-			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -1478,6 +1487,9 @@ return {
 						'Period', 0,
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'min_score', 100,
 				'enemy_cover_mod', 50,
 				'EnemyPreparedAttackScore', 100,
@@ -1494,6 +1506,9 @@ return {
 						'Period', 0,
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'min_score', 100,
 				'enemy_cover_mod', 50,
 				'AllowedTriggerTypes', set( "Proximity", "Proximity-Timed", "Timed" ),
@@ -1501,6 +1516,9 @@ return {
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AOEGrenadeThrow",
 				'Weight', 500,
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'EnemyPreparedAttackScore', 100,
 				'MinDist', 4000,
 				'AllowedAoeTypes', set( "fire", "teargas", "toxicgas" ),
@@ -1521,6 +1539,9 @@ return {
 						'ApplyTo', "Team",
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'enemy_score', -50,
 				'team_score', 100,
 				'self_score_mod', 100,
@@ -1530,7 +1551,6 @@ return {
 			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
-				'Weight', 300,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "FlareThrow",
@@ -1704,6 +1724,7 @@ return {
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'FlankMarginTiles', 6,
+				'WingFraction', 60,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1734,6 +1755,9 @@ return {
 						'Period', 0,
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'min_score', 100,
 				'EnemyPreparedAttackScore', 120,
 				'MinDist', 6000,
@@ -1754,6 +1778,9 @@ return {
 						'ApplyTo', "Team",
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'enemy_score', 0,
 				'team_score', 100,
 				'self_score_mod', 100,
@@ -1791,6 +1818,9 @@ return {
 				'RequiredKeywords', {
 					"Nova",
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'team_score', 0,
 				'self_score_mod', 100,
 				'MinDist', 0,
@@ -1915,7 +1945,6 @@ return {
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
-			PlaceObj('AIPolicyTakeCover', nil),
 			PlaceObj('AIPolicyStayNearAllies', {
 				'TargetDist', "average",
 			}),
@@ -1998,7 +2027,6 @@ return {
 				'RangeMax', 20,
 				'Falloff', 6,
 			}),
-			PlaceObj('AIPolicyTakeCover', nil),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -2040,6 +2068,9 @@ return {
 						'Effect', "disable",
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'self_score_mod', -1000,
 				'EnemyPreparedAttackScore', 100,
 				'MinDist', 6000,
@@ -2315,6 +2346,9 @@ return {
 						'Period', 0,
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'self_score_mod', -1000,
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
@@ -2360,6 +2394,9 @@ return {
 						'ApplyTo', "Team",
 					}),
 				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
 				'enemy_score', 150,
 				'self_score_mod', -1000,
 				'enemy_cover_mod', 50,
