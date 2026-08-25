@@ -34,7 +34,7 @@ function RATOAI_CUAEoptions()
                 },
 
                 extraUtility = {
-                    night_pack, {type = {{"Explosive", 40}, {"Flash", 50}}, amount = 2}, rare_gas
+                    night_pack, {type = {{"Explosive", 40}, {"Flash", 50}}, amount = 1}, rare_gas
                 }
             },
             Commander = {
@@ -59,14 +59,14 @@ function RATOAI_CUAEoptions()
                     },
                     Handgun = {tag = "CloseQuarters", prioritySlots = {"Scope", "Barrel", "Side"}}
                 },
-                extraUtility = {night_pack, {type = {{"Flash", 40}, {"Explosive", 50}}, amount = 2}}
+                extraUtility = {night_pack, {type = {{"Flash", 30}, {"Explosive", 40}}, amount = 1}}
             },
 
             Stormer = {
                 weaponComponentsPriorities = {
                     Shotgun = {tag = "CloseQuarters", prioritySlots = {"Barrel", "Muzzle"}}
                 },
-                extraUtility = {night_pack, {type = {{"Explosive", 20}, {"Fire", 50}}, amount = 2}}
+                extraUtility = {night_pack, {type = {{"Explosive", 20}, {"Fire", 50}}, amount = 1}}
 
             },
             Heavy = {

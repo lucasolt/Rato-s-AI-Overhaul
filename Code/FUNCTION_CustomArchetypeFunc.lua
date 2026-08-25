@@ -1,41 +1,41 @@
 ---- PERF (C11.3): tabela constante, era reconstruida inteira (5 sub-tabelas,
 ---- ~20 arrays de string) a cada chamada de GetArgsForArchetypeAndWeaponSelection
 local ROLE_ARGS = {
-        Marksman = {
-            main_w_classes = {"SniperRifle", "AssaultRifle"},
-            close_w_classes = {"SubmachineGun", "Revolver", "Pistol"},
-            close_archetype = "RATOAI_RetreatingMarksman",
-            vr = "AIArchetypeScared",
-            dist = 8
-        },
-        Stormer = {
-            main_w_classes = {"Firearm"},
-            close_w_classes = {"MeleeWeapon", "Shotgun"},
-            close_archetype = "Brute",
-            vr = "AIArchetypeAngry",
-            dist = 8
-        },
-        Artillery = {
-            main_w_classes = {"Artillery", "GrenadeLauncher"},
-            close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
-            close_archetype = "RATOAI_RetreatingMarksman",
-            vr = "AIArchetypeScared",
-            dist = 7
-        },
-        Rocketeer = {
-            main_w_classes = {"Artillery", "RocketLauncher"},
-            close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
-            close_archetype = "RATOAI_RetreatingMarksman",
-            vr = "AIArchetypeScared",
-            dist = 6
-        },
-        ArmyCommander = { ---- ????? not sure why they had this in vanilla
-            main_w_classes = {"Firearm"},
-            close_w_classes = {"Firearm"},
-            close_archetype = "Soldier",
-            vr = "AIArchetypeAngry",
-            dist = 12
-        }
+    Marksman = {
+        main_w_classes = {"SniperRifle", "AssaultRifle"},
+        close_w_classes = {"SubmachineGun", "Revolver", "Pistol"},
+        close_archetype = "RATOAI_RetreatingMarksman",
+        vr = "AIArchetypeScared",
+        dist = 6
+    },
+    Stormer = {
+        main_w_classes = {"Firearm"},
+        close_w_classes = {"MeleeWeapon", "Shotgun"},
+        close_archetype = "Brute",
+        vr = "AIArchetypeAngry",
+        dist = 8
+    },
+    Artillery = {
+        main_w_classes = {"Artillery", "GrenadeLauncher"},
+        close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
+        close_archetype = "RATOAI_RetreatingMarksman",
+        vr = "AIArchetypeScared",
+        dist = 6
+    },
+    Rocketeer = {
+        main_w_classes = {"Artillery", "RocketLauncher"},
+        close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
+        close_archetype = "RATOAI_RetreatingMarksman",
+        vr = "AIArchetypeScared",
+        dist = 6
+    },
+    ArmyCommander = { ---- ????? not sure why they had this in vanilla
+        main_w_classes = {"Firearm"},
+        close_w_classes = {"Firearm"},
+        close_archetype = "Soldier",
+        vr = "AIArchetypeAngry",
+        dist = 12
+    }
 
 }
 

@@ -241,7 +241,13 @@ function AIPolicyCustomWeaponRange:EvalDest(context, dest, grid_voxel)
     ------------------------------------------------------------------------------------
     if self.Mode == "target" then
         local target = context.dest_target and context.dest_target[dest]
-        if IsValid(target) and not (target:IsDead() or target:IsDowned()) then
+        ---- BUGFIX (B40): `IsIncapacitated()` no lugar de `IsDead() or IsDowned()`. E um
+        ---- superconjunto: pega tambem `IsGettingDowned()` (o inimigo no meio da queda) e
+        ---- `command == "Die"`. Sem isso, o alvo que esta caindo AGORA continuava definindo
+        ---- a distancia ideal por mais uma avaliacao. Mesmo predicado nos quatro pontos das
+        ---- duas policies de faixa, e a mesma nocao que o RATOAI_DownedFactor
+        ---- (SOURCE_AIPolicyDealDamage) ja usava para descontar o alvo derrubado.
+        if IsValid(target) and not target:IsIncapacitated() then
             local tpos = RATOAI_ValidatePosZ(target:GetPos())
             if IsValidPos(tpos) then
                 return self:BandScore(self_pos:Dist(tpos), rmin, rmax, falloff)
@@ -258,7 +264,9 @@ function AIPolicyCustomWeaponRange:EvalDest(context, dest, grid_voxel)
     local total, total_weight = 0, 0
 
     for _, enemy in ipairs(context.enemies or empty_table) do
-        if self:IsVisible(context, enemy) and enemy and not (enemy:IsDead() or enemy:IsDowned()) then
+        ---- BUGFIX (B40): caido nao e referente de posicionamento -- ver a nota do modo
+        ---- target acima.
+        if self:IsVisible(context, enemy) and enemy and not enemy:IsIncapacitated() then
             local epos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(epos) then
                 local dist = self_pos:Dist(epos)

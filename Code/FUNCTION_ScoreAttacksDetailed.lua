@@ -79,8 +79,9 @@ local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
     end
     local v = cache[aim_level]
     if v == nil then
-        local use, bonus = Presets.ChanceToHitModifier.Default.Aim:CalcValue(
-                               unit, target, nil, action, weapon, nil, nil, aim_level)
+        local use, bonus = Presets.ChanceToHitModifier.Default.Aim:CalcValue(unit, target, nil,
+                                                                             action, weapon, nil,
+                                                                             nil, aim_level)
         v = (use and bonus) or 0
         cache[aim_level] = v
     end
@@ -241,8 +242,7 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             local perda = MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
             eff_cth = eff_cth + perda
             if dbg then
-                context.recoil_loss_at[upos][target] =
-                    context.recoil_loss_at[upos][target] + perda
+                context.recoil_loss_at[upos][target] = context.recoil_loss_at[upos][target] + perda
             end
         end
 
@@ -252,9 +252,8 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             table.insert(context.cth_attacks_at[upos][target], eff_cth)
         end
 
-        local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth,
-                                          RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
-                                                          action, weapon))
+        local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth, RATOAI_AimBonus(
+                                              aim_cth_by_level, aim_i, unit, target, action, weapon))
         if dbg then
             table.insert(context.burst_hits_at[upos][target], expanded)
         end
@@ -267,8 +266,12 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- PERF (C2): o ForEachPreset dentro do CalcChanceToHit acima ja avaliou
     ---- RangeAttackTargetStanceCover com estes mesmos argumentos -- refaze-lo aqui
     ---- era trabalho duplicado, e este preset faz raycast de cover.
-    ---- O unico consumidor de target_covers e AIPolicyCustomFlanking:CompareCovers,
-    ---- que usa a RAZAO cover_cth/cover_penalty. O valor de grid serve ao mesmo fim.
+    ---- O unico consumidor de target_covers e AIPolicyCustomFlanking:CoverPct, que usa a
+    ---- RAZAO cover_cth/RATOAI_GetMaxCoverCTH(). O valor de grid serve ao mesmo fim.
+    ---- ATENCAO (B39.2): sem cobertura, a entrada fica NIL aqui -- nao ha `else`. O lado
+    ---- da posicao atual (SOURCE_AICreateContext.lua:218) grava `0` EXPLICITO. As duas
+    ---- convencoes convivem, mas quem le precisa testar `~= nil`, e nao truthiness:
+    ---- `0` e truthy em Lua, e foi exatamente esse o bug da flanking antiga.
     local cover = GetCoverFrom(tpos, upos)
     if cover == const.CoverHigh then
         target_covers[target] = RATOAI_GetMaxCoverCTH()
@@ -482,8 +485,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- Sem ele na chave, o denominador (ataque padrao com o AP inteiro) e o resto
     ---- (ataque padrao com o AP que sobrou) colidiriam -- MESMA acao, MESMA mira, MESMO
     ---- body_part -- e o segundo receberia o numero do primeiro em silencio.
-    local ap = ap_override or (context.dest_ap and context.dest_ap[upos]) or unit.ActionPoints or
-                   0
+    local ap = ap_override or (context.dest_ap and context.dest_ap[upos]) or unit.ActionPoints or 0
 
     ---- chave inclui o nivel forcado: o RATOAI_EnsureAimPlan avalia o MESMO ataque em
     ---- varios niveis, e sem isso a segunda avaliacao devolveria a primeira.
@@ -559,8 +561,8 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     else
         local prev_pos, prev_target = context.attacker_pos, context.current_target
         context.attacker_pos, context.current_target = attacker_pos, target
-        ok_calc, attacks, aims, paid_stance, ap_left = pcall(AICalcAttacksAndAim, context, ap,
-                                                            dist, action, cost)
+        ok_calc, attacks, aims, paid_stance, ap_left =
+            pcall(AICalcAttacksAndAim, context, ap, dist, action, cost)
         context.attacker_pos, context.current_target = prev_pos, prev_target
     end
 
@@ -572,8 +574,13 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ---- DEBUG (D7): `ap_left = ap`. Nenhum ataque desta acao saiu, entao o orcamento
         ---- inteiro continua na mesa para o ataque padrao -- e o ramo nao-sustentado precisa
         ---- disso para nao creditar zero ao turno todo so porque a candidata nao coube.
-        memo[key] = {hits = 0, attacks = 0, ap_left = ap, hits_first = 0,
-                     motivo = "0 ataques cabem no AP"}
+        memo[key] = {
+            hits = 0,
+            attacks = 0,
+            ap_left = ap,
+            hits_first = 0,
+            motivo = "0 ataques cabem no AP"
+        }
         return 0, 0, nil, nil, ap, 0
     end
 
@@ -593,8 +600,13 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- CTH nenhuma). O caro vem abaixo -- get_recoil mais um CalcChanceToHit por nivel de mira.
     -----------------------------------------------------------------------------------------------
     if body_part ~= "Torso" and (aims[1] or 0) < 1 then
-        memo[key] = {hits = 0, attacks = 0, ap_left = ap, hits_first = 0,
-                     motivo = "tiro localizado sem stance -- nao compensa"}
+        memo[key] = {
+            hits = 0,
+            attacks = 0,
+            ap_left = ap,
+            hits_first = 0,
+            motivo = "tiro localizado sem stance -- nao compensa"
+        }
         return 0, 0, nil, nil, ap, 0
     end
 
@@ -617,8 +629,8 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     local recoil_cth = 0
     local usa_recoil = shots > 1 or attacks > 1
     if usa_recoil and IsKindOf(weapon, "Firearm") then
-        local ok_r, r = pcall(get_recoil, unit, target, target:GetPos(), action, weapon, nil,
-                              shots, nil, nil, nil, nil, nil, attacker_pos)
+        local ok_r, r = pcall(get_recoil, unit, target, target:GetPos(), action, weapon, nil, shots,
+                              nil, nil, nil, nil, nil, attacker_pos)
         recoil_cth = (ok_r and type(r) == "number") and cRound(r) or 0
     end
 
@@ -657,9 +669,8 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
             eff_cth = eff_cth + MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
         end
 
-        local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth,
-                                           RATOAI_AimBonus(aim_cth_by_level, aim_i, unit, target,
-                                                           action, weapon))
+        local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth, RATOAI_AimBonus(
+                                               aim_cth_by_level, aim_i, unit, target, action, weapon))
         if i == 1 then
             hits_first = expandido
         end
@@ -679,10 +690,16 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ---- (o precalc de destino unico do AIPlayAttacks reescreve o alvo daquele destino).
         ---- Sem esta linha, "razao 250 com 0 acertos" e indistinguivel de "0 acertos contra
         ---- o alvo errado": custou uma sessao de DAP para recuperar o alvo pelo `dist`.
-        dbg = {cost = cost, shots = shots, attacks = attacks,
-               recoil = usa_recoil and recoil_cth or nil,
-               alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
-               ap = ap, dist = dist, aims = table.concat(aims, ",", 1, attacks)}
+        dbg = {
+            cost = cost,
+            shots = shots,
+            attacks = attacks,
+            recoil = usa_recoil and recoil_cth or nil,
+            alvo = IsKindOf(target, "Unit") and target.session_id or tostring(target),
+            ap = ap,
+            dist = dist,
+            aims = table.concat(aims, ",", 1, attacks)
+        }
         local cths = {}
         for aim_lvl, v in pairs(cth_by_aim) do
             cths[#cths + 1] = string.format("a%d=%d", aim_lvl, v)
@@ -695,9 +712,15 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- ataque) e `hits_first` da primeira iteracao do laco acima. Os dois existem para o ramo
     ---- nao-sustentado do RATOAI_ExpectedRatio e nao custam avaliacao nenhuma a mais.
     ap_left = ap_left or 0
-    memo[key] = {hits = hits, attacks = attacks, dbg = dbg, aim1 = aims[1],
-                 stance = paid_stance and true or false, ap_left = ap_left,
-                 hits_first = hits_first}
+    memo[key] = {
+        hits = hits,
+        attacks = attacks,
+        dbg = dbg,
+        aim1 = aims[1],
+        stance = paid_stance and true or false,
+        ap_left = ap_left,
+        hits_first = hits_first
+    }
     return hits, attacks, aims[1], paid_stance, ap_left, hits_first
 end
 
@@ -740,8 +763,7 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
 
     ---- o plano da heuristica, que e a referencia a ser batida
     context.__ratoai_aim_force = nil
-    local base_hits, _, heur_level = RATOAI_ExpectedFor(context, action, upos, target,
-                                                        attacker_pos)
+    local base_hits, _, heur_level = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos)
     if not base_hits or not heur_level then
         context.__ratoai_aim_plan = {upos = upos, target = target, level = nil}
         return
@@ -759,8 +781,8 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
         end
         if h and real_lvl then
             ---- assimetria: descer de mira precisa vencer a margem, subir nao
-            local alvo_hits = (real_lvl < heur_level) and
-                                  MulDivRound(base_hits, 100 + margem, 100) or base_hits
+            local alvo_hits =
+                (real_lvl < heur_level) and MulDivRound(base_hits, 100 + margem, 100) or base_hits
             if h > alvo_hits and h > best_hits then
                 best_level, best_hits = real_lvl, h
             end
@@ -774,8 +796,12 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
 
     if RATOAI_Debug then
         context.dbg_aim_plan = {
-            heur = heur_level, base = base_hits, best = best_level, hits = best_hits,
-            margem = margem, planos = dbg_rows and table.concat(dbg_rows, " "),
+            heur = heur_level,
+            base = base_hits,
+            best = best_level,
+            hits = best_hits,
+            margem = margem,
+            planos = dbg_rows and table.concat(dbg_rows, " ")
         }
     end
 
@@ -931,14 +957,27 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
             ---- `n` = ataques que a candidata FARIA se repetisse (o modelo antigo);
             ---- `k` = ataques do padrao com o AP que sobrou; `m` = ataques do denominador.
             ---- Sao as tres contagens que fazem o sanity check do numero fechar na mao.
-            dbg_turno = {sustentado = false, sozinha = hits, primeiro = um, resto = resto,
-                         ap_left = ap_left, ap_total = ap_total, n = act_atks, k = resto_atks,
-                         m = base_atks}
+            dbg_turno = {
+                sustentado = false,
+                sozinha = hits,
+                primeiro = um,
+                resto = resto,
+                ap_left = ap_left,
+                ap_total = ap_total,
+                n = act_atks,
+                k = resto_atks,
+                m = base_atks
+            }
         end
         hits = um + resto
     elseif RATOAI_Debug then
-        dbg_turno = {sustentado = true, sozinha = hits, ap_total = ap_total, n = act_atks,
-                     m = base_atks}
+        dbg_turno = {
+            sustentado = true,
+            sozinha = hits,
+            ap_total = ap_total,
+            n = act_atks,
+            m = base_atks
+        }
     end
 
     -----------------------------------------------------------------------------------------------
@@ -985,22 +1024,27 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     ---- razao. Sem isto, "por que a IA escolheu auto" nao tem resposta observavel.
     if RATOAI_Debug then
         local m = context.__ratoai_expected
-        local slot = m and m[tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) ..
-                             "@" .. (body_part or "Torso")]
+        local slot = m and
+                         m[tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
+                             (body_part or "Torso")]
         context.dbg_expected = context.dbg_expected or {}
         local dbg_id = (body_part and body_part ~= "Torso") and
                            (tostring(action.id) .. "/" .. body_part) or tostring(action.id)
         context.dbg_expected[dbg_id] = {
-            hits = hits, base = base, ratio = ratio, dbg = slot and slot.dbg,
+            hits = hits,
+            base = base,
+            ratio = ratio,
+            dbg = slot and slot.dbg,
             motivo = slot and slot.motivo,
-            stance = act_stance, base_stance = base_stance,
+            stance = act_stance,
+            base_stance = base_stance,
             ---- DEBUG (D7): a decomposicao do numerador, para dar para ver a razao NOVA ao lado
             ---- da ANTIGA. `sozinha` e o numerador do modelo velho (N ataques da candidata);
             ---- `primeiro + resto` e o do novo. Sem isto a recalibragem dos Weight seria feita
             ---- no escuro -- nao daria para separar "a acao piorou" de "a escala mudou".
             turno = dbg_turno,
             ratio_antigo = dbg_turno and dbg_turno.sozinha and
-                RATOAI_RatioBase100(dbg_turno.sozinha, base) or nil,
+                RATOAI_RatioBase100(dbg_turno.sozinha, base) or nil
         }
 
         ---- ...e uma copia FORA do context. O ai_context e zerado no fim da execucao do
@@ -1049,9 +1093,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
             rec.ap = context.dest_ap and context.dest_ap[upos]
             rec.dest_cth = context.dest_cth and context.dest_cth[upos]
             rec.target = IsKindOf(target, "Unit") and target.session_id or tostring(target)
-            rec.actions[dbg_id] = {
-                hits = hits, ratio = ratio, dbg = slot and slot.dbg,
-            }
+            rec.actions[dbg_id] = {hits = hits, ratio = ratio, dbg = slot and slot.dbg}
         end
     end
 

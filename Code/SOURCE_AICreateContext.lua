@@ -202,7 +202,7 @@ function AICreateContext(unit, context)
 
         -----
         ---- PERF (C2, consistencia): este valor e comparado com
-        ---- context.dest_target_cover_score em AIPolicyCustomFlanking:CompareCovers.
+        ---- context.dest_target_cover_score em AIPolicyCustomFlanking:CoverPct.
         ---- Como C2 passou o lado do destino a usar o cover de grid, este lado
         ---- precisa usar a mesma base -- senao a comparacao mistura cover continuo
         ---- (aqui) com discreto (la) e enviesa a decisao de flanquear.

@@ -88,6 +88,12 @@ function IModeAIDebug:GetVoxelRolloverText()
         text = text .. "\n\nThreat Exposure Debug:\n" .. threat_dbg[dest] .. "\n"
     end
 
+    ---- so existe com const.RATOAI.EncircleDebug ligado
+    local encircle_dbg = self.ai_context.dest_encircle_debug
+    if dest and encircle_dbg and encircle_dbg[dest] then
+        text = text .. "\n\nEncircle Enemy Debug:\n" .. encircle_dbg[dest] .. "\n"
+    end
+
     if dest and self.ai_context.aims_at[dest] then
         for enemy, aims in pairs(self.ai_context.aims_at[dest]) do
             local aim_text = ""

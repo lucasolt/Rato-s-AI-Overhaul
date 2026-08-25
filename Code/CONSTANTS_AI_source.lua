@@ -371,7 +371,7 @@ const.RATOAI.MGSetupMalus = 80
 ---- fazer sentido.
 ---------------------------------------------------------------------------------------------------
 
-const.RATOAI.PronePackTiles = 32
+const.RATOAI.PronePackTiles = 20
 
 ---------------------------------------------------------------------------------------------------
 ---- POSTURA DE DESTINO POR COBERTURA (BUGFIX B37, SOURCE_AIFindDestinations.lua)

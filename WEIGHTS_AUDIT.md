@@ -3,6 +3,14 @@
 *2026-08-17. Base: `Rato's AI Overhaul` v1.12 + `GBO3` (source do jogo em `ModTools/Src`).*
 *Companheiro de `AI_SYSTEM_GUIDE.md` — este documento é só sobre **magnitude numérica**.*
 
+> Para o modelo matemático de **como os pesos de um arquétipo conversam entre si** (influência =
+> `Weight × D`, âncoras absolutas, `A` e `R_optloc`, regras de tuning e as tabelas por arquétipo
+> extraídas do `items.lua` atual), ver **`POLICY_BUDGET.md`**. Aqui ficam os bugs; lá, a
+> calibragem.
+
+
+ESSE ARQUIVO TA DESATUALIZADO EM PARTE
+
 ## Status das correções
 
 Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
@@ -32,6 +40,7 @@ Aplicadas no código (procure por `BUGFIX (Bn)` nos arquivos):
 | B26 | ⚠️ **aplicado, não testado em jogo** | `SOURCE_AIPrecalcConeTargetZones.lua` (**novo — falta registrar no editor**) — o parâmetro `stance` do vanilla era ignorado: o cone da MG era decidido com a linha em pé. |
 | B27 / C13 | ⚠️ **aplicado, não testado em jogo** | `AIPOLICYPOS_MGSetupPosScore.lua` — reescrita. Ângulo medido da unidade e não do tile, portão de ângulo com unidade errada (razão vs AP), visibilidade da posição atual, média em vez de aglomerado, sem portão de LOS. |
 | B28 | ⚠️ **aplicado, não testado em jogo** | `REACTIONS_StopMGPackingUp.lua` — montava a MG e atirava fora do cone. Ordem, não filtro: o precalc roda antes da signature action. |
+| B40 | ⚠️ **aplicado, não testado em jogo** | `AIPOLICYPOS_CustomWeaponRange.lua`, `AIPOLICYPOS_GrenadeRange.lua` — inimigo caído deixa de ser referente de posicionamento. Na `CustomGrenadeRange` ele pesava 5% (`DownedWeightModifier`) e, sozinho no alcance, fazia a policy opinar sem referente válido; agora é pulado. Predicado unificado em `IsIncapacitated()` nos 4 pontos (pega também `IsGettingDowned`). `DownedWeightModifier` virou `no_edit` na classe derivada. |
 | B3, B4 | ⏸️ **não aplicado** | são calibragem, não bug — mudam o balanceamento |
 | B8 | ⏸️ não aplicado | código morto, inofensivo |
 | M1 – M7 | ⏸️ **não aplicado** | magnitude / calibragem |

@@ -28,6 +28,10 @@ return {
 		'CodeFileName', "Code/AIPOLICYPOS_CustomFlanking.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "AIPOLICYPOS_EncircleEnemy",
+		'CodeFileName', "Code/AIPOLICYPOS_EncircleEnemy.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "AIPOLICYPOS_CustomSeekCover",
 		'CodeFileName', "Code/AIPOLICYPOS_CustomSeekCover.lua",
 	}),
@@ -293,11 +297,11 @@ return {
 		'Help', "If checked, Militia units will not receive Stats Boost. Restart after applying.",
 	}),
 	PlaceObj('ModItemConstDef', {
-		Comment = "-- 2 if using visibility = self",
-		comment = "-- 2 if using visibility = self",
+		Comment = "-- change to 2 if using visibility = self",
+		comment = "-- change to 2 if using visibility = self",
 		group = "Default",
 		id = "RATOAI_ThreatSaturation",
-		value = 2,
+		value = 3,
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
@@ -305,14 +309,17 @@ return {
 				'BiasId', "Standard",
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyThreatExposure', {
-						'MaxThreat', 2,
+						'Weight', 187,
+						'CoverNearTiles', 12,
+						'CoverTrustNear', 50,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
 						'MaxHits', 100,
+						'SoftK', 190,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 30,
+						'Weight', 60,
 						'Normalization', "tokill",
 					}),
 				},
@@ -333,8 +340,13 @@ return {
 				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 70,
+				'Weight', 75,
 				'visibility_mode', "team",
+			}),
+			PlaceObj('AIPolicyEncircleEnemy', {
+				'DepthTiles', 4,
+				'ForwardLookaheadTiles', 4,
+				'WingFraction', 80,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -356,7 +368,7 @@ return {
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "SuppressiveFire",
-						'Value', -35,
+						'Value', -30,
 						'Period', 0,
 						'ApplyTo', "Team",
 					}),
@@ -384,7 +396,7 @@ return {
 			}),
 			PlaceObj('AIConeAttack', {
 				'BiasId', "Overwatch",
-				'Weight', 80,
+				'Weight', 50,
 				'CustomScoring', function (self, context)
 					return Overwatch_CustomScoring(self, context)
 				end,
@@ -417,7 +429,7 @@ return {
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow",
-				'Weight', 200,
+				'Weight', 150,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "AssaultGrenadeThrow",
@@ -462,7 +474,7 @@ return {
 			}),
 			PlaceObj('AIActionHeavyWeaponAttack', {
 				'BiasId', "LauncherFire",
-				'Weight', 200,
+				'Weight', 150,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "LauncherFire",
@@ -510,7 +522,6 @@ return {
 					PlaceObj('AIPolicyCustomFlanking', {
 						'ReserveAttackAP', "Stance",
 						'visibility_mode', "team",
-						'OnlyTarget', true,
 					}),
 					PlaceObj('AIPolicyCustomSeekCover', {
 						'ThreatRelative', 80,
@@ -578,9 +589,6 @@ return {
 						'Weight', 50,
 						'RangeMin', 30,
 						'RangeMax', 50,
-					}),
-					PlaceObj('AIPolicyCustomSeekCover', {
-						'Required', true,
 					}),
 				},
 				'TakeCoverChance', 100,
@@ -807,18 +815,19 @@ return {
 						'SoftK', 50,
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 125,
+						'Weight', 150,
 						'CoverTrust', 100,
+						'FalloffCurve', 40,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 20,
+						'Weight', 40,
 						'Normalization', "tokill",
 					}),
 					PlaceObj('AIPolicyEvadeEnemies', {
 						'Weight', 1,
 						'Required', true,
 						'RangeBase', "Absolute",
-						'Range', 8,
+						'Range', 6,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -828,17 +837,20 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyHighGround', {
-				'DownhillMax', 80,
+				'Weight', 150,
+				'DownhillMax', 50,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
-				'Weight', 150,
+				'Weight', 50,
 			}),
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 200,
+				'RangeMin', 20,
+				'RangeMax', 40,
 				'Falloff', 4,
-				'WeightFalloff', "quadratica",
 			}),
-			PlaceObj('AIPolicyTakeCover', nil),
+			PlaceObj('AIPolicyTakeCover', {
+				'Weight', 50,
+			}),
 		},
 		OptLocSearchRadius = 100,
 		PrefStance = "Crouch",
@@ -877,13 +889,6 @@ return {
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "Headshot",
 				'Weight', 120,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "Headshot",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
 				'CustomScoring', function (self, context)
 					return SingleShotTargeted_CustomScoring(self, context)
 				end,
@@ -901,7 +906,7 @@ return {
 			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow",
-				'Weight', 150,
+				'Weight', 90,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "AssaultGrenadeThrow",
@@ -948,6 +953,139 @@ return {
 		},
 		group = "RatoAI",
 		id = "RATOAI_Sniper",
+	}),
+	PlaceObj('ModItemAIArchetype', {
+		Behaviors = {
+			PlaceObj('StandardAI', {
+				'Score', function (self, unit, proto_context, debug_data)
+					return self.Weight
+					--return getStandardBehaviorScore_HeavyGunner(self, unit, proto_context, debug_data)
+				end,
+				'OptLocWeight', 150,
+				'EndTurnPolicies', {
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 80,
+						'CoverTrust', 0,
+						'PlateauTiles', 0,
+						'FalloffCurve', 100,
+						'MeleeRange', 10,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 200,
+						'SoftK', 160,
+					}),
+					PlaceObj('AIPolicyMGSetupPosScore', {
+						'Weight', 200,
+						'FirstEnemyScore', 60,
+						'ClusterBonus', 20,
+						'AllyPenalty', 10,
+						'ReserveAPforSetup', true,
+					}),
+				},
+				'TakeCoverChance', 0,
+				'override_attack_id', "MGBurstFire",
+				'override_cost_id', "MGBurstFire",
+			}),
+			PlaceObj('HoldPositionAI', {
+				'Weight', 200,
+				'Comment', "In Setup",
+				'Fallback', false,
+				'Score', function (self, unit, proto_context, debug_data)
+					if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
+						local score = getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
+						return MulDivRound(score, self.Weight, 100)
+					end
+					
+					return 0
+				end,
+				'OptLocWeight', 0,
+				'SignatureActions', {
+					PlaceObj('AIActionMGBurstFire', {
+						'Aiming', "Maximum",
+						'AttackTargeting', set( "Torso" ),
+					}),
+					PlaceObj('AIActionMGSetup', {
+						'BiasId', "MGSetup",
+						'CustomScoring', function (self, context)
+							local unit = context.unit
+							if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
+								return 0, true, false   
+							end
+							
+							return self.Weight, false, self.Priority
+						end,
+						'enemy_score', 110,
+						'team_score', -20,
+						'min_score', 100,
+						'enemy_cover_mod', 50,
+						'cur_zone_mod', 140,
+					}),
+				},
+				'TargetingPolicies', {
+					PlaceObj('AITargetingEnemyInCover', {
+						'Weight', 200,
+					}),
+					PlaceObj('AITargetingEnemyHealth', {
+						'Health', 50,
+						'AboveHealth', true,
+					}),
+				},
+				'TakeCoverChance', 0,
+			}),
+		},
+		ExposedProne = true,
+		OptLocPolicies = {
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 150,
+				'RangeMin', 40,
+				'RangeMax', 40,
+			}),
+			PlaceObj('AIPolicyIndoorsOutdoors', {
+				'Weight', 25,
+				'Indoors', false,
+			}),
+			PlaceObj('AIPolicyMGSetupPosScore', {
+				'FirstEnemyScore', 60,
+				'ClusterBonus', 40,
+				'RequireLOS', false,
+				'AllyPenalty', 0,
+			}),
+		},
+		OptLocSearchRadius = 80,
+		SignatureActions = {
+			PlaceObj('AIActionMGBurstFire', {
+				'CustomScoring', function (self, context)
+					                    return self.Weight, false, self.Priority
+				end,
+				'Aiming', "Remaining AP",
+				'AttackTargeting', set( "Torso" ),
+			}),
+			PlaceObj('AIActionMGSetup', {
+				'BiasId', "MGSetup",
+				'Weight', 200,
+				'CustomScoring', function (self, context)
+					return MGSetup_CustomScoring(self, context)
+				end,
+				'enemy_score', 110,
+				'team_score', -10,
+				'min_score', 100,
+				'enemy_cover_mod', 50,
+				'cur_zone_mod', 140,
+			}),
+		},
+		TargetScoreRandomization = 10,
+		TargetingPolicies = {
+			PlaceObj('AITargetingEnemyHealth', {
+				'Weight', 20,
+				'Health', 50,
+				'AboveHealth', true,
+			}),
+			PlaceObj('AITargetingEnemyInCover', {
+				'Weight', 20,
+			}),
+		},
+		group = "Simplified",
+		id = "HeavyGunner",
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
@@ -1104,150 +1242,20 @@ return {
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
 			PlaceObj('StandardAI', {
-				'Score', function (self, unit, proto_context, debug_data)
-					return self.Weight
-					--return getStandardBehaviorScore_HeavyGunner(self, unit, proto_context, debug_data)
-				end,
 				'OptLocWeight', 150,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 80,
-						'CoverTrust', 0,
-						'PlateauTiles', 0,
-						'FalloffCurve', 100,
-						'MeleeRange', 10,
-					}),
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-						'SoftK', 160,
-					}),
-					PlaceObj('AIPolicyMGSetupPosScore', {
-						'Weight', 200,
-						'FirstEnemyScore', 60,
-						'ClusterBonus', 20,
-						'AllyPenalty', 10,
-						'ReserveAPforSetup', true,
-					}),
-				},
-				'TakeCoverChance', 0,
-				'override_attack_id', "MGBurstFire",
-				'override_cost_id', "MGBurstFire",
-			}),
-			PlaceObj('HoldPositionAI', {
-				'Weight', 200,
-				'Comment', "In Setup",
-				'Fallback', false,
-				'Score', function (self, unit, proto_context, debug_data)
-					if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
-						local score = getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
-						return MulDivRound(score, self.Weight, 100)
-					end
-					
-					return 0
-				end,
-				'OptLocWeight', 0,
-				'SignatureActions', {
-					PlaceObj('AIActionMGBurstFire', {
-						'Aiming', "Maximum",
-						'AttackTargeting', set( "Torso" ),
-					}),
-					PlaceObj('AIActionMGSetup', {
-						'BiasId', "MGSetup",
-						'CustomScoring', function (self, context)
-							local unit = context.unit
-							if unit:HasStatusEffect("ManningEmplacement") or unit:HasStatusEffect("StationedMachineGun") then
-								return 0, true, false   
-							end
-							
-							return self.Weight, false, self.Priority
-						end,
-						'enemy_score', 110,
-						'team_score', -20,
-						'min_score', 100,
-						'enemy_cover_mod', 50,
-						'cur_zone_mod', 140,
-					}),
-				},
-				'TargetingPolicies', {
-					PlaceObj('AITargetingEnemyInCover', {
-						'Weight', 200,
-					}),
-					PlaceObj('AITargetingEnemyHealth', {
-						'Health', 50,
-						'AboveHealth', true,
-					}),
-				},
-				'TakeCoverChance', 0,
-			}),
-		},
-		ExposedProne = true,
-		OptLocPolicies = {
-			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 150,
-				'RangeMin', 40,
-				'RangeMax', 40,
-			}),
-			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 25,
-				'Indoors', false,
-			}),
-			PlaceObj('AIPolicyMGSetupPosScore', {
-				'FirstEnemyScore', 60,
-				'ClusterBonus', 40,
-				'RequireLOS', false,
-				'AllyPenalty', 0,
-			}),
-		},
-		OptLocSearchRadius = 80,
-		SignatureActions = {
-			PlaceObj('AIActionMGBurstFire', {
-				'CustomScoring', function (self, context)
-					                    return self.Weight, false, self.Priority
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Torso" ),
-			}),
-			PlaceObj('AIActionMGSetup', {
-				'BiasId', "MGSetup",
-				'Weight', 200,
-				'CustomScoring', function (self, context)
-					return MGSetup_CustomScoring(self, context)
-				end,
-				'enemy_score', 110,
-				'team_score', -10,
-				'min_score', 100,
-				'enemy_cover_mod', 50,
-				'cur_zone_mod', 140,
-			}),
-		},
-		TargetScoreRandomization = 10,
-		TargetingPolicies = {
-			PlaceObj('AITargetingEnemyHealth', {
-				'Weight', 20,
-				'Health', 50,
-				'AboveHealth', true,
-			}),
-			PlaceObj('AITargetingEnemyInCover', {
-				'Weight', 20,
-			}),
-		},
-		group = "Simplified",
-		id = "HeavyGunner",
-	}),
-	PlaceObj('ModItemAIArchetype', {
-		Behaviors = {
-			PlaceObj('StandardAI', {
-				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
+						'Weight', 250,
+						'SoftK', 190,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 60,
 						'Normalization', "tokill",
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 120,
 						'CoverTrust', 100,
-						'CoverNearTiles', 6,
+						'CoverNearTiles', 4,
 						'PlateauTiles', 0,
 						'MeleeRange', 6,
 					}),
@@ -1262,14 +1270,16 @@ return {
 				'OptLocWeight', 20,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 120,
 						'CoverTrust', 100,
 						'CoverNearTiles', 0,
 						'PlateauTiles', 0,
 						'MeleeRange', 4,
 					}),
-					PlaceObj('AIPolicyDealDamage', nil),
-					PlaceObj('AIPolicyCustomFlanking', {
+					PlaceObj('AIPolicyDealDamage', {
 						'Weight', 200,
+					}),
+					PlaceObj('AIPolicyCustomFlanking', {
 						'Required', true,
 						'ReserveAttackAP', "Stance",
 					}),
@@ -1298,15 +1308,26 @@ return {
 			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
+		ExposedProne = true,
+		ExposedProneMinTiles = 12,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 150,
-				'Falloff', 10,
+				'RangeMin', 20,
+				'RangeMax', 40,
+				'Falloff', 3,
 			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
+			PlaceObj('AIPolicyLosToEnemy', {
+				'Weight', 50,
+			}),
 			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 80,
+				'Weight', 50,
 				'visibility_mode', "team",
+			}),
+			PlaceObj('AIPolicyEncircleEnemy', {
+				'Weight', 150,
+				'FlankMarginTiles', 8,
+				'ForwardLookaheadTiles', 0,
+				'MinSeparationTiles', 1,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1403,238 +1424,47 @@ return {
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
 			PlaceObj('StandardAI', {
-				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-					}),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'Weight', 50,
-						'ReserveAttackAP', "Stance",
-						'OnlyTarget', true,
-					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', nil),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 60,
-						'Normalization', "tokill",
-					}),
-					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 200,
-						'CoverTrust', 100,
-						'CoverNearTiles', 6,
-						'PlateauTiles', 0,
-						'MeleeRange', 6,
-					}),
-				},
-				'TakeCoverChance', 50,
-			}),
-			PlaceObj('PositioningAI', {
-				'BiasId', "Flanking",
-				'Weight', 40,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "ExplosiveGrenadeThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "SmokeGrenade",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "FlareThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "AOEGrenadeThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "Overwatch",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'Comment', "Flanking",
-				'Fallback', false,
-				'OptLocWeight', 20,
-				'EndTurnPolicies', {
-					PlaceObj('AIPolicyFlanking', {
-						'AllyPlannedPosition', true,
-					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 60,
-						'Normalization', "tokill",
-					}),
-					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 200,
-					}),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'Required', true,
-						'ReserveAttackAP', "AP",
-						'visibility_mode', "team",
-					}),
-					PlaceObj('AIPolicyThreatExposure', {
-						'Weight', 200,
-						'CoverTrust', 100,
-						'CoverNearTiles', 0,
-						'PlateauTiles', 0,
-						'MeleeRange', 4,
-					}),
-				},
-				'TakeCoverChance', 100,
-				'VoiceResponse', "AIFlanking",
-			}),
-		},
-		Comment = "Keywords: Flank, Explosives",
-		OptLocPolicies = {
-			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 150,
-				'Falloff', 10,
-			}),
-			PlaceObj('AIPolicyLosToEnemy', nil),
-			PlaceObj('AIPolicyCustomSeekCover', {
-				'AssumeCrouch', true,
-			}),
-			PlaceObj('AIPolicyCustomFlanking', {
-				'Weight', 200,
-				'visibility_mode', "team",
-			}),
-		},
-		OptLocSearchRadius = 80,
-		PrefStance = "Crouch",
-		SignatureActions = {
-			PlaceObj('AIActionMobileShot', {
-				'BiasId', "RunAndGun",
-				'Weight', 200,
-				'NotificationText', "",
-				'CustomScoring', function (self, context)
-					return MobileAttack_CustomScoring(self, context)
-				end,
-				'action_id', "RunAndGun",
-			}),
-			PlaceObj('AIActionMobileShot', {
-				'BiasId', "MobileShot",
-				'Weight', 200,
-				'NotificationText', "",
-				'CustomScoring', function (self, context)
-					return MobileAttack_CustomScoring(self, context)
-				end,
-			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "Autofire",
-				'NotificationText', "",
-				'CustomScoring', function (self, context)
-					return AutoFire_CustomScoring(self, context)
-				end,
-				'action_id', "AutoFire",
-				'Aiming', "Maximum",
-				'AttackTargeting', set( "Torso" ),
-			}),
-			PlaceObj('AIActionThrowGrenade', {
-				'BiasId', "ExplosiveGrenadeThrow",
-				'min_score', 130,
-				'enemy_cover_mod', 50,
-				'EnemyPreparedAttackScore', 250,
-				'MinDist', 6000,
-			}),
-			PlaceObj('AIActionThrowGrenade', {
-				'BiasId', "AOEGrenadeThrow",
-				'EnemyPreparedAttackScore', 120,
-				'MinDist', 6000,
-				'AllowedAoeTypes', set( "fire", "teargas", "toxicgas" ),
-			}),
-			PlaceObj('AIActionThrowFlare', {
-				'BiasId', "FlareThrow",
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "FlareThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "FlareThrow",
-						'Value', -20,
-						'ApplyTo', "Team",
-					}),
-				},
-				'team_score', 0,
-				'self_score_mod', 0,
-				'min_score', 100,
-				'TargetLastAttackPos', true,
-			}),
-			PlaceObj('AIConeAttack', {
-				'BiasId', "Overwatch",
-				'Weight', 50,
-				'CustomScoring', function (self, context)
-					return Overwatch_CustomScoring(self, context)
-				end,
-				'team_score', -10,
-				'enemy_cover_mod', 50,
-				'action_id', "Overwatch",
-			}),
-		},
-		TargetScoreRandomization = 10,
-		TargetingPolicies = {
-			PlaceObj('AITargetingEnemyHealth', {
-				'Weight', 50,
-				'Health', 50,
-			}),
-			PlaceObj('AITargetingEnemyWeapon', {
-				'Weight', 50,
-				'EnemyWeapon', "Sniper",
-			}),
-			PlaceObj('AITargetingHasStatusEffect', {
-				'Weight', 50,
-				'StatusID', "Flanked",
-			}),
-		},
-		group = "Simplified",
-		id = "Skirmisher_copy",
-	}),
-	PlaceObj('ModItemAIArchetype', {
-		Behaviors = {
-			PlaceObj('StandardAI', {
 				'turn_phase', "Early",
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', nil),
 					PlaceObj('AIPolicyThreatExposure', {
-						'CoverNearTiles', 8,
 						'PlateauTiles', 0,
+					}),
+					PlaceObj('AIPolicyCustomGrenadeRange', {
+						'Weight', 150,
+						'RangeMin', 30,
+						'RangeMax', 60,
+						'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
+						'SaveAP', true,
+						'Mode', "target",
 					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
+		ExposedProne = true,
 		OptLocPolicies = {
-			PlaceObj('AIPolicyLosToEnemy', nil),
+			PlaceObj('AIPolicyLosToEnemy', {
+				'Weight', 75,
+			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 80,
+				'Weight', 50,
 				'Indoors', false,
 			}),
-			PlaceObj('AIPolicyGrenadeRange', {
-				'Weight', 160,
-				'CheckLOS', false,
-				'RangeMin', 30,
-				'RangeMax', 60,
-				'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
-			}),
-			PlaceObj('AIPolicyGrenadeRange', {
-				'Weight', 40,
-				'CheckLOS', false,
-				'RangeMin', 20,
-				'RangeMax', 100,
-				'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
-			}),
 			PlaceObj('AIPolicyHighGround', {
-				'Weight', 50,
+				'Weight', 40,
 				'DownhillMax', 40,
 			}),
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 150,
+				'RangeBase', "Absolute",
+				'RangeMin', 6,
+				'RangeMax', 18,
+				'Falloff', 4,
+			}),
 			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 80,
+				'Weight', 75,
 				'visibility_mode', "team",
 			}),
 		},
@@ -1880,6 +1710,9 @@ return {
 				'RangeBase', "Absolute",
 				'RangeMin', 1,
 				'RangeMax', 14,
+			}),
+			PlaceObj('AIPolicyEncircleEnemy', {
+				'FlankMarginTiles', 6,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -2132,8 +1965,13 @@ return {
 				'Weight', 50,
 				'OptLocWeight', 200,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
-					PlaceObj('AIPolicyThreatExposure', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 200,
+						'SoftK', 190,
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 187,
+					}),
 				},
 				'TakeCoverChance', 0,
 			}),
@@ -2143,9 +1981,13 @@ return {
 				'Fallback', false,
 				'OptLocWeight', 20,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 187,
+						'SoftK', 190,
+					}),
 					PlaceObj('AIPolicyEvadeEnemies', {
-						'Weight', 150,
+						'Weight', 1,
+						'Required', true,
 						'RangeBase', "Absolute",
 						'Range', 10,
 					}),
@@ -2170,7 +2012,7 @@ return {
 		SignatureActions = {
 			PlaceObj('AIActionMobileShot', {
 				'BiasId', "RunAndGun",
-				'Weight', 500,
+				'Weight', 200,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return MobileAttack_CustomScoring(self, context)
@@ -2179,7 +2021,7 @@ return {
 			}),
 			PlaceObj('AIActionMobileShot', {
 				'BiasId', "MobileShot",
-				'Weight', 500,
+				'Weight', 200,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return MobileAttack_CustomScoring(self, context)
@@ -2195,6 +2037,20 @@ return {
 				'action_id', "AutoFire",
 				'Aiming', "Maximum",
 				'AttackTargeting', set( "Torso" ),
+			}),
+			PlaceObj('AIActionThrowGrenade', {
+				'BiasId', "AssaultGrenadeThrow",
+				'Weight', 90,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "AssaultGrenadeThrow",
+						'Effect', "disable",
+					}),
+				},
+				'self_score_mod', -1000,
+				'EnemyPreparedAttackScore', 100,
+				'MinDist', 6000,
+				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
 			}),
 		},
 		TargetScoreRandomization = 10,
@@ -2337,7 +2193,18 @@ return {
 			PlaceObj('StandardAI', {
 				'Weight', 50,
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 300,
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
+						'Weight', 50,
+						'CoverTrust', 100,
+						'CoverNearTiles', 0,
+						'CoverTrustNear', 0,
+						'PlateauTiles', 0,
+						'FalloffCurve', 50,
+						'MeleeRange', 1,
+					}),
 				},
 				'TakeCoverChance', 0,
 			}),
@@ -2371,23 +2238,13 @@ return {
 		id = "Beserk",
 	}),
 	PlaceObj('ModItemAIArchetype', {
-		BaseAttackWeight = 150,
 		BaseMovementWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
 				'BiasId', "Standard",
 				'EndTurnPolicies', {
-					PlaceObj('AIPolicyDealDamage', nil),
-					PlaceObj('AIPolicyCustomFlanking', {
-						'RequiredKeywords', {
-							"Soldier",
-						},
-						'Weight', 50,
-						'ReserveAttackAP', "Stance",
-						'OnlyTarget', true,
-					}),
-					PlaceObj('AIPolicyTryNotToBeFlanked', {
-						'Weight', 50,
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 200,
 					}),
 					PlaceObj('AIPolicyWeaponRange', {
 						'Weight', 150,
@@ -2395,26 +2252,29 @@ return {
 						'RangeMin', 6,
 						'RangeMax', 10,
 					}),
-					PlaceObj('AIPolicyCustomSeekCover', nil),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyCustomSeekCover', {
-				'Weight', 50,
-			}),
 			PlaceObj('AIPolicyLosToEnemy', nil),
+			PlaceObj('AIPolicyCustomWeaponRange', {
+				'RangeMin', 20,
+				'RangeMax', 40,
+			}),
 			PlaceObj('AIPolicyWeaponRange', {
 				'RangeBase', "Melee",
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'Weight', 50,
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
 		SignatureActions = {
 			PlaceObj('AIAttackSingleTarget', {
 				'BiasId', "Autofire",
-				'Weight', 150,
 				'NotificationText', "",
 				'CustomScoring', function (self, context)
 					return AutoFire_CustomScoring(self, context)
@@ -2425,7 +2285,7 @@ return {
 			}),
 			PlaceObj('AIConeAttack', {
 				'BiasId', "Overwatch",
-				'Weight', 120,
+				'Weight', 50,
 				'CustomScoring', function (self, context)
 					return Overwatch_CustomScoring(self, context)
 				end,
@@ -2447,59 +2307,6 @@ return {
 					return MobileAttack_CustomScoring(self, context)
 				end,
 			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "GroinShot",
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Groin" ),
-			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "ArmShot",
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "ArmShot",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Arms" ),
-			}),
-			PlaceObj('AIAttackSingleTarget', {
-				'BiasId', "LegShot",
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "LegShot",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'CustomScoring', function (self, context)
-					return SingleShotTargeted_CustomScoring(self, context)
-				end,
-				'Aiming', "Remaining AP",
-				'AttackTargeting', set( "Legs" ),
-			}),
-			PlaceObj('AIActionThrowGrenade', {
-				'BiasId', "AssaultGrenadeThrow",
-				'Weight', 80,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "AssaultGrenadeThrow",
-						'Effect', "disable",
-						'Period', 0,
-					}),
-				},
-				'self_score_mod', -1000,
-				'min_score', 100,
-				'MinDist', 6000,
-				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
-			}),
 			PlaceObj('AIActionThrowGrenade', {
 				'BiasId', "AssaultGrenadeThrow200",
 				'Weight', 200,
@@ -2514,30 +2321,9 @@ return {
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
 			}),
-			PlaceObj('AIActionThrowGrenade', {
-				'BiasId', "SmokeGrenade",
-				'Weight', 200,
-				'OnActivationBiases', {
-					PlaceObj('AIBiasModification', {
-						'BiasId', "SmokeGrenade",
-						'Effect', "disable",
-					}),
-					PlaceObj('AIBiasModification', {
-						'BiasId', "SmokeGrenade",
-						'Value', -50,
-						'Period', 0,
-						'ApplyTo', "Team",
-					}),
-				},
-				'enemy_score', -50,
-				'team_score', 100,
-				'self_score_mod', 100,
-				'MinDist', 0,
-				'AllowedAoeTypes', set( "smoke" ),
-			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
-				'Weight', 200,
+				'Weight', 50,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "FlareThrow",
@@ -2576,8 +2362,8 @@ return {
 						'ApplyTo', "Team",
 					}),
 				},
+				'enemy_score', 150,
 				'self_score_mod', -1000,
-				'min_score', 100,
 				'enemy_cover_mod', 50,
 				'MinDist', 7000,
 				'LimitRange', true,
@@ -2822,5 +2608,176 @@ return {
 		'pollyvoice', "Joey",
 		'gender', "Male",
 		'VoiceResponseId', "AdonisAssault",
+	}),
+	PlaceObj('ModItemUnitDataCompositeDef', {
+		'Group', "Adonis",
+		'Id', "AdonisFlanker_copy",
+		'object_class', "UnitData",
+		'Health', 70,
+		'Agility', 81,
+		'Dexterity', 83,
+		'Strength', 47,
+		'Wisdom', 73,
+		'Leadership', 20,
+		'Marksmanship', 70,
+		'Mechanical', 0,
+		'Explosives', 0,
+		'Medical', 0,
+		'Portrait', "UI/EnemiesPortraits/AdonisRecon",
+		'Name', T(195403006020, --[[ModItemUnitDataCompositeDef AdonisFlanker_copy Name]] "Commando"),
+		'Randomization', true,
+		'Affiliation', "Adonis",
+		'StartingLevel', 3,
+		'neutral_retaliate', true,
+		'AIKeywords', {
+			"Flank",
+			"RunAndGun",
+		},
+		'archetype', "Skirmisher",
+		'role', "Recon",
+		'AlwaysUseOpeningAttack', true,
+		'MaxAttacks', 2,
+		'unitPowerModifier', 75,
+		'MaxHitPoints', 50,
+		'StartingPerks', {
+			"AutoWeapons",
+			"Hotblood",
+			"NightOps",
+			"RelentlessAdvance",
+			"SteadyBreathing",
+		},
+		'AppearancesList', {
+			PlaceObj('AppearanceWeight', {
+				'Preset', "Adonis_Recon",
+			}),
+		},
+		'Equipment', {
+			"AdonisFlanker",
+		},
+		'AdditionalGroups', {
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_1",
+			}),
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_2",
+			}),
+		},
+		'Tier', "Veteran",
+		'pollyvoice', "Joey",
+		'gender', "Male",
+		'VoiceResponseId', "AdonisAssault",
+	}),
+	PlaceObj('ModItemUnitDataCompositeDef', {
+		'Group', "Adonis",
+		'Id', "AdonisAssault_copy",
+		'object_class', "UnitData",
+		'Health', 75,
+		'Agility', 75,
+		'Dexterity', 75,
+		'Strength', 85,
+		'Wisdom', 56,
+		'Leadership', 50,
+		'Marksmanship', 70,
+		'Mechanical', 0,
+		'Explosives', 0,
+		'Medical', 0,
+		'Portrait', "UI/EnemiesPortraits/AdonisSoldier",
+		'Name', T(384992128748, --[[ModItemUnitDataCompositeDef AdonisAssault_copy Name]] "Guard"),
+		'Randomization', true,
+		'Affiliation', "Adonis",
+		'StartingLevel', 6,
+		'neutral_retaliate', true,
+		'AIKeywords', {
+			"Soldier",
+			"Ordnance",
+			"Explosives",
+		},
+		'role', "Soldier",
+		'MaxAttacks', 2,
+		'CustomEquipGear', function (self, items)
+			self:TryLoadAmmo("Handheld A", "AssaultRifle", "_762NATO_Tracer")
+			self:TryLoadAmmo("Handheld A", "GrenadeLauncher", "_40mmFlashbangGrenade")
+		end,
+		'unitPowerModifier', 75,
+		'MaxHitPoints', 50,
+		'StartingPerks', {
+			"AutoWeapons",
+			"LightningReactionNPC",
+		},
+		'AppearancesList', {
+			PlaceObj('AppearanceWeight', {
+				'Preset', "Adonis_Soldier",
+			}),
+		},
+		'Equipment', {
+			"AdonisAssault",
+		},
+		'AdditionalGroups', {
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_1",
+			}),
+			PlaceObj('AdditionalGroup', {
+				'Weight', 50,
+				'Exclusive', true,
+				'Name', "AdonisMale_2",
+			}),
+		},
+		'Tier', "Elite",
+		'pollyvoice', "Joey",
+		'gender', "Male",
+		'VoiceResponseId', "AdonisAssault",
+	}),
+	PlaceObj('ModItemUnitDataCompositeDef', {
+		'Group', "SiegfriedSuperSoldiers",
+		'Id', "SuperSoldier_Assault_copy",
+		'object_class', "UnitData",
+		'Health', 75,
+		'Agility', 75,
+		'Dexterity', 75,
+		'Strength', 85,
+		'Wisdom', 56,
+		'Leadership', 50,
+		'Marksmanship', 84,
+		'Mechanical', 50,
+		'Explosives', 39,
+		'Medical', 52,
+		'Portrait', "UI/EnemiesPortraits/ArmyHeavy",
+		'Name', T(255682331059, --[[ModItemUnitDataCompositeDef SuperSoldier_Assault_copy Name]] "Soldat"),
+		'Randomization', true,
+		'Affiliation', "SuperSoldiers",
+		'StartingLevel', 6,
+		'neutral_retaliate', true,
+		'AIKeywords', {
+			"Control",
+		},
+		'role', "Soldier",
+		'MaxAttacks', 2,
+		'PickCustomArchetype', function (self, proto_context)  end,
+		'MaxHitPoints', 50,
+		'StartingPerks', {
+			"AutoWeapons",
+			"Berserker",
+			"HoldPosition",
+			"DieselPerk",
+		},
+		'AppearancesList', {
+			PlaceObj('AppearanceWeight', {
+				'Preset', "Landsbach_SuperSoldier_Assault",
+			}),
+		},
+		'Equipment', {
+			"SuperSoldier_Assault",
+		},
+		'AdditionalGroups', {},
+		'Tier', "Elite",
+		'pollyvoice', "Joey",
+		'gender', "Male",
+		'VoiceResponseId', "SuperSoldier_Assault",
 	}),
 }

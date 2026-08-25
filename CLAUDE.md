@@ -29,6 +29,7 @@ Integração opcional com CUAE (loot/armas dos inimigos).
 |---|---|
 | `AI_SYSTEM_GUIDE.md` | Pipeline completo do turno da IA; os 4 tipos de score; `best_dest` vs `ai_destination`; `OptLocWeight`; `AIDecisionThreshold`. **Ponto de partida.** |
 | `WEIGHTS_AUDIT.md` | Auditoria de magnitude numérica dos pesos. Status B1–B8 / M1–M7 (o que foi aplicado e o que é calibragem pendente). |
+| `POLICY_BUDGET.md` | Modelo matemático dos pesos de policy por arquétipo: influência = `Weight × D`, as três âncoras absolutas, `A` (agressividade) e `R_optloc`, e as regras R1–R9 para tunar. Extraído do `items.lua` atual — **é o que substitui as tabelas 13.1/13.4 do guia**. |
 | `SEEKCOVER_GUIDE.md` | Leitura linha a linha de `AIPOLICYPOS_CustomSeekCover.lua`. |
 | `SIGNATURE_POSITIONING_GAP.md` | Investigação: o scoring de posição é cego às signature actions. |
 | `PERF_PLAN.md` / `PERF_CHANGES.md` | Gargalos de performance e os patches C1–C12 (C10 e Fase 2 não aplicados). |
