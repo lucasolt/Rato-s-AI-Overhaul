@@ -141,7 +141,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo colado.\n" .. "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
                 "So tem efeito com `CoverCancels` ligado.",
             editor = "number",
-            default = 8,
+            default = 4,
             min = 0,
             max = 30
         }, {
@@ -155,7 +155,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
                 "cheia, como se fosse corpo a corpo.\n" .. "So tem efeito com CoverNearTiles > 0.",
             editor = "number",
-            default = 20,
+            default = 50,
             min = 0,
             max = 100
         }, {

@@ -6,7 +6,7 @@ local ROLE_ARGS = {
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol"},
         close_archetype = "RATOAI_RetreatingMarksman",
         vr = "AIArchetypeScared",
-        dist = 6
+        dist = 8
     },
     Stormer = {
         main_w_classes = {"Firearm"},
@@ -20,7 +20,7 @@ local ROLE_ARGS = {
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
         close_archetype = "RATOAI_RetreatingMarksman",
         vr = "AIArchetypeScared",
-        dist = 6
+        dist = 8
     },
     Rocketeer = {
         main_w_classes = {"Artillery", "RocketLauncher"},

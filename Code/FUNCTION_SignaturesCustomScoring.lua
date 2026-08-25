@@ -492,7 +492,7 @@ function Pindown_CustomScoring(self, context)
     return Max(0, weight), weight < 0 and true or disable, priority
 end
 
-function GrenadeLaunchCustomScoring(self, context)
+function DemolitionCustomScoring(self, context)
     local unit = context.unit
     local weight, disable, priority = self.Weight, false, self.Priority
 
