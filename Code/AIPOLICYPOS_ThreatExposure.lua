@@ -375,7 +375,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         return 0
     end
 
-    local dbg = const.RATOAI.ThreatDebug and {} or nil
+    local trace = const.RATOAI.ThreatDebug and {} or nil
 
     ---- Portao de LOS. Distingue `false` (o motor CHECOU e ninguem ve) de `nil` (nunca
     ---- checou -- destino fora de all_destinations). Tratar nil como "sem LOS" zeraria
@@ -431,7 +431,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                 local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
                 threat = threat + contrib
 
-                if dbg then
+                if trace then
                     if cancels then
                         ---- so anota quando o raio realmente mordeu -- senao poluiria
                         ---- toda linha do overlay com um numero que nunca muda
@@ -439,32 +439,32 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                         if trust and near > 0 and d < near then
                             near_note = string.format(" | COLADO: confianca %d%%", trust)
                         end
-                        dbg[#dbg + 1] = string.format(
+                        trace[#trace + 1] = string.format(
                                             "  %s: %st / alcance %st%s -> peso %d" ..
                                                 " | exposto %d%% -> contribui %d%s",
                                             tostring(enemy.session_id), tostring(tiles(d)),
                                             tostring(tiles(range)), capped and " (teto)" or "",
                                             ramp, uncovered, contrib, near_note)
                     else
-                        dbg[#dbg + 1] = string.format("  %s: %st / alcance %st%s -> peso %d",
+                        trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d",
                                                       tostring(enemy.session_id),
                                                       tostring(tiles(d)), tostring(tiles(range)),
                                                       capped and " (teto)" or "", ramp)
                     end
                 end
-            elseif dbg then
-                dbg[#dbg + 1] = string.format("  %s: PULADO (posicao invalida)",
+            elseif trace then
+                trace[#trace + 1] = string.format("  %s: PULADO (posicao invalida)",
                                               tostring(enemy.session_id))
             end
-        elseif dbg then
-            dbg[#dbg + 1] = string.format("  %s: PULADO (%s)", tostring(enemy.session_id),
+        elseif trace then
+            trace[#trace + 1] = string.format("  %s: PULADO (%s)", tostring(enemy.session_id),
                                           not alive and "abatido/morto" or
                                               ("nao visivel, modo " ..
                                                   tostring(self.visibility_mode)))
         end
     end
 
-    if dbg then
+    if trace then
         local saturation = self:GetSaturation()
         local head = string.format("inimigos em context.enemies: %d | saturacao %d %s " ..
                                        "| Penalty %d | Weight %d\n" ..
@@ -491,7 +491,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                        0)
         context.dest_threat_exposure_debug = context.dest_threat_exposure_debug or {}
         context.dest_threat_exposure_debug[dest] =
-            head .. "\n" .. table.concat(dbg, "\n") .. "\n" .. tail
+            head .. "\n" .. table.concat(trace, "\n") .. "\n" .. tail
     end
 
     if threat <= 0 then

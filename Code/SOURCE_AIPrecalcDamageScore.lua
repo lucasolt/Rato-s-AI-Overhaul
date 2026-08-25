@@ -74,8 +74,8 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     ---- tabelas target_cth/target_hit/target_score sao locais do laco de destinos. Sem
     ---- isto nao ha como perguntar "e contra o alvo #3, quanto seria o CTH".
     ---- Mesmo criterio de custo do PERF (C9): so existe com RATOAI_Debug.
-    local dbg = RATOAI_Debug
-    if dbg then
+    local trace = RATOAI_Debug
+    if trace then
         ---- zerado a cada chamada: e sempre o ultimo precalc que a UI esta olhando.
         ---- `dbg_target_list` NAO e gravado aqui -- `targets` ainda vai ser reatribuido
         ---- pelo filtro de StationedMachineGun/ManningEmplacement mais abaixo, e guardar
@@ -225,7 +225,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     ---- injetados, filtro de emplacement) -- e exatamente a lista que o laco abaixo vai
     ---- percorrer. Ela pode divergir de context.enemies, que era o que a pagina Alvo
     ---- iterava antes.
-    if dbg then
+    if trace then
         context.dbg_target_list = targets
     end
 
@@ -260,7 +260,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
 
         ---- DEBUG (D1)
         local dbg_dest
-        if dbg then
+        if trace then
             dbg_dest = {ap = ap, cost_ap = cost_ap, by_target = {}}
             context.dbg_targets[upos] = dbg_dest
             if not (weapon and ap >= cost_ap) then

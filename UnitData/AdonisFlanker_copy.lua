@@ -4,7 +4,6 @@ DefineClass.AdonisFlanker_copy = {
 	__generated_by_class = "ModItemUnitDataCompositeDef",
 
 
-	__copy_group = "Adonis",
 	object_class = "UnitData",
 	Health = 70,
 	Agility = 81,

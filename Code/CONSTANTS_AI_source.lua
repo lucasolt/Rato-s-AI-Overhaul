@@ -15,7 +15,7 @@
 ---- REGRA: nao criar global nova para constante nem para interruptor. Nem com rawget, nem sem.
 ---- Ficam de fora, e cada uma tem motivo proprio:
 ----   RATOAI_Debug       -- nao e constante, e estado recomputado no CombatStart, e e lido em
-----                         laco quente como `local dbg = RATOAI_Debug`. Ver UTIL.lua.
+----                         laco quente como `local trace = RATOAI_Debug`. Ver UTIL.lua.
 ----   RATOAI_LastExpected -- deposito de DADOS de debug, nao configuracao.
 ---- (A valvula do debug, antes RATOAI_DebugForce, MUDOU para const.RATOAI.DebugForce -- ela era
 ----  lida com rawget e portanto nunca enxergou nada digitado no console. Ver B32 em UTIL.lua.)

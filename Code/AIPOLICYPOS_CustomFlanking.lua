@@ -326,12 +326,12 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
     end
 
     local dest_los = context.dest_target_los[dest]
-    local dbg = const.RATOAI.FlankDebug
+    local trace = const.RATOAI.FlankDebug
     local x, y, z
 
     ---- so desempacota se alguem for usar (distancia ou debug). stance_pos_unpack e
     ---- barato, mas e por destino.
-    if self.ScalePerDistance or not self.OnlyTarget or dbg then
+    if self.ScalePerDistance or not self.OnlyTarget or trace then
         x, y, z = stance_pos_unpack(dest)
     end
 
@@ -343,7 +343,7 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
             return 0
         end
         score = self:ScoreEnemy(p, target, dest_cover, dest_los, x, y, z)
-        if dbg then
+        if trace then
             local now_pct, dest_pct = self:CoverPct(p, target, dest_cover, dest_los)
             txt = string.format("alvo %s: cobertura daqui %d%% -> dali %d%% = %d",
                                 tostring(target.session_id), now_pct, dest_pct, score)
@@ -365,7 +365,7 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
                 local w = (enemy == target) and target_weight or 1
                 acc = acc + s * w
                 wsum = wsum + w
-                if dbg then
+                if trace then
                     lines = lines or {}
                     lines[#lines + 1] = string.format("  %s: %d (peso %d)",
                                                       tostring(enemy.session_id), s, w)
@@ -376,13 +376,13 @@ function AIPolicyCustomFlanking:EvalDest(context, dest, grid_voxel)
             return 0
         end
         score = MulDivRound(acc, 1, wsum)
-        if dbg then
+        if trace then
             txt = string.format("media de %d inimigos = %d\n%s", wsum, score,
                                 table.concat(lines or empty_table, "\n"))
         end
     end
 
-    if dbg then
+    if trace then
         context.dest_flanking_pol_debug[dest] = string.format("%s\n  EvalDest %d (x Weight %d)",
                                                               txt, score, self.Weight or 100)
     end

@@ -308,7 +308,7 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- mesmo com debug desligado. Esta e uma politica OptLoc (20 usos em
     ---- items.lua), entao rodava sobre todos os destinos do raio de busca.
     ---- `debugforpos_simple` nao tinha sequer um uso ativo -- removida.
-    local dbg = const.RATOAI.SeekCoverDebug and {} or nil
+    local trace = const.RATOAI.SeekCoverDebug and {} or nil
 
     for _, enemy in ipairs(tbl) do
         local visible = true
@@ -331,22 +331,22 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
             score = score + cover_score * weight
             total_weight = total_weight + weight
 
-            if dbg then
+            if trace then
                 if weight == 0 then
-                    dbg[#dbg + 1] = string.format(
+                    trace[#trace + 1] = string.format(
                                         "  %s: %st / alcance %st -> peso 0 (%s) -- FORA da media",
                                         tostring(enemy.session_id), tostring(dbg_tiles(e_dist)),
                                         tostring(dbg_tiles(e_range)), tostring(why))
                 else
-                    dbg[#dbg + 1] = string.format(
+                    trace[#trace + 1] = string.format(
                                         "  %s: %st / alcance %st -> peso %d | cobertura %d (%s)" ..
                                             " | c*w %d", tostring(enemy.session_id),
                                         tostring(dbg_tiles(e_dist)), tostring(dbg_tiles(e_range)),
                                         weight, cover_score, tostring(why), cover_score * weight)
                 end
             end
-        elseif dbg then
-            dbg[#dbg + 1] = string.format("  %s: PULADO (nao visivel, modo %s)",
+        elseif trace then
+            trace[#trace + 1] = string.format("  %s: PULADO (nao visivel, modo %s)",
                                           tostring(enemy.session_id), tostring(self.visibility_mode))
         end
     end
@@ -367,13 +367,13 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
             total_weight = total_weight + 100
             score = score + cover_score * 100
 
-            if dbg then
-                dbg[#dbg + 1] = string.format("  last_known_enemy_pos: peso 100 (cheio)" ..
+            if trace then
+                trace[#trace + 1] = string.format("  last_known_enemy_pos: peso 100 (cheio)" ..
                                                   " | cobertura %d | c*w %d", cover_score,
                                               cover_score * 100)
             end
-        elseif dbg then
-            dbg[#dbg + 1] = "  last_known_enemy_pos: nao ha posicao conhecida"
+        elseif trace then
+            trace[#trace + 1] = "  last_known_enemy_pos: nao ha posicao conhecida"
         end
     end
 
@@ -381,11 +381,11 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- ameaca que cobertura resolve. Neutro -- a policy nao tem opiniao sobre este
     ---- tile, em vez de fingir que ele e ruim.
     if total_weight <= 0 then
-        if dbg then
-            dbg[#dbg + 1] = "  SOMA(w) = 0 -> ninguem que cobertura resolva alcanca este tile"
-            dbg[#dbg + 1] = "  EvalDest 0"
+        if trace then
+            trace[#trace + 1] = "  SOMA(w) = 0 -> ninguem que cobertura resolva alcanca este tile"
+            trace[#trace + 1] = "  EvalDest 0"
             self:StoreDebug(context, dest, self:FormatDebugHeader(context, ustance) .. "\n" ..
-                                table.concat(dbg, "\n"))
+                                table.concat(trace, "\n"))
         end
         return 0
     end
@@ -393,8 +393,8 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
     ---- media ponderada: "que fracao da ameaca apontada para mim eu neutralizo"
     local avg = MulDivRound(score, 1, total_weight)
 
-    if dbg then
-        dbg[#dbg + 1] = string.format("  SOMA(c*w) %d / SOMA(w) %d -> media %d", score,
+    if trace then
+        trace[#trace + 1] = string.format("  SOMA(c*w) %d / SOMA(w) %d -> media %d", score,
                                       total_weight, avg)
     end
 
@@ -426,23 +426,23 @@ function AIPolicyCustomSeekCover:EvalDest(context, dest, grid_voxel)
         local factor = (100 - rel) + MulDivRound(rel, presence, 100)
         avg = MulDivRound(avg, factor, 100)
 
-        if dbg then
-            dbg[#dbg + 1] = string.format("  presence = %d*100/%d = %d%s | ThreatRelative %d" ..
+        if trace then
+            trace[#trace + 1] = string.format("  presence = %d*100/%d = %d%s | ThreatRelative %d" ..
                                               " -> factor %d", total_weight, saturation, presence,
                                           (MulDivRound(total_weight, 100, saturation) > 100) and
                                               " (CLAMPADO)" or "", rel, factor)
         end
-    elseif dbg then
-        dbg[#dbg + 1] = "  ThreatRelative 0 -> cobertura ABSOLUTA, media entra crua"
+    elseif trace then
+        trace[#trace + 1] = "  ThreatRelative 0 -> cobertura ABSOLUTA, media entra crua"
     end
 
-    if dbg then
+    if trace then
         ---- o Weight nao e aplicado aqui: quem multiplica e o AIScoreDest. Mostrado para
         ---- o numero do overlay bater com a linha "Custom Seek Cover" do Voxel score.
-        dbg[#dbg + 1] = string.format("  EvalDest %d  (x Weight %d%% = %d no AIScoreDest)", avg,
+        trace[#trace + 1] = string.format("  EvalDest %d  (x Weight %d%% = %d no AIScoreDest)", avg,
                                       self.Weight or 100, MulDivRound(avg, self.Weight or 100, 100))
         self:StoreDebug(context, dest,
-                        self:FormatDebugHeader(context, ustance) .. "\n" .. table.concat(dbg, "\n"))
+                        self:FormatDebugHeader(context, ustance) .. "\n" .. table.concat(trace, "\n"))
     end
 
     return avg

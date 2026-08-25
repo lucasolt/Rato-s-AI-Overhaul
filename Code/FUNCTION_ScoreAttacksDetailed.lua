@@ -143,8 +143,8 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- PERF (C9): estas tabelas so sao lidas por IModeAIDebug:GetVoxelRolloverText.
     ---- Eram criadas por (destino, alvo) -- na casa dos milhares por turno --
     ---- e retidas ate o turno acabar.
-    local dbg = RATOAI_Debug
-    if dbg then
+    local trace = RATOAI_Debug
+    if trace then
         context.aims_at[upos] = context.aims_at[upos] or {}
         context.aims_at[upos][target] = aims
         context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
@@ -241,12 +241,12 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
 
             local perda = MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
             eff_cth = eff_cth + perda
-            if dbg then
+            if trace then
                 context.recoil_loss_at[upos][target] = context.recoil_loss_at[upos][target] + perda
             end
         end
 
-        if dbg then
+        if trace then
             ---- a CTH da bala LIDER deste ataque, ja com o recoil persistente dentro --
             ---- e o numero que a rajada de fato expandiu
             table.insert(context.cth_attacks_at[upos][target], eff_cth)
@@ -254,7 +254,7 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
 
         local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth, RATOAI_AimBonus(
                                               aim_cth_by_level, aim_i, unit, target, action, weapon))
-        if dbg then
+        if trace then
             table.insert(context.burst_hits_at[upos][target], expanded)
         end
         mod = mod + expanded
@@ -371,8 +371,8 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
         ---- DEBUG (D1): paridade com o caminho "Detailed". Sem isto a tabela de
         ---- candidatos e o detalhe tiro a tiro ficavam vazios com
         ---- UseSimpleAttacksScoring ligado.
-        local dbg = RATOAI_Debug
-        if dbg then
+        local trace = RATOAI_Debug
+        if trace then
             context.aims_at[upos] = context.aims_at[upos] or {}
             context.aims_at[upos][target] = aims
             context.cth_attacks_at[upos] = context.cth_attacks_at[upos] or {}
@@ -399,7 +399,7 @@ function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz
                 first_cth = shot_cth
             end
 
-            if dbg then
+            if trace then
                 table.insert(context.cth_attacks_at[upos][target], shot_cth)
             end
 
@@ -448,7 +448,7 @@ end
 ---- `attacks`. Devolve nil quando nao da para responder -- o chamador cai no caminho antigo.
 ---------------------------------------------------------------------------------------------------
 ---- DEBUG (D2): declarada AQUI, no escopo do arquivo. O engine so permite criar global
----- durante o load -- em runtime `RATOAI_LastExpected = {}` levanta
+---- durante o load -- em runtime `RATOAI_LastExpected =  levanta
 ---- "Attempt to create a new global" e derruba a escolha de acao da unidade (medido: o
 ---- sprocall do AIPlayAttacks engoliu, mas a unidade perdeu a signature action).
 ---- Criar sempre, e nao so com RATOAI_Debug: a flag e recomputada no CombatStart
@@ -681,7 +681,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- DEBUG (D2): os insumos que produziram o numero. Sem eles "a IA escolheu auto"
     ---- nao se distingue de "a IA sorteou auto" -- e sao justamente custo, balas e
     ---- contagem de ataques que a conta antiga nao enxergava.
-    local dbg
+    local trace
     if RATOAI_Debug then
         ---- `recoil` so aparece quando de fato participou da conta; nos demais casos o painel
         ---- mostra "-", que e a informacao correta (nao entra), e nao um numero inerte.
@@ -690,7 +690,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ---- (o precalc de destino unico do AIPlayAttacks reescreve o alvo daquele destino).
         ---- Sem esta linha, "razao 250 com 0 acertos" e indistinguivel de "0 acertos contra
         ---- o alvo errado": custou uma sessao de DAP para recuperar o alvo pelo `dist`.
-        dbg = {
+        trace = {
             cost = cost,
             shots = shots,
             attacks = attacks,
@@ -705,7 +705,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
             cths[#cths + 1] = string.format("a%d=%d", aim_lvl, v)
         end
         table.sort(cths)
-        dbg.cth = table.concat(cths, " ")
+        trace.cth = table.concat(cths, " ")
     end
 
     ---- DEBUG (D7): `ap_left` vem do 4o retorno do AICalcAttacksAndAim (AP depois do PRIMEIRO
@@ -713,14 +713,13 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- nao-sustentado do RATOAI_ExpectedRatio e nao custam avaliacao nenhuma a mais.
     ap_left = ap_left or 0
     memo[key] = {
-        hits = hits,
-        attacks = attacks,
-        dbg = dbg,
-        aim1 = aims[1],
-        stance = paid_stance and true or false,
-        ap_left = ap_left,
-        hits_first = hits_first
-    }
+	hits = hits,
+	attacks = attacks,
+	trace = trace,
+	aim1 = aims[1],
+	stance = paid_stance and true or false,
+	ap_left = ap_left,
+	hits_first = hits_first}
     return hits, attacks, aims[1], paid_stance, ap_left, hits_first
 end
 
@@ -1034,7 +1033,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
             hits = hits,
             base = base,
             ratio = ratio,
-            dbg = slot and slot.dbg,
+            trace = slot and slot.trace,
             motivo = slot and slot.motivo,
             stance = act_stance,
             base_stance = base_stance,
@@ -1093,7 +1092,10 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
             rec.ap = context.dest_ap and context.dest_ap[upos]
             rec.dest_cth = context.dest_cth and context.dest_cth[upos]
             rec.target = IsKindOf(target, "Unit") and target.session_id or tostring(target)
-            rec.actions[dbg_id] = {hits = hits, ratio = ratio, dbg = slot and slot.dbg}
+        	rec.actions[dbg_id] = {
+				hits = hits, ratio = ratio,
+				trace = slot and slot.trace
+				}
         end
     end
 

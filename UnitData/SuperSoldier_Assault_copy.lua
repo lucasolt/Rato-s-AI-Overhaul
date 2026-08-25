@@ -4,7 +4,6 @@ DefineClass.SuperSoldier_Assault_copy = {
 	__generated_by_class = "ModItemUnitDataCompositeDef",
 
 
-	__copy_group = "SiegfriedSuperSoldiers",
 	object_class = "UnitData",
 	Health = 75,
 	Agility = 75,
@@ -17,7 +16,7 @@ DefineClass.SuperSoldier_Assault_copy = {
 	Explosives = 39,
 	Medical = 52,
 	Portrait = "UI/EnemiesPortraits/ArmyHeavy",
-	Name = T(255682331059, "Soldat"),
+	Name = T(255682331059, --[[ModItemUnitDataCompositeDef SuperSoldier_Assault_copy Name]] "Soldat"),
 	Randomization = true,
 	Affiliation = "SuperSoldiers",
 	StartingLevel = 6,

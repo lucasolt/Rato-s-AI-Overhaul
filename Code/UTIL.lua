@@ -13,7 +13,7 @@
 ---- de debug aberto e os cheats ligados.
 ----
 ---- Continua sendo um booleano simples, e nao uma funcao: o caminho quente le
----- `local dbg = RATOAI_Debug` por chamada e nao pode pagar uma chamada de funcao.
+---- `local trace = RATOAI_Debug` por chamada e nao pode pagar uma chamada de funcao.
 ---- So o momento da avaliacao mudou.
 ----
 ---- `const.RATOAI.DebugForce = true/false` no console trava o valor; nil (o default) volta
@@ -34,15 +34,16 @@ function RATOAI_RecomputeDebugFlag()
     RATOAI_Debug = Platform.developer and Platform.cheats and true or false
 end
 
+
 RATOAI_RecomputeDebugFlag()
 
 ---- ClassesBuilt e o primeiro marco depois que TODO codigo de mod ja executou (o
 ---- proprio ForceDev.lua se apoia nisso). ModsReloaded cobre o reload em runtime, e
 ---- CombatStart e a rede de seguranca barata -- e o unico momento em que a flag
 ---- importa, e nao esta em caminho quente.
-OnMsg.ClassesBuilt = RATOAI_RecomputeDebugFlag
-OnMsg.ModsReloaded = RATOAI_RecomputeDebugFlag
-OnMsg.CombatStart = RATOAI_RecomputeDebugFlag
+--OnMsg.ClassesBuilt = RATOAI_RecomputeDebugFlag
+--OnMsg.ModsReloaded = RATOAI_RecomputeDebugFlag
+--OnMsg.CombatStart = RATOAI_RecomputeDebugFlag
 
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B17): posicao ANCORA de uma unidade peekada.

@@ -4,7 +4,6 @@ DefineClass.AdonisAssault_copy = {
 	__generated_by_class = "ModItemUnitDataCompositeDef",
 
 
-	__copy_group = "Adonis",
 	object_class = "UnitData",
 	Health = 75,
 	Agility = 75,

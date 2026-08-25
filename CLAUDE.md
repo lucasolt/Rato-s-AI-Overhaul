@@ -35,6 +35,7 @@ Integração opcional com CUAE (loot/armas dos inimigos).
 | `PERF_PLAN.md` / `PERF_CHANGES.md` | Gargalos de performance e os patches C1–C12 (C10 e Fase 2 não aplicados). |
 | `DEBUG SERVER.md` | Console Lua no jogo rodando via DAP (`tools/dap_probe.py`, porta 8165, só `JA3Debug.exe`). |
 | `AIM_AND_STANCE.md` | Mira, nº de ataques e Shooting Stance: as três moedas de AP, a árvore do `AICalcAttacksAndAim`, ciclo de vida da stance, o recoil que encarece mira. |
+| `DBG_RESERVED_WORD.md` | **Ler antes de nomear qualquer variável de debug.** `dbg` é usado pelo engine (`dbg(...)`, ver `lib.lua:32`) e uma etapa de build (Gold Master) mexe no texto por causa disso — usar `dbg` como identificador em `Code/*.lua` quebra o carregamento só no executável normal (`JA3.exe`), nunca no `JA3Debug.exe`. Use `trace`. |
 
 ## Estrutura do `Code/` — prefixo = tipo de override
 | Prefixo | Papel |
@@ -90,7 +91,7 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
   `const.RATOAI = const.RATOAI or {}` no topo do arquivo); só os tunables gerais moram no
   `CONSTANTS_AI_source.lua`.
   Exceção única e documentada: `RATOAI_Debug` (estado recomputado no `CombatStart` e lido em laço
-  quente como `local dbg = RATOAI_Debug`) e `RATOAI_LastExpected` (depósito de dados, não config).
+  quente como `local trace = RATOAI_Debug`) e `RATOAI_LastExpected` (depósito de dados, não config).
 - **Criar global em runtime é erro de execução.** O engine só permite no load — em runtime levanta
   `Attempt to create a new global` e derruba a ação em curso. Global nova se declara no escopo do
   arquivo; `rawset(_G, ...)` contorna o `__newindex` mas é gambiarra, não solução.
@@ -111,6 +112,11 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
   referenciam `PERF_CHANGES.md`, `WEIGHTS_AUDIT.md` e a seção 10 do `AI_SYSTEM_GUIDE.md`.
   Manter o padrão ao aplicar novas mudanças; conferir o maior número já usado antes de
   escolher o próximo (as listas não são contíguas).
+- **Nunca use o identificador `dbg`** (variável, chave de tabela, ou mencionado em
+  comentário) em `Code/*.lua` — é reservado pelo engine (`dbg(...)`, ver `lib.lua:32` e
+  [[DBG_RESERVED_WORD.md]]) e quebra o carregamento do mod só no executável normal
+  (`JA3.exe`), nunca no `JA3Debug.exe`, com um erro de sintaxe Lua que parece não fazer
+  sentido porque o arquivo está de fato correto. Use `trace`.
 - Repositório git próprio (branches: `main`, `claude-performance-refactor`,
   `New_AiCalcAttacksAndAim`).
 - **O GBO3 também é do autor e pode ser modificado.** Ele não é uma dependência
