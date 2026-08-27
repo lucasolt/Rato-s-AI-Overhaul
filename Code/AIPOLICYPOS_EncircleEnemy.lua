@@ -554,6 +554,10 @@ end
 ----
 ---- Para ver o PLANO (eixo, linha de frente, faixas de flanco, lado de cada unidade)
 ---- desenhado no mapa: `RATOAI_DbgEncircle()` no console.
+----
+---- Para FORCAR o recalculo do plano (centroides, eixo, etc.) sem esperar o turno mudar
+---- -- util depois de mover unidades pelo editor -- `RATOAI_RecalcEncirclePlan()` no
+---- console. Redesenha o overlay sozinho.
 ---------------------------------------------------------------------------------------------------
 if const.RATOAI.EncircleDebug == nil then
     const.RATOAI.EncircleDebug = false

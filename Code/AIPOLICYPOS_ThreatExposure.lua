@@ -107,7 +107,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "por inteiro (agressiva). Abaixo disso sobra ameaca mesmo coberta, e a " ..
                 "IA fica mais cautelosa. 0 = cobertura nao vale nada.",
             editor = "number",
-            default = 90,
+            default = 80,
             min = 0,
             max = 100
         }, {
@@ -141,7 +141,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo colado.\n" .. "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
                 "So tem efeito com `CoverCancels` ligado.",
             editor = "number",
-            default = 4,
+            default = 12,
             min = 0,
             max = 30
         }, {
@@ -155,7 +155,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "0 = colado, cobertura nao vale nada -- o inimigo entra com a ameaca " ..
                 "cheia, como se fosse corpo a corpo.\n" .. "So tem efeito com CoverNearTiles > 0.",
             editor = "number",
-            default = 40,
+            default = 0,
             min = 0,
             max = 100
         }, {
@@ -205,7 +205,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "em CTH. Abaixo disso a IA desconta o beneficio (deitar prende a unidade: " ..
                 "levantar custa AP no turno seguinte). 0 = postura nao vale nada.",
             editor = "number",
-            default = 90,
+            default = 70,
             min = 0,
             max = 100
         }, {
@@ -299,7 +299,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "concentra em quem esta perto. Valores no meio interpolam.\n" ..
                 "Nao muda o peso no plato (100) nem no limite do alcance (0).",
             editor = "number",
-            default = 020,
+            default = 0,
             min = 0,
             max = 100
         }, {

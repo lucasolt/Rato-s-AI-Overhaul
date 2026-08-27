@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 4490,
+	'version', 4575,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -105,8 +105,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787694883,
-	'code_hash', 9201260542872829007,
+	'saved', 1787804595,
+	'code_hash', -2839408130413132979,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",

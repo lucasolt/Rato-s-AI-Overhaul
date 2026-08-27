@@ -323,7 +323,6 @@ return {
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
-						'CoverNearTiles', 12,
 					}),
 				},
 				'TakeCoverChance', 50,
@@ -340,11 +339,6 @@ return {
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
-			PlaceObj('AIPolicyEncircleEnemy', {
-				'DepthTiles', 4,
-				'ForwardLookaheadTiles', 4,
-				'WingFraction', 60,
-			}),
 			PlaceObj('AIPolicyHighGround', {
 				'Weight', 50,
 				'FullBonusDz', 4,
@@ -352,8 +346,12 @@ return {
 				'Reference', "enemies",
 			}),
 			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 50,
 				'visibility_mode', "team",
+			}),
+			PlaceObj('AIPolicyEncircleEnemy', {
+				'Weight', 150,
+				'DepthTiles', 4,
+				'WingFraction', 60,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -534,9 +532,10 @@ return {
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 175,
-						'CoverTrust', 100,
-						'CoverNearTiles', 3,
-						'CoverTrustNear', 0,
+						'CoverTrust', 90,
+						'CoverNearTiles', 6,
+						'CoverTrustNear', 70,
+						'StanceTrust', 50,
 						'PlateauTiles', 0,
 						'MeleeRange', 6,
 					}),
@@ -554,6 +553,7 @@ return {
 						'Weight', 200,
 						'CoverTrust', 100,
 						'CoverNearTiles', 0,
+						'StanceTrust', 50,
 						'PlateauTiles', 0,
 						'MeleeRange', 4,
 					}),
@@ -565,6 +565,10 @@ return {
 						'Weight', 300,
 						'MaxHits', 100,
 						'SoftK', 150,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 50,
+						'Normalization', "tokill",
 					}),
 				},
 				'SignatureActions', {
@@ -595,17 +599,17 @@ return {
 		ExposedProneMinTiles = 12,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
+				'Weight', 80,
 				'RangeMin', 20,
-				'RangeMax', 40,
-				'Falloff', 3,
+				'RangeMax', 30,
+				'Falloff', 4,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'Weight', 150,
-				'FlankMarginTiles', 8,
-				'ForwardLookaheadTiles', 0,
+				'FlankMarginTiles', 6,
 				'WingFraction', 80,
 			}),
 			PlaceObj('AIPolicyTakeCover', {
@@ -723,8 +727,9 @@ return {
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
-						'CoverTrust', 100,
-						'FalloffCurve', 0,
+						'CoverTrust', 90,
+						'CoverTrustNear', 40,
+						'StanceTrust', 80,
 					}),
 					PlaceObj('AIPolicyEvadeEnemies', {
 						'Weight', 1,
@@ -740,7 +745,6 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 125,
 				'RangeMin', 20,
 				'RangeMax', 35,
 				'Falloff', 6,
@@ -753,7 +757,6 @@ return {
 				'Reference', "enemies",
 			}),
 			PlaceObj('AIPolicyTakeCover', {
-				'Weight', 50,
 				'visibility_mode', "team",
 			}),
 		},
@@ -1015,7 +1018,6 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 175,
 						'CoverNearTiles', 3,
-						'CoverTrustNear', 0,
 						'PlateauTiles', 0,
 					}),
 					PlaceObj('AIPolicyCustomGrenadeRange', {
@@ -1166,7 +1168,8 @@ return {
 				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyThreatExposure', {
-						'CoverTrust', 0,
+						'CoverTrust', 20,
+						'StanceTrust', 100,
 						'PlateauTiles', 0,
 						'FalloffCurve', 100,
 						'MeleeRange', 10,
@@ -1181,10 +1184,11 @@ return {
 						'SoftK', 150,
 					}),
 					PlaceObj('AIPolicyMGSetupPosScore', {
-						'Weight', 150,
+						'Weight', 200,
 						'FirstEnemyScore', 60,
-						'ClusterBonus', 20,
-						'AllyPenalty', 10,
+						'ClusterBonus', 40,
+						'visibility_mode', "self",
+						'AllyPenalty', 0,
 						'ReserveAPforSetup', true,
 					}),
 				},
@@ -1242,16 +1246,16 @@ return {
 		ExposedProne = true,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 150,
 				'RangeMin', 20,
 				'RangeMax', 30,
 				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
-				'Weight', 25,
+				'Weight', 50,
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyMGSetupPosScore', {
+				'Weight', 150,
 				'FirstEnemyScore', 60,
 				'ClusterBonus', 40,
 				'RequireLOS', false,
@@ -1274,8 +1278,8 @@ return {
 					return MGSetup_CustomScoring(self, context)
 				end,
 				'enemy_score', 110,
-				'team_score', -10,
-				'min_score', 100,
+				'team_score', 0,
+				'min_score', 1,
 				'enemy_cover_mod', 50,
 				'cur_zone_mod', 140,
 			}),
@@ -1414,8 +1418,6 @@ return {
 					}),
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 150,
-						'CoverTrust', 80,
-						'CoverTrustNear', 0,
 						'FalloffCurve', 60,
 					}),
 					PlaceObj('AIPolicyEvadeEnemies', {
@@ -1954,7 +1956,6 @@ return {
 						'Weight', 50,
 						'CoverTrust', 100,
 						'CoverNearTiles', 0,
-						'CoverTrustNear', 0,
 						'PlateauTiles', 0,
 						'FalloffCurve', 50,
 						'MeleeRange', 1,
