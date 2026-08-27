@@ -1,6 +1,6 @@
 # CLAUDE.md — Rato's AI Overhaul
  
-> **Atualizado:** 2026-08-27 · **Mod:** v1.12 · **Verificado contra:** GBO3 3.51, JA3_CommonLib 1.5
+> **Atualizado:** 2026-08-27 · **Mod:** v1.12 · **Verificado contra:** GBO3 3.60, JA3_CommonLib 1.5
  
 ## Estrutura do workspace
  
