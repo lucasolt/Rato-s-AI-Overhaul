@@ -28,7 +28,7 @@ Integração opcional com CUAE (loot/armas dos inimigos).
 |---|---|---|
 | `AI_SYSTEM_GUIDE.md` | explicador | Pipeline completo do turno da IA; os 4 tipos de score; `best_dest` vs `ai_destination`; `OptLocWeight`; `AIDecisionThreshold`. **Ponto de partida.** |
 | `POLICY_BUDGET.md` | explicador | Modelo matemático dos pesos de policy por arquétipo: influência = `Weight × D`, as três âncoras absolutas, `A` (agressividade) e `R_optloc`, e as regras R1–R9 para tunar. Extraído do `items.lua` atual. |
-| `CORRECTIONS.md` | **tracker** | Bugs de lógica/scoring: o que era, onde, e se já foi aplicado (B1–B40). Achado novo entra aqui como número novo — não como arquivo novo. |
+| `CORRECTION_TRACKER.md` | **tracker** | Bugs de lógica/scoring: o que era, onde, e se já foi aplicado (B1–B40). Achado novo entra aqui como número novo — não como arquivo novo. |
 | `PERF.md` | **tracker** | Gargalos de performance e patches C1–C14: o que foi aplicado, o que falta. Mesma regra do acima. |
 | `PERF_PROFILING.md` | metodologia | Como instrumentar e medir por policy/fase. É sobre *medir*, não sobre *otimizar* — por isso separado do `PERF.md`. |
 | `DEBUG SERVER.md` | ferramenta | Console Lua no jogo rodando via DAP (`tools/dap_probe.py`, porta 8165, só `JA3Debug.exe`). |
