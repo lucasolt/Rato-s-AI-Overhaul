@@ -1180,7 +1180,6 @@ return {
 						'CoverTrust', 20,
 						'StanceTrust', 100,
 						'PlateauTiles', 0,
-						'FalloffCurve', 100,
 						'MeleeRange', 10,
 					}),
 					PlaceObj('AIPolicyDealDamage', {
@@ -1275,7 +1274,7 @@ return {
 		SignatureActions = {
 			PlaceObj('AIActionMGBurstFire', {
 				'CustomScoring', function (self, context)
-					                    return self.Weight, false, self.Priority
+					return AutoFire_CustomScoring(self, context)
 				end,
 				'Aiming', "Remaining AP",
 				'AttackTargeting', set( "Torso" ),
