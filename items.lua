@@ -256,6 +256,10 @@ return {
 		'name', "FUNCTION_GunnerBehaviors",
 		'CodeFileName', "Code/FUNCTION_GunnerBehaviors.lua",
 	}),
+	PlaceObj('ModItemCode', {
+		'name', "SOURCE_ReliabilityCheck",
+		'CodeFileName', "Code/SOURCE_ReliabilityCheck.lua",
+	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
@@ -355,6 +359,7 @@ return {
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'Weight', 150,
 				'DepthTiles', 4,
+				'LateralShare', 60,
 				'WingFraction', 60,
 			}),
 		},

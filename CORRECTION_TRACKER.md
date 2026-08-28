@@ -51,6 +51,37 @@ a descrição aqui é só o resumo pra saber se já foi mexido e onde.
 
 | B45 | Os 3 `OnMsg` que ligam `RATOAI_RecomputeDebugFlag` estavam comentados — reabria o B16 inteiro. Painel do `Rato Dev` mostrando tudo sem chance de acerto era isto: `dbg_expected`, `cth_attacks_at` e `aims_at` são todos porteados por `RATOAI_Debug` | `UTIL.lua` | ✅ aplicado — **causa medida no processo vivo** (27/08): flag `false` com `Platform.developer`/`cheats` ambos `true` e `DebugForce` nil; chamar a recomputação à mão virava `true` |
 
+| B46 | IA era blindada contra emperramento **e** contra desgaste de arma — `FirearmBase:ReliabilityCheck` tinha `attacker.team.control ~= "AI"` no gate, exclusão explícita do vanilla. E não havia lógica nenhuma de unjam na IA | **GBO3** `SOURCE_ReliabilityAndJam.lua` + `__JamParams.lua` (dono da fórmula e do portão `const.Weapons.WearAppliesToAI`); **RATOAI** `SOURCE_ReliabilityCheck.lua` (só liga o portão) e `SOURCE_AIReloadWeapons.lua` (`RATOAI_AIUnjamWeapons`, antes da recarga; válvula `const.RATOAI.UnjamCostsAP`) | ✅ caminho de unjam **medido ao vivo** (27/08): destravou, −5000 AP, −16 Condition, `num_safe_attacks`=2. Fórmula nova de jam/desgaste **não testada em jogo** |
+
+### B46 — a fórmula mora no GBO3, não aqui
+
+Jam e desgaste afetam **o jogador**, então a fórmula é escopo do GBO3. Se os dois mods
+sobrescrevessem `ReliabilityCheck`, o RATOAI (que carrega depois, por ser dependente) apagaria a
+fórmula do GBO3 **em silêncio**. Divisão: GBO3 é dono da função e expõe
+`const.Weapons.WearAppliesToAI` (default `false` = vanilla); o RATOAI só liga o portão.
+
+Mudança de significado: `Reliability` deixa de ser velocidade de desgaste e vira **resistência a
+emperrar**. Os valores herdados estavam calibrados como taxa de desgaste (por isso Gewehr98 25 e
+BarretM82 10, invertendo a realidade) — proposta de reescala em `reliability_proposta.lua` no
+scratchpad, valores finais são do autor.
+
+### B46 — o que saber antes de calibrar
+
+- **Um gate, dois efeitos.** No vanilla o mesmo `if` governa o sorteio de jam **e** a perda de
+  `Condition` por disparo. Destravar um destrava o outro. Efeito para o jogador: arma saqueada de
+  inimigo que lutou muito vem em condição pior. É mudança de economia de loot, não só de
+  dificuldade.
+- **Já morde hoje.** Medido em combate: armas de inimigo já chegam com Condition espalhada
+  (57, 74, 76, 77, 82, 100) — vem do `RandomizeCondition` do loadout vanilla (±30). Um AK47 em 57
+  já tem ~10% de chance de emperrar por ataque. Não precisa de peça adicional.
+- **`SkillCheck` é determinístico**, não aleatório (`threshold <= stat`). Inimigo tem
+  `Mechanical = 0` e threshold `(100−Condition)+(100−Reliability)`, então **sempre falha** — mas
+  falhar destrava assim mesmo, perdendo Condition (3 a 16). A arma só trava de vez se chegar a 0.
+  Espiral auto-limitada: `num_safe_attacks`=2 é concedido mesmo na falha. **Dial de balanceamento:
+  subir `Mechanical` do arquétipo pelo editor**, sem código.
+- **Gap de paridade deliberado:** o caminho da IA pula o `ProvokeOpportunityAttacks` que
+  `Unit:UnjamWeapon` faz para o jogador.
+
 ### B43 — por que não cobrava mesmo com a válvula ligada
 
 Medido no processo vivo (27/08): o mod de Workshop **"Revised Mags II"** (`URkxyfE`, só em `.hpk`)

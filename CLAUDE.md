@@ -68,11 +68,23 @@ Vanilla sobrescritos: `Soldier`, `HeavyGunner`, `Skirmisher`, `Brute`, `Medic`, 
 Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_RetreatingMarksman`.
  
 ## Regras de edição
-- `items.lua` — **gerado pelo editor de mods do jogo. NUNCA editar.** Contém os presets
-  (archetypes, policies, behaviors, actions, mod options) e espelha a lista de código.
-  Mudança de peso/preset tem que sair pelo editor in-game.
-- `metadata.lua` — não editar sem instrução explícita; a lista `code` define a **ordem de
-  carregamento** e está espelhada no `items.lua` (editar um dessincroniza o outro).
+- `items.lua` — gerado pelo editor de mods do jogo. Contém os presets (archetypes, policies,
+  behaviors, actions, mod options) e espelha a lista de código.
+  **Presets e números continuam saindo só pelo editor in-game — nunca editar à mão.**
+  **Exceção, autorizada em 2026-08-27: registrar arquivo de código novo.** Ao criar um
+  `Code/*.lua`, adicione o bloco correspondente seguindo o padrão já existente no arquivo:
+  ```lua
+  PlaceObj('ModItemCode', {
+      'name', "NOME_DO_ARQUIVO",          -- sem .lua
+      'CodeFileName', "Code/NOME_DO_ARQUIVO.lua",
+  }),
+  ```
+  (`'comment'` é opcional e alguns blocos usam.) A posição deve espelhar a da lista `code` do
+  `metadata.lua` — os dois são a **mesma ordem de carregamento** e dessincronizar quebra o load.
+  Vale o mesmo para o GBO3 e os outros mods do autor, que têm `items.lua` no mesmo formato.
+- `metadata.lua` — a lista `code` define a **ordem de carregamento** e está espelhada no
+  `items.lua`. Registrar arquivo de código novo aqui é permitido (ver acima); **os dois têm que
+  ser atualizados juntos**, na mesma posição. Qualquer outra alteração pede instrução explícita.
 - Lógica nova vai em `Code/*.lua`; presets e números vão pelo editor.
 - **Aritmética: sempre `MulDivRound`, nunca float.** Esta engine roda Lua 5.3 com o
   operador `/` **substituído por divisão inteira truncada** — medido no processo vivo:
