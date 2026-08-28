@@ -52,9 +52,12 @@ end
 ---- linhas `pred` antes de um `EXEC` sao do destino ESCOLHIDO -- o AIPlayAttacks
 ---- reexecuta o precalc so nele antes de atirar.
 ---------------------------------------------------------------------------------------------------
+---- `max_atks` e o teto EFETIVO (arquetipo x carregador, BUGFIX B43); `context.max_attacks` e so o
+---- do arquetipo. Os dois aparecem lado a lado como `max_atk=efetivo/arquetipo` -- quando divergem,
+---- foi a municao que limitou, e e isso que se quer enxergar ao depurar contagem de disparos.
 local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                                    bolting_cost, min_aim, desired, has_stance, has_stance_ap,
-                                   attacks, aims, surcharge_fn)
+                                   max_atks, attacks, aims, surcharge_fn)
     local filt = const.RATOAI.AimDebugUnit
     if filt and not tostring(unit.session_id):find(tostring(filt), 1, true) then
         return
@@ -71,14 +74,16 @@ local function RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_
     end
     printf("[AIM] %s %s | ap=%s AP=%s free=%s start=%s limpo=%s | dist=%s | cost=%s stance=%s " ..
                "rot=%s bolt=%s | balas=%s recoil_aim=%s | min_aim=%s desired=%s stance?=%s " ..
-               "stance_ap?=%s max_atk=%s || tiros=%s miras=%s", tostring(unit.session_id),
+               "stance_ap?=%s max_atk=%s/%s mag=%s || tiros=%s miras=%s", tostring(unit.session_id),
            context.AIisPlayingAttacks and "EXEC" or "pred", tostring(ap),
            tostring(unit.ActionPoints), tostring(free), tostring(context.start_ap),
            tostring((unit.ActionPoints or 0) - free),
            target_dist and tostring(MulDivRound(target_dist, 1, const.SlabSizeX)) or "nil",
            tostring(cost), tostring(stance_cost), tostring(rotation_cost), tostring(bolting_cost),
            tostring(context.burst_shots), sc, tostring(min_aim), tostring(desired),
-           tostring(has_stance), tostring(has_stance_ap), tostring(context.max_attacks),
+           tostring(has_stance), tostring(has_stance_ap), tostring(max_atks),
+           tostring(context.max_attacks),
+           tostring(context.weapon and context.weapon.ammo and context.weapon.ammo.Amount),
            tostring(attacks), aims and table.concat(aims, ",") or "nil")
 end
 ---------------------------------------------------------------------------------------------------
@@ -286,6 +291,39 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
 
     ----
 
+    -----------------------------------------------------------------------------------------------
+    ---- BUGFIX (B43) -- TENTATIVA REVERTIDA. Aqui houve um teto por CARREGADOR: `max_atks` era
+    ---- limitado por `ammo.Amount / burst_shots`, e o `ReloadAP` saia do `ap` quando a arma estava
+    ---- vazia. A ideia era por a decisao de recarregar no orcamento em vez de numa signature action.
+    ----
+    ---- POR QUE SAIU. Zerava a contagem de ataques em campo -- o painel de debug passou a mostrar
+    ---- todas as acoes sem chance de acerto. Revertido por isso, e nao porque a causa exata esteja
+    ---- estabelecida: NAO esta. Fica registrado o que se sabe e o que nao se sabe, para a proxima
+    ---- tentativa nao repetir o caminho.
+    ----
+    ---- O QUE FOI VERIFICADO. `AIReloadWeapons` tem TRES call sites, nao dois: alem do
+    ---- `AIPlayAttacks` (CombatAI.lua:260/318), ela e a PRIMEIRA linha de `Unit:StartAI`
+    ---- (Unit.lua:8912) -- antes do SelectArchetype, do behavior e do AICreateContext. Ou seja a
+    ---- arma chega ao Think ja recarregada, e o teto por carregador deveria ter sido um no-op para
+    ---- arma normal (`MagazineSize / burst_shots` >= `max_attacks` no caso comum). Que ele NAO tenha
+    ---- sido e exatamente o que ficou sem explicacao.
+    ----
+    ---- SUSPEITOS NAO DESCARTADOS, para quem retomar: `HeavyWeapon` casa em
+    ---- `IsKindOf(w, "Firearm")` mas tem MagazineSize 1 e municao Ordnance; `burst_shots` e
+    ---- resolvido no `AIPrecalcDamageScore` e pode nao estar setado em todo caminho que chega
+    ---- aqui; e o `AICalcAttacksAndAim` tambem e chamado pelo `PositioningAIScore`, fora do laco
+    ---- que preenche o context.
+    ----
+    ---- COMO MEDIR ANTES DE TENTAR DE NOVO: `local debug = true` no topo deste arquivo imprime
+    ---- `max_atk=efetivo/arquetipo mag=N` por chamada. Se `mag` vier 0 ou nil em campo, a premissa
+    ---- de "chega recarregado" esta errada em algum caminho -- e e esse caminho que interessa.
+    ----
+    ---- A parte de EXECUCAO do B43 continua valendo e nao depende disto: a recarga passou a custar
+    ---- AP de verdade (SOURCE_AIReloadWeapons.lua) e acontece antes do laco de ataques
+    ---- (SOURCE_AIPlayAttacks.lua). O que se perdeu foi so o planejamento antecipado do custo.
+    -----------------------------------------------------------------------------------------------
+    local max_atks = context.max_attacks
+
     local total_stance_cost = cost + stance_cost
 
     ---- support for reverting to basic attacks from AIPlayAttacks (always on the same position as the signature)
@@ -320,8 +358,8 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     -----------------------------------------------------------------------------------
     if has_stance_ap and stance_cost > 0 and target_dist and (const.RATOAI.HipfireMaxDist or 0) > 0 and
         target_dist <= const.RATOAI.HipfireMaxDist * const.SlabSizeX then
-        local n_prep = RATOAI_ShotsOf(Min(context.max_attacks, Max(0, ap - stance_cost) / cost))
-        local n_hip = RATOAI_ShotsOf(Min(context.max_attacks, ap / cost))
+        local n_prep = RATOAI_ShotsOf(Min(max_atks, Max(0, ap - stance_cost) / cost))
+        local n_hip = RATOAI_ShotsOf(Min(max_atks, ap / cost))
         if n_hip > n_prep then
             has_stance_ap = false
         end
@@ -386,7 +424,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         ----
         ---- Nota: quando nao ha AP para a stance, `stance_cost` ja e 0 mais acima e esta
         ---- linha nao muda nada -- o caso do hipfire por falta de AP continua correto.
-        local num_atks = Min(context.max_attacks, Max(0, ap - stance_cost) / cost)
+        local num_atks = Min(max_atks, Max(0, ap - stance_cost) / cost)
         local aims = {}
         for i = 1, num_atks do
             aims[i] = min_aim
@@ -394,7 +432,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         if debug then
             RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                                 bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
-                                num_atks, aims)
+                                max_atks, num_atks, aims)
         end
         ---- 3o retorno (const.RATOAI.StanceBias): este plano PAGA a stance, ou seja a unidade
         ---- termina o turno preparada. Vale ate o proximo turno, e nenhum "acertos
@@ -480,7 +518,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         ---- querer dizer "sem mais disparos, despeje o AP que sobrou em mira". Nunca fez
         ---- isso: o nivel ia para uma variavel local que morria no break. Continua NAO
         ---- implementado -- ver 7.0b em AIM_AND_STANCE.md.
-        if index > context.max_attacks then
+        if index > max_atks then
             break
         end
 
@@ -519,7 +557,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     if debug then
         RATOAI_AimDebugLine(context, unit, ap, target_dist, cost, stance_cost, rotation_cost,
                             bolting_cost, min_aim, desired_aim_level, has_stance, has_stance_ap,
-                            num_attacks, aims, function(st, lv)
+                            max_atks, num_attacks, aims, function(st, lv)
             return RATOAI_RecoilAimSurcharge(context, st, lv, action)
         end)
     end

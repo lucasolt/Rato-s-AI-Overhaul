@@ -1,5 +1,20 @@
 local RATOAI_originalAIPlayAttacks = AIPlayAttacks
 
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B43): aqui houve um `AIReloadWeapons(unit)` antes da chamada original, para cobrir
+---- "carregador vazio no inicio do turno" -- o caso em que o laco de ataques do AIPlayAttacks
+---- dispara sem municao, falha, e a unidade perde o turno.
+----
+---- REMOVIDO: era redundante. `AIReloadWeapons` tem TRES call sites, e o que importa aqui nao e
+---- nenhum dos dois do AIPlayAttacks (CombatAI.lua:260/318) e sim a PRIMEIRA LINHA de
+---- `Unit:StartAI` (Unit.lua:8912) -- antes do SelectArchetype, do behavior e do AICreateContext.
+---- A arma ja chega recarregada tanto ao Think quanto a execucao; o caso que se queria cobrir nao
+---- existia.
+----
+---- Fica registrado porque a suposicao errada ("so recarrega depois de atacar") foi o que motivou
+---- tambem a AISignatureAction descartada em AIACTION_Reload.lua. Antes de reintroduzir qualquer
+---- coisa nessa linha: sao tres call sites, confira os tres.
+---------------------------------------------------------------------------------------------------
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
     RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)

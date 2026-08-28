@@ -459,6 +459,42 @@ end
 ---- Global e nao const.RATOAI de proposito: e deposito de DADOS, nao configuracao.
 RATOAI_LastExpected = {}
 
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B44): a chave do memo `__ratoai_expected`, construida em UM lugar so.
+----
+---- O SINTOMA. O painel "Resultado esperado" do mod `Rato Dev` parou de mostrar o detalhe tiro a
+---- tiro (`RATODBG_AIDebugUI.lua:1199`, `local d = e.trace`). Foi atribuido ao rename de `dbg` para
+---- `trace`, porque os dois aconteceram na mesma janela -- mas os dois lados daquele rename estao
+---- corretos e casam: aqui se grava `trace = trace` (memo) e `trace = slot and slot.trace`
+---- (dbg_expected), e la se le `e.trace`.
+----
+---- A CAUSA REAL. Havia DUAS copias escritas a mao da chave composta do memo, e elas divergiram. O
+---- produtor passou a usar cinco componentes -- `action@aim_force@body_part@ap@stance_paid` -- quando
+---- o `ap` entrou na identidade do plano e o `__ratoai_stance_paid` foi acrescentado (D7). O
+---- consumidor no bloco de debug continuou montando so tres: `action@aim_force@body_part`. Chave
+---- que nunca casa => `slot` nil => `trace` e `motivo` nil em todo `dbg_expected`, e o mesmo na
+---- telemetria (`rec.actions[dbg_id].trace`).
+----
+---- Silencioso por construcao: `slot and slot.trace` degrada para nil sem erro nenhum, entao o
+---- painel simplesmente desenhava a linha vazia. Os campos calculados na hora (`hits`, `base`,
+---- `ratio`) continuaram certos, que e por que so o DETALHE sumiu.
+----
+---- Por isso a chave agora nasce aqui e nao em outro lugar: enquanto forem duas concatenacoes
+---- escritas a mao, qualquer componente novo reabre exatamente este bug -- e reabre em silencio.
+---------------------------------------------------------------------------------------------------
+local function RATOAI_ExpectedKey(context, action, body_part, ap)
+    return tostring(action and action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
+               tostring(body_part or "Torso") .. "@" .. tostring(ap) .. "@" ..
+               tostring(context.__ratoai_stance_paid)
+end
+
+---- o AP que o RATOAI_ExpectedFor resolve por dentro quando ninguem passa `ap_override`. Extraido
+---- para que quem precisa REMONTAR a chave depois (o bloco de debug do RATOAI_ExpectedRatio) chegue
+---- ao mesmo numero sem repetir a expressao -- que e a outra metade de como o B44 aconteceu.
+local function RATOAI_ExpectedAP(context, upos)
+    return (context.dest_ap and context.dest_ap[upos]) or context.unit.ActionPoints or 0
+end
+
 ---- `body_part` (default "Torso"): a penalidade de tiro localizado entra pelo
 ---- `target_spot_group` do CalcChanceToHit. Sem este parametro, medir um tiro na cabeca
 ---- devolveria o numero de um tiro no torso -- justamente a penalidade que se quer pesar.
@@ -485,14 +521,13 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- Sem ele na chave, o denominador (ataque padrao com o AP inteiro) e o resto
     ---- (ataque padrao com o AP que sobrou) colidiriam -- MESMA acao, MESMA mira, MESMO
     ---- body_part -- e o segundo receberia o numero do primeiro em silencio.
-    local ap = ap_override or (context.dest_ap and context.dest_ap[upos]) or unit.ActionPoints or 0
+    local ap = ap_override or RATOAI_ExpectedAP(context, upos)
 
     ---- chave inclui o nivel forcado: o RATOAI_EnsureAimPlan avalia o MESMO ataque em
     ---- varios niveis, e sem isso a segunda avaliacao devolveria a primeira.
+    ---- BUGFIX (B44): montada pelo RATOAI_ExpectedKey, nunca a mao -- ver o cabecalho dele.
     body_part = body_part or "Torso"
-    local key = tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
-                    body_part .. "@" .. tostring(ap) .. "@" ..
-                    tostring(context.__ratoai_stance_paid)
+    local key = RATOAI_ExpectedKey(context, action, body_part, ap)
     local cached = memo[key]
     if cached then
         return cached.hits, cached.attacks, cached.aim1, cached.stance, cached.ap_left,
@@ -1022,10 +1057,13 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
     ---- DEBUG (D2): o par (acertos da acao, acertos do ataque padrao) que produziu a
     ---- razao. Sem isto, "por que a IA escolheu auto" nao tem resposta observavel.
     if RATOAI_Debug then
+        ---- BUGFIX (B44): a chave e a MESMA que o RATOAI_ExpectedFor gravou. O `ap` e o do destino
+        ---- (nenhum `ap_override` foi passado na chamada la em cima), e o `__ratoai_stance_paid` ja
+        ---- voltou ao valor de entrada -- o ramo nao-sustentado o restaura logo depois de usar.
         local m = context.__ratoai_expected
         local slot = m and
-                         m[tostring(action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
-                             (body_part or "Torso")]
+                         m[RATOAI_ExpectedKey(context, action, body_part,
+                                              RATOAI_ExpectedAP(context, upos))]
         context.dbg_expected = context.dbg_expected or {}
         local dbg_id = (body_part and body_part ~= "Torso") and
                            (tostring(action.id) .. "/" .. body_part) or tostring(action.id)

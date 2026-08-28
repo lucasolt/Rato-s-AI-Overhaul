@@ -41,9 +41,25 @@ RATOAI_RecomputeDebugFlag()
 ---- proprio ForceDev.lua se apoia nisso). ModsReloaded cobre o reload em runtime, e
 ---- CombatStart e a rede de seguranca barata -- e o unico momento em que a flag
 ---- importa, e nao esta em caminho quente.
---OnMsg.ClassesBuilt = RATOAI_RecomputeDebugFlag
---OnMsg.ModsReloaded = RATOAI_RecomputeDebugFlag
---OnMsg.CombatStart = RATOAI_RecomputeDebugFlag
+----
+---- BUGFIX (B45): estas tres linhas estavam COMENTADAS, o que reabria o B16 por inteiro -- a
+---- chamada solta acima e a unica que rodava, e ela roda no load, quando `Platform.developer`
+---- ainda e nil. A flag congelava em false para sempre e TODO o caminho de debug do mod ficava
+---- morto: `dbg_expected` (painel "Resultado esperado" do Rato Dev), `cth_attacks_at` e `aims_at`
+---- sao todos porteados por `RATOAI_Debug`.
+----
+---- Medido no processo vivo em 2026-08-27, com o painel aberto e os cheats ligados:
+----   RATOAI_Debug                        => false
+----   Platform.developer / Platform.cheats => true / true
+----   const.RATOAI.DebugForce              => nil
+----   RATOAI_RecomputeDebugFlag()          => RATOAI_Debug vira true
+---- Ou seja: as entradas estavam todas certas e faltava so alguem chamar a recomputacao. O B16
+---- foi diagnosticado e escrito, mas o gancho nunca foi ligado -- por isso o sintoma voltou
+---- parecendo outro bug (as linhas de detalhe do painel sumindo, atribuidas ao rename dbg->trace
+---- e depois ao B44).
+OnMsg.ClassesBuilt = RATOAI_RecomputeDebugFlag
+OnMsg.ModsReloaded = RATOAI_RecomputeDebugFlag
+OnMsg.CombatStart = RATOAI_RecomputeDebugFlag
 
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B17): posicao ANCORA de uma unidade peekada.

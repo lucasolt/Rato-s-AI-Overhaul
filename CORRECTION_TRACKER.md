@@ -21,7 +21,7 @@ a descrição aqui é só o resumo pra saber se já foi mexido e onde.
 | B13 | `OptLocWeight` sumia quando a unidade já estava no lugar ótimo | `SOURCE_AIScoreReachableVoxels.lua` | ✅ aplicado |
 | B14 | Ramo antecipado do `AICalcAttacksAndAim` não descontava o custo de stance | `SOURCE_AICalcAttacksandAim.lua` | ✅ aplicado |
 | B15 | `cth_attacks_at` acumulava disparos entre passadas do precalc (só afeta debug) | `FUNCTION_ScoreAttacksDetailed.lua` | ✅ aplicado |
-| B16 | `RATOAI_Debug` congelava em `false` no load — debug do mod inteiro morto | `UTIL.lua` | ✅ aplicado |
+| B16 | `RATOAI_Debug` congelava em `false` no load — debug do mod inteiro morto | `UTIL.lua` | ⚠️ **estava marcado como aplicado e não estava** — os 3 `OnMsg` que são a correção ficaram comentados. Ver B45 |
 | B17 | Shooting stance oscilava entre cobertura e peek | `UTIL.lua`, `SOURCE_AICreateContext.lua`, `SOURCE_AIScoreReachableVoxels.lua` | ✅ aplicado |
 | B18 | Laço de mira comprava nível e só depois perguntava se o disparo cabia — podia devolver zero disparos | `SOURCE_AICalcAttacksandAim.lua` | ✅ aplicado |
 | B19 | Free move contado como AP de ataque | `SOURCE_AICalcAttacksandAim.lua` | ✅ aplicado |
@@ -45,6 +45,45 @@ a descrição aqui é só o resumo pra saber se já foi mexido e onde.
 | B38 | `cost` do `SaveAP` era calculado e descartado — o gate nunca disparava | `AIPOLICYPOS_GrenadeRange.lua` | ✅ aplicado |
 | B39 | Gradiente de cobertura era jogado fora (só virada binária contava) + assimetria `0`/`nil` entre origem e destino | `AIPOLICYPOS_CustomFlanking.lua` | ✅ aplicado |
 | B40 | Inimigo caído deixa de ser referente de posicionamento | `AIPOLICYPOS_CustomWeaponRange.lua`, `AIPOLICYPOS_GrenadeRange.lua` | ⚠️ não testado em jogo (17/08) |
+| B43 | `AIReloadWeapons` recarregava de graça — 0 AP, sem checagem, apesar de o source ter uma `CanReload` (checa AP) que nunca era chamada em lugar nenhum | `SOURCE_AIReloadWeapons.lua` — mantém a fabricação de munição do vanilla (inimigo não carrega munição; a action `"Reload"` do jogador não serve), agora atrás de portão de AP + `ConsumeAP`. Válvula `const.RATOAI.ReloadCostsAP` | ⚠️ não testado em jogo (27/08). **Atenção:** `AIReloadWeapons` é chamada em `Unit:StartAI` (Unit.lua:8912), então a cobrança cai no início do turno e muda o AP de todo o scoring — não só o da execução |
+
+| B44 | Painel "Resultado esperado" do `Rato Dev` parou de mostrar o detalhe tiro a tiro. Não era o rename `dbg`→`trace` (esse está correto dos dois lados): a chave composta do memo `__ratoai_expected` era escrita à mão em **dois** lugares e divergiu — o produtor passou a usar `action@aim@body@ap@stance_paid`, o consumidor do bloco de debug continuou em `action@aim@body`. Chave nunca casava → `slot` nil → `trace`/`motivo` nil, em silêncio | `FUNCTION_ScoreAttacksDetailed.lua` (chave agora nasce só em `RATOAI_ExpectedKey`) | ⚠️ não testado em jogo (27/08) |
+
+| B45 | Os 3 `OnMsg` que ligam `RATOAI_RecomputeDebugFlag` estavam comentados — reabria o B16 inteiro. Painel do `Rato Dev` mostrando tudo sem chance de acerto era isto: `dbg_expected`, `cth_attacks_at` e `aims_at` são todos porteados por `RATOAI_Debug` | `UTIL.lua` | ✅ aplicado — **causa medida no processo vivo** (27/08): flag `false` com `Platform.developer`/`cheats` ambos `true` e `DebugForce` nil; chamar a recomputação à mão virava `true` |
+
+### B43 — por que não cobrava mesmo com a válvula ligada
+
+Medido no processo vivo (27/08): o mod de Workshop **"Revised Mags II"** (`URkxyfE`, só em `.hpk`)
+sobrescreve `CombatActions.Reload.GetAPCost` e devolve **0** para arma de carregador destacável —
+inclusive com a forma de args que a UI do jogador usa. Como o gate era `if cost > 0 then ConsumeAP`,
+nunca cobrava. Não é específico da IA: medido em mercs, `Gewehr98` → 3000, `PapovkaSKS_1` → 0,
+`UZI` → 0. **O jogador também recarrega de graça essas armas nesta modlist.**
+
+Daí o `const.RATOAI.ReloadAPSource`. **Default `weapon`**, decisão do autor: o Revised Mags precifica
+por pente (sem pente caro, com pente barato) e essa economia não se aplica à IA, que não tem pente
+nem inventário — o `0` dele é "não sei", não "de graça". `weapon.ReloadAP` é onde o **GBO3** escreve
+os custos (`PATCH_GBO_weapons.lua`, por arma), e por ser property já vem com os modificadores de
+componente aplicados, incluindo o `ReloadAPIncrease` do próprio GBO3 (`Assign_magsize.lua`) — ou
+seja, rebalancear no GBO3 continua mexendo no que a IA paga.
+
+### B43 — tentativa revertida (teto por carregador)
+
+Houve também um teto por carregador no `AICalcAttacksAndAim` (limitar disparos por `ammo.Amount` e
+tirar o `ReloadAP` do orçamento), para pôr a decisão de recarregar no orçamento em vez de numa ação.
+**Revertido** — zerava a contagem de ataques em campo (painel mostrava tudo sem chance de acerto).
+A causa exata não foi estabelecida; o comentário no arquivo lista os suspeitos não descartados e
+como medir. Não retomar sem medir primeiro.
+
+### B43 — pendência de limpeza
+
+A primeira tentativa foi uma `AISignatureAction` (`AIReloadWeapon`, `Code/AIACTION_Reload.lua`) e
+**não funcionou**: ela roteava pela action `"Reload"` do jogador, que resolve munição por
+`GetAvailableAmmos` — e inimigo não carrega munição, nem no inventário nem em squad bag. A chamada
+virava no-op silencioso e a IA parava de recarregar (pior que o vanilla, que ao menos fabricava).
+
+A classe foi mantida **viva e inerte** porque o `items.lua` tem um `PlaceObj('AIReloadWeapon', nil)`
+nas `SignatureActions` de um arquétipo, posto pelo editor. Para remover de vez: tirar a ação pelo
+editor in-game, salvar, e só então apagar o arquivo.
 
 ## Fora desta lista, de propósito
 

@@ -134,6 +134,11 @@ Novos: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreat
   painel "Resultado esperado". Já atualizado lá para `e.trace`. Renomear só o lado produtor
   não daria erro — a linha de detalhe sumiria em silêncio. Se `dbg_expected` ganhar campo
   novo, lembre que quem consome está noutro repo.
+  *Falso positivo já cobrado deste rename:* o painel "Resultado esperado" parar de mostrar o
+  detalhe tiro a tiro **não** foi culpa do rename — os dois lados dele estavam certos. Era a chave
+  composta do memo `__ratoai_expected`, escrita à mão em dois lugares e divergindo em silêncio.
+  Ver `BUGFIX B44`. Antes de culpar o rename de novo, confira se o consumidor e o produtor montam
+  a mesma chave.
   *Não tocado de propósito:* compostos com prefixo `dbg_` (`dbg_expected`, `dbg_id`,
   `dbg_rows`, `dbg_available_actions`, …). O caso reproduzido em jogo foi só o token isolado.
   **Risco em aberto:** não sabemos se a etapa de build reage ao token isolado ou a qualquer

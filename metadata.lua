@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 4575,
+	'version', 4586,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -68,6 +68,7 @@ return PlaceObj('ModDef', {
 		"Code/FUNCTION_SetArchetypePoliciesWeights.lua",
 		"Code/PROPERTIES_Unit.lua",
 		"Code/SOURCE_AIPrecalcDamageScore.lua",
+		"Code/SOURCE_AIReloadWeapons.lua",
 		"Code/SOURCE_AICalcAOETargetPoints.lua",
 		"Code/SOURCE_AIPrecalcGrenadeZones.lua",
 		"Code/SOURCE_AICalcAttacksandAim.lua",
@@ -105,8 +106,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787804595,
-	'code_hash', -2839408130413132979,
+	'saved', 1787872748,
+	'code_hash', -4772990775834166489,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",

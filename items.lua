@@ -168,6 +168,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIPrecalcDamageScore.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIReloadWeapons",
+		'CodeFileName', "Code/SOURCE_AIReloadWeapons.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AICalcAOETargetPoints",
 		'CodeFileName', "Code/SOURCE_AICalcAOETargetPoints.lua",
 	}),
