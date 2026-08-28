@@ -41,6 +41,39 @@ function AIScoreDest(context, policies, dest, grid_voxel, base_score, visual_vox
 
     score = (base_score or 0) + score
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B47): perigo do CAMINHO e explosivo armado no tile final.
+    ----
+    ---- Os dois entram AQUI, junto do `g_Bombard`, porque sao a mesma categoria de pergunta que o
+    ---- bloco do topo deste arquivo ja fazia -- "quanto este destino me custa em risco?" -- e nao
+    ---- opiniao de arquetipo. Ficam depois do `base_score` de proposito: sao vies sobre o total,
+    ---- nao mais uma policy disputando peso.
+    ----
+    ---- ADITIVO e nao multiplicativo, ao contrario do g_Bombard logo abaixo. Multiplicar castiga
+    ---- proporcionalmente ao que o tile ja vale, entao o tile ruim dentro do cone empata com o
+    ---- tile ruim fora dele -- e some justamente a informacao que se quer. Somar mantem a ordem.
+    ----
+    ---- Ver Code/FUNCTION_DangerScan.lua para o que entra em cada um (e por que pindown e mina de
+    ---- contato NAO entram).
+    ---------------------------------------------------------------------------------------------
+    local path_danger = RATOAI_PathDanger(context, dest, x, y, z)
+    if path_danger ~= 0 then
+        score = score + path_danger
+        if score_details then
+            score_details[#score_details + 1] = "DANGEROUS PATH"
+            score_details[#score_details + 1] = path_danger
+        end
+    end
+
+    local timed_danger = RATOAI_TimedTrapDanger(context, dest, x, y, z)
+    if timed_danger ~= 0 then
+        score = score + timed_danger
+        if score_details then
+            score_details[#score_details + 1] = "TIMED EXPLOSIVE"
+            score_details[#score_details + 1] = timed_danger
+        end
+    end
+
     -- bombard zone modifier
     for _, zone in ipairs(g_Bombard) do
         local dist = zone:GetDist(x, y, z)

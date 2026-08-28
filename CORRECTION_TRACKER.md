@@ -52,6 +52,117 @@ a descrição aqui é só o resumo pra saber se já foi mexido e onde.
 | B45 | Os 3 `OnMsg` que ligam `RATOAI_RecomputeDebugFlag` estavam comentados — reabria o B16 inteiro. Painel do `Rato Dev` mostrando tudo sem chance de acerto era isto: `dbg_expected`, `cth_attacks_at` e `aims_at` são todos porteados por `RATOAI_Debug` | `UTIL.lua` | ✅ aplicado — **causa medida no processo vivo** (27/08): flag `false` com `Platform.developer`/`cheats` ambos `true` e `DebugForce` nil; chamar a recomputação à mão virava `true` |
 
 | B46 | IA era blindada contra emperramento **e** contra desgaste de arma — `FirearmBase:ReliabilityCheck` tinha `attacker.team.control ~= "AI"` no gate, exclusão explícita do vanilla. E não havia lógica nenhuma de unjam na IA | **GBO3** `SOURCE_ReliabilityAndJam.lua` + `__JamParams.lua` (dono da fórmula e do portão `const.Weapons.WearAppliesToAI`); **RATOAI** `SOURCE_ReliabilityCheck.lua` (só liga o portão) e `SOURCE_AIReloadWeapons.lua` (`RATOAI_AIUnjamWeapons`, antes da recarga; válvula `const.RATOAI.UnjamCostsAP`) | ✅ caminho de unjam **medido ao vivo** (27/08): destravou, −5000 AP, −16 Condition, `num_safe_attacks`=2. Fórmula nova de jam/desgaste **não testada em jogo** |
+| B47 | O planejador era cego ao **caminho**: só pontuava o tile final. A IA sabia não *parar* em gás/fogo e atravessava os dois de graça, e entrava em cone de Overwatch sem nenhum custo no plano (na execução ela leva o tiro, replaneja, e repete). O pathfinder também não ajuda — `CombatPath:RebuildPaths` passa um único parâmetro de perigo, `avoid_mines` | `FUNCTION_DangerScan.lua` (novo: `RATOAI_PathDanger`, `RATOAI_TimedTrapDanger`), gancho em `SOURCE_AIScoreDest.lua`, bandeira de passe em `SOURCE_AIScoreReachableVoxels.lua`, overlay em `DEBUG.lua` | ✅ varredura de trajeto **medida ao vivo** (28/08): 26/27 acertos contra verdade independente, 0 falso positivo. O `PathDangerScope` que saiu daí ainda **não foi rodado** |
+
+### B47 — o que entra, o que não entra, e por quê
+
+`gás nocivo` e `fogo` contam **por voxel** atravessado. `overwatch` conta **por cone** e não por
+tile — cruzar dispara a interrupção uma vez, então correr 8 tiles dentro do cone não é 8× pior que
+cruzar 1 — e **com rampa de distância**: cruzar a 3 tiles do atirador não é cruzar na ponta do
+cone. Por cone vale o *pior ponto* do trajeto (acumulação por máximo, não por soma).
+
+A rampa é a `RATOAI_ThreatRamp` — a mesma da Seek Cover e da ThreatExposure, de propósito: as três
+não podem divergir de noção de "quanto perto é perto". O `range` dela é o `overwatch.dist` do
+próprio cone (`UnitOverwatch.lua:202` já o monta com `Clamp` entre min/max range da arma), então
+plateau → penalidade cheia e ponta do cone → só o piso (`PathOverwatchMinPct`, 15%). O piso existe
+porque cruzar na borda não é inofensivo: o inimigo ainda atira, só que com CTH ruim.
+
+**Gás é lista branca** (`const.RATOAI.PathHarmfulGas = {teargas, toxicgas}`), não `~= "smoke"`.
+Fumaça comum não machuca — só bloqueia visão, e atravessar chega a ser bom. Além disso a lista
+negra tinha um bug real: `SmokeObj:GetGasType` (`Grenade.lua:1997`) é
+`self.zones and self.zones[1] and self.zones[1].gas_type` e **pode devolver nil/false** — com
+lista negra, gás de tipo indefinido seria tratado como nocivo. O `AnyInterruptsAlongPath` do
+vanilla (`Utility.lua:1580`) tem exatamente esse buraco.
+
+Ficaram **de fora**, cada um por um motivo diferente:
+
+- **pindown** — no GBO3 o `PinDown` virou *Snipe*: ataque adiado que dispara no início do próximo
+  turno, não interrupção de movimento. E mesmo no vanilla ele nunca esteve no caminho:
+  `CheckProvokeOpportunityAttacks` (`UnitOverwatch.lua:1247-1320`) só tem ramos de trap, melee
+  interrupt e overwatch. O `IsThreatened(nil, "pindown")` testa `g_Pindown[enemy].target == self`,
+  que é "estou marcado" — não há cone a evitar.
+- **explosivo timed** — detona por relógio, não por contato. Atravessar o raio no meio do turno é
+  inofensivo; o que mata é *terminar* o turno dentro dele. Por isso virou pergunta de tile final
+  (`RATOAI_TimedTrapDanger`, gradiente igual ao do `g_Bombard`) e não entrou no scan de caminho.
+- **mina Contact/Proximity** — é o único perigo que o pathfinder já trata sozinho, via
+  `avoid_mines`. Duplicar aqui seria contar duas vezes.
+
+### B47 — o custo é amortizado, não por destino
+
+`cpath.paths_prev_pos` é uma **árvore** enraizada na posição da unidade (a origem aponta para
+`false`), então o caminho de qualquer destino é sufixo do caminho do pai. O perigo acumulado é
+memoizado por voxel: cada destino novo sobe a árvore até bater em algo já calculado. Amortizado, o
+laço de destinos custa O(voxels da árvore), não O(destinos × comprimento).
+
+Com mapa limpo (sem gás, sem fogo, sem cone inimigo visível) o snapshot de perigo resolve `false`
+uma vez por `context` e o mecanismo inteiro custa uma leitura de tabela por destino.
+
+### B47 — medido ao vivo (28/08, LegionRaider:775, turno 3)
+
+Sonda DAP no processo rodando, MD com overwatch ativo (cone de **6 tiles**, 22°, `num_attacks`=3),
+unidade a 4 tiles do MD, 270 destinos. Varri o caminho de cada destino por fora (verdade
+independente) e comparei com o que o mod marcou:
+
+| | |
+|---|---|
+| caminho cruza o cone **e** foi marcado | 26 |
+| cruza mas **não** foi marcado | 1 |
+| marcado **sem** cruzar (falso positivo) | 0 |
+| limpo | 243 |
+
+O único "miss" é o caso excluído de propósito: destino cujo caminho só toca o cone **na origem** —
+a unidade já está lá.
+
+**A varredura de trajeto funciona.** Dos 26 marcados, **23 estão geometricamente fora do cone** —
+distância ao MD de 8 a 21 tiles, num cone de 6. Impossível vir do tile final. A região penalizada é
+a *sombra* do cone vista da unidade (ápice na unidade, não no MD), que no overlay parece uma cunha
+indo até o alcance da arma. Está correto: são os destinos inalcançáveis sem atravessar.
+
+A rampa de distância também apareceu — tiles com `-143` em vez de `-170` (84% da penalidade), de
+trajetos que cruzaram já passando do platô.
+
+### B47 — o achado que gerou o `PathDangerScope`
+
+No mesmo turno: `best_end_score` = **82**, notas de OptLoc entre **92 e 339**. Com penalidade de
+−170:
+
+```
+PENALIZADOS que sobreviveram no dest_scores (OptLoc):  0
+PENALIZADOS descartados (score <= 0):                 26
+```
+
+`AIFindOptimalLocation` tem `if score > 0 then` (`CombatAI.lua:1287`) — nota ≤ 0 é **descartada**,
+não ranqueada. Então no passe de OptLoc a penalidade não rebaixava o candidato: **apagava**. Isso
+contraria o "viés em gradiente" do resto do mod — a IA deixa de *considerar* uma boa posição atrás
+do cone, em vez de considerá-la e achar cara.
+
+Daí `const.RATOAI.PathDangerScope` (`"endturn"` default | `"optloc"` | `"both"`) e
+`TimedDangerScope` (`"both"` default). O discriminador é `context.__ratoai_endturn_pass`, ligado no
+override de `AIScoreReachableVoxels` — funciona porque `AIScoreDest` tem **exatamente dois**
+chamadores no jogo (`AIFindOptimalLocation` e `AIScoreReachableVoxels`), verificado por grep.
+
+`"both"` restaura o comportamento de 28/08. Com o debug ligado, um termo fora de escopo escreve no
+overlay dizendo isso — overlay vazio não pode ser confundido com feature quebrada de novo.
+
+### B47 — o que ainda não foi verificado
+
+- O `PathDangerScope` em si **não foi rodado em jogo** (só o mecanismo de 28/08 foi). Não há Lua no
+  ambiente; a checagem do código novo foi balanceamento de blocos, sync `metadata.lua` ×
+  `items.lua`, saída única em `AIScoreReachableVoxels` (a bandeira não pode ficar presa), e
+  conferência dos símbolos do engine contra o source.
+- As **magnitudes** (`PathGasPenalty` 60, `PathFirePenalty` 60, `PathOverwatchPenalty` 170, teto
+  400, `DestTimedPenalty` 250, `PathOverwatchMinPct` 15) são chute calibrado pela escala do
+  `AIAvoidFireWeigth` (−200), não medição. Todas vivem em `const.RATOAI.*` e são ajustáveis no
+  console sem recarregar mod.
+- O `PathOverwatchPenalty` subiu de 130 para 170 **junto com** a rampa de distância, e não por
+  medição: com valor fixo 130 valia em qualquer ponto do cone; com rampa passaria a valer só
+  colado no atirador, e todo o resto ficaria mais barato que antes — a rampa sozinha só enfraquece
+  o mecanismo. Se em campo a IA passar a dar voltas absurdas para evitar cone, é o primeiro número
+  a baixar.
+- O teste de cone é **geométrico 2D e ignora paredes** — superestima (marca tile que a parede
+  protegeria). Erro deliberado para o lado seguro, mas se em campo a IA evitar cones que uma
+  parede já bloqueia, é aqui que está.
+- `const.RATOAI.PathDangerDebug = true` no console mostra a composição por tile no rollover.
 
 ### B46 — a fórmula mora no GBO3, não aqui
 

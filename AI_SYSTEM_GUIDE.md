@@ -186,6 +186,30 @@ Antes das policies, `AIScoreDest` aplica dois modificadores globais: fogo/gás a
 **Bias Markers** do mapa (multiplicador percentual por região — o level designer usa isso para
 empurrar a IA pra fora ou pra dentro de áreas).
 
+Todos esses modificadores do vanilla perguntam a mesma coisa: **"o tile FINAL é perigoso?"**.
+Nenhum olha os voxels intermediários, e o pathfinder também não — `CombatPath:RebuildPaths`
+(`CombatPath.lua:70-72`) passa um único parâmetro de perigo ao `GetCombatPathPositions`,
+`avoid_mines`. Resultado no vanilla: a IA sabe não *parar* na nuvem de gás e atravessa ela inteira,
+e entra em cone de Overwatch de graça no plano (na execução ela leva o tiro e replaneja, em loop).
+
+O **BUGFIX B47** repõe esse insumo. `Code/FUNCTION_DangerScan.lua` acrescenta dois termos aditivos
+no mesmo ponto do `g_Bombard`:
+
+| Termo | O que mede | Granularidade |
+|---|---|---|
+| `RATOAI_PathDanger` | gás nocivo, fogo e cones de Overwatch **no trajeto** | gás/fogo por voxel; overwatch **por cone** (cruzar dispara a interrupção uma vez) e com **rampa de distância** — vale o pior ponto do trajeto |
+| `RATOAI_TimedTrapDanger` | explosivo *timed* armado, no tile final | gradiente do centro à borda do `AreaOfEffect` |
+
+A rampa do overwatch é a `RATOAI_ThreatRamp` — a mesma da Seek Cover e da ThreatExposure, para as
+três não divergirem de noção de alcance —, com `range` = `overwatch.dist` do próprio cone. Gás usa
+**lista branca** (`teargas`/`toxicgas`): fumaça comum não machuca, e `GetGasType()` pode devolver
+`nil`, o que uma lista negra trataria como nocivo.
+
+Pindown ficou de fora de propósito (no GBO3 virou *Snipe*, ataque adiado; e nem no vanilla ele é
+interrupt de movimento), e mina Contact/Proximity também (já é o que o `avoid_mines` cobre). O
+custo é amortizado pela árvore `paths_prev_pos`. Detalhes e o que falta verificar: `B47` no
+`CORRECTION_TRACKER.md`.
+
 ### 2.4 As flags `optimal_location` e `end_of_turn`
 
 Cada classe de policy declara duas booleanas read-only que dizem **onde ela pode ser usada**:

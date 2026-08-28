@@ -51,6 +51,22 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
     end)
     unit.ai_end_turn_search = {}
 
+    ---------------------------------------------------------------------------------------------
+    ---- BUGFIX (B47): marca que o passe de END-TURN esta rodando.
+    ----
+    ---- Lido por `scope_ok` em FUNCTION_DangerScan.lua, que decide se os termos DANGEROUS PATH e
+    ---- TIMED EXPLOSIVE valem neste passe (const.RATOAI.PathDangerScope / TimedDangerScope).
+    ----
+    ---- Funciona porque `AIScoreDest` tem exatamente DOIS chamadores no jogo -- este e o
+    ---- `AIFindOptimalLocation`. Bandeira ligada = End-Turn; desligada = OptLoc. Marcar aqui evita
+    ---- ter que sobrescrever o AIFindOptimalLocation so para pendurar a bandeira contraria.
+    ----
+    ---- Desligada no fim da funcao (ha um unico `return`, no rodape). Se algum dia aparecer saida
+    ---- antecipada, ela PRECISA limpar tambem -- bandeira presa em `true` faria o OptLoc se passar
+    ---- por End-Turn pelo resto do turno.
+    ---------------------------------------------------------------------------------------------
+    context.__ratoai_endturn_pass = true
+
     local total_dist = context.total_dist
     local dest_dist = context.dest_dist or empty_table
 
@@ -281,5 +297,7 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
     end
 
     context.closest_dest = closest_dest
+    ---- BUGFIX (B47): fim do passe de End-Turn -- ver o cabecalho onde a bandeira e ligada.
+    context.__ratoai_endturn_pass = false
     return context.best_end_dest, context.best_end_score
 end

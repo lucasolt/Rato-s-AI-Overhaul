@@ -104,6 +104,10 @@ return {
 		'CodeFileName', "Code/UTIL.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "FUNCTION_DangerScan",
+		'CodeFileName', "Code/FUNCTION_DangerScan.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "CUAE_options",
 		'CodeFileName', "Code/CUAE_options.lua",
 	}),

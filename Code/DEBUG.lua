@@ -88,6 +88,12 @@ function IModeAIDebug:GetVoxelRolloverText()
         text = text .. "\n\nThreat Exposure Debug:\n" .. threat_dbg[dest] .. "\n"
     end
 
+    ---- so existe com const.RATOAI.PathDangerDebug ligado
+    local path_dbg = self.ai_context.dest_path_danger_debug
+    if dest and path_dbg and path_dbg[dest] then
+        text = text .. "\n\nPath Danger Debug:\n" .. path_dbg[dest] .. "\n"
+    end
+
     ---- so existe com const.RATOAI.EncircleDebug ligado
     local encircle_dbg = self.ai_context.dest_encircle_debug
     if dest and encircle_dbg and encircle_dbg[dest] then

@@ -22,7 +22,7 @@ return PlaceObj('ModDef', {
 	'author', "rato",
 	'version_major', 1,
 	'version_minor', 12,
-	'version', 4594,
+	'version', 4596,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -52,6 +52,7 @@ return PlaceObj('ModDef', {
 		"Code/AIACTION_ThrowFlare.lua",
 		"Code/AIACTION_PrepareWeapon.lua",
 		"Code/UTIL.lua",
+		"Code/FUNCTION_DangerScan.lua",
 		"Code/CUAE_options.lua",
 		"Code/REACTIONS_StopMGPackingUp.lua",
 		"Code/FUNCTION_ChangeEquipment.lua",
@@ -107,8 +108,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1787955313,
-	'code_hash', -846202482390776700,
+	'saved', 1787959526,
+	'code_hash', -7026557358780724437,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",
