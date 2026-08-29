@@ -1231,6 +1231,37 @@ vermelho`, que pintava 1 e 99 da mesma cor e só deixava vermelho o zero exato. 
 saem das rampas já existentes (`NEG_RAMP[5]`, `POS_RAMP[3]`, `POS_RAMP[5]`), então a paleta do
 painel continua sendo uma só.
 
+### 10.6 Isolar quem conta como ameaça
+
+Marcador: `---- DEBUG (D8)`. Estado em `const.RATOAI.ThreatOnly`, predicado
+`RATOAI_ThreatCounts` (`UTIL.lua`), UI na página **Controles** do painel do *Rato Dev*.
+
+**O problema que resolve:** os termos da `AIPolicyThreatExposure` (rampa de distância,
+cancelamento por cobertura, postura, custo de preparo) chegam ao tile **somados** sobre todos os
+inimigos. Um número que é a soma de quatro efeitos sobre quatro unidades não permite verificar
+nenhum deles. Restringindo a ameaça a um inimigo, cada termo fica legível no rollover.
+
+```lua
+const.RATOAI.ThreatOnly = {MD = true}                  -- só o MD ameaça
+const.RATOAI.ThreatOnly = {MD = true, Grizzly = true}  -- os dois
+const.RATOAI.ThreatOnly = false                        -- normal
+```
+
+Pelo painel: `[x] / [ ]` por inimigo, `só` para isolar um em um clique, `todos de volta` para
+limpar. Todo toggle re-roda o `IModeAIDebug:Process` — o filtro muda o **resultado** do scoring,
+não a apresentação, então sem recalcular o painel mostraria os números do think anterior.
+
+**Onde morde:** só nas leituras de ameaça — `AIPolicyThreatExposure` e os cones de overwatch do
+`FUNCTION_DangerScan`. **Não** filtra `context.enemies`, de propósito: isso mudaria em quem a IA
+atira, e o teste deixaria de ser sobre scoring de posição.
+
+> Deixe desligado em partida valendo. Ligado, a IA fica cega para quem está fora da lista e vai
+> parar em lugar idiota.
+
+**Contrato cross-mod.** O formato da tabela (chave = `session_id`) é lido e escrito pelo *Rato
+Dev*, repo separado. Mudar para handle ou índice quebra o painel de lá **em silêncio** — o mesmo
+tipo de acoplamento que já mordeu no `dbg_expected` (ver `CLAUDE.md`).
+
 ---
 
 ## 11. Armadilhas e bugs do source (importantes para modding)

@@ -144,6 +144,28 @@ chamadores no jogo (`AIFindOptimalLocation` e `AIScoreReachableVoxels`), verific
 `"both"` restaura o comportamento de 28/08. Com o debug ligado, um termo fora de escopo escreve no
 overlay dizendo isso — overlay vazio não pode ser confundido com feature quebrada de novo.
 
+### B47 — visibilidade do cone (`PathOverwatchVisibility`)
+
+Nasceu com o modo **cravado** em `enemy_visible_by_team`, e era o único ponto do mod com a
+visibilidade fixa no código — toda policy de posição expõe `visibility_mode` (`ThreatExposure`,
+`CustomSeekCover`, `CustomWeaponRange`, `GrenadeRange`, `MGSetupPosScore`). Virou
+`const.RATOAI.PathOverwatchVisibility` (`"team"` default, `"self"`, `"all"`), sem mudar
+comportamento.
+
+O trio `if "self" … elseif "team" … else true` estava escrito à mão em **cinco** lugares; agora há
+`RATOAI_EnemyVisible(context, enemy, mode)` em `UTIL.lua`. As policies existentes **não** foram
+convertidas — conversão em massa de caminho quente pede medição, e não havia motivo para arriscar
+junto de outra mudança. O helper existe para o código novo não virar o sexto.
+
+Valor desconhecido cai em `"team"`, o oposto do que o `scope_ok` faz (lá cai no permissivo). É
+deliberado: lá o risco de um typo é desligar um mecanismo em silêncio, aqui é a IA enxergar o que
+não devia. Em cada caso o fallback é o lado seguro.
+
+**Vale para os três modos:** `enemy_visible` e `enemy_visible_by_team` são calculadas **uma vez**
+no `AICreateContext`, a partir da posição **atual** da unidade (`SOURCE_AICreateContext.lua:200`).
+O modo é constante do turno — não varia por destino, e nenhum deles responde *"o que eu enxergaria
+de lá"*. Visibilidade liga/desliga o inimigo inteiro da conta, nunca cria gradiente entre tiles.
+
 ### B47 — o que ainda não foi verificado
 
 - O `PathDangerScope` em si **não foi rodado em jogo** (só o mecanismo de 28/08 foi). Não há Lua no
@@ -163,6 +185,154 @@ overlay dizendo isso — overlay vazio não pode ser confundido com feature queb
   protegeria). Erro deliberado para o lado seguro, mas se em campo a IA evitar cones que uma
   parede já bloqueia, é aqui que está.
 - `const.RATOAI.PathDangerDebug = true` no console mostra a composição por tile no rollover.
+
+| B48 | `AIPolicyThreatExposure` só olhava distância e cobertura, então um inimigo **mirando o tile** e um inimigo **de costas e despreparado** contavam a mesma ameaça. O GBO3 cobra AP nos dois casos (`Unit:GetShootingStanceAP`): girar em stance, ou entrar em stance do zero | `AIPOLICYPOS_ThreatExposure.lua` (`RATOAI_SetupParams`, `RATOAI_SetupFactor`, properties `SetupBias`/`SetupReadyPct`/`SetupCostlyPct`) | ⚠️ **experimental, não rodado em jogo** (28/08) — fórmula validada no processo vivo em 4 armas, comportamento não |
+
+### B48 — o modelo: uma moeda só, AP para o tiro de qualidade
+
+```lua
+-- FUNCTIONS_CombatAP.lua:3-58 (GBO3)
+ap_rotate = Clamp(ShootingConeAngle(self, weapon, target) * const.Scale.AP,
+                  0, ap_stance + Get_AimCost(self))
+...
+if stance    then return ap_rotate    -- já preparado: só girar
+elseif aim<1 then return ap_hipfire   -- tiro de quadril
+end          return ap_stance         -- preparar do zero
+```
+
+Três leituras que só apareceram medindo:
+
+1. `ShootingConeAngle` conta em **meios-cones** (`OverwatchAngle / 2`, divisão inteira): dentro do
+   arco custa 0, cada meio-cone a mais custa 1 AP.
+2. `GetHipfire_StanceAP` está marcada `---- not used` e **retorna 0 sempre**
+   (`FUNCTIONS_CombatAP.lua:129-139`). Quem não está em stance não fica impedido de atirar — fica
+   impedido de atirar **bem**. O preço do hipfire é CTH, não AP. Por isso o custo modelado é o do
+   tiro de *qualidade*, e para quem está fora de stance ele é `ap_stance`.
+3. **O teto não é fixo** — é `ap_stance + Get_AimCost`, e varia bastante por arma.
+
+Tudo vira uma moeda só, normalizada pelo mesmo teto do `Clamp` do jogo:
+
+| estado | custo | fator |
+|---|---|---|
+| em stance, dentro do arco | 0 | `SetupReadyPct` (115) |
+| em stance, fora do arco | `ap_rotate` | interpolado |
+| **fora de stance** | `ap_stance` | interpolado |
+| custo no teto | `ap_stance + aim_cost` | `SetupCostlyPct` (75) |
+
+O que torna os dois estados **comparáveis**: como o teto é `ap_stance + aim_cost`, estar fora de
+stance cai naturalmente em `ap_stance / (ap_stance + aim_cost)` do caminho — um pouco *menos* ruim
+que estar em stance apontado para o lado oposto. Isso não foi escolhido, é o que os números do jogo
+dizem, e faz sentido: girar 180° custa mais que preparar do zero já virado para onde se quer.
+
+### B48 — medido ao vivo (28/08, 4 armas em campo)
+
+```
+Gewehr98   arco 5°   ap_stance 5000  teto 6000   0g:115 5g:108 10g:102 16g:95 21g:88 27g:82 32g:75
+DoubleBbl  arco 7°   ap_stance 3000  teto 4000   0g:115 7g:105 15g:95 22g:85 30g:75
+UZI        arco 12°  ap_stance 2000  teto 3000   0g:115 12g:102 25g:88 38g:75
+MP40       arco 11°  ap_stance 2000  teto 3000   (idem UZI)
+
+FORA de stance:  Gewehr98 x82  |  DoubleBbl x85  |  UZI x88
+```
+
+O sniper fora de stance é quase tão inofensivo quanto um sniper apontado para o lado errado —
+porque entrar em stance custa a ele quase o teto inteiro. Emergiu dos números, não foi calibrado.
+
+O gradiente é **escalonado, não suave**, de propósito: o custo em AP é inteiro. Suavizar o lado do
+ângulo deixaria de ser comparável com o lado do `ap_stance`, que é um AP de verdade — e comparar os
+dois é o ponto. A resolução dos degraus vem da arma (3 a 6 passos).
+
+Casos especiais: **overwatch permanente** (emplacamento) gira de graça, então conta sempre como
+pronto (`x115`); sem arma de fogo não se aplica.
+
+Ajuste no console sem recarregar mod: `const.RATOAI.ThreatSetupReady` (115),
+`const.RATOAI.ThreatSetupCostly` (75), e `const.RATOAI.ThreatSetupBias = false` para derrubar tudo.
+Com `ThreatDebug` ligado, a linha do inimigo ganha
+`PREPARO: FORA de stance (entrar custa 5000), teto 6000 -> x82%`.
+
+**Atenção à calibragem:** agora praticamente todo inimigo recebe um fator ≠ 100, então a ameaça
+média da policy **desce**. O ponto neutro deixou de ser "todo mundo 100" e passou a ser "quem está
+pronto e alinhado". Se os pesos de archetype estiverem calibrados na escala antiga, isso desloca a
+policy inteira para baixo — `ThreatSetupBias = false` isola o efeito para comparar.
+
+| B49 | O único teto da `ThreatExposure` era `Min(soma, saturação)` — **na soma**. Um inimigo sozinho podia estourar o que a escala diz que ele vale (`SetupReadyPct` 115 × `ThreatEffectMods` >100), e aí `saturação = 100 × N` deixava de significar "N inimigos". Efeito medido: com N=3, "3 prontos" e "3 neutros" davam **a mesma** penalidade — o bônus de estar pronto era invisível | `AIPOLICYPOS_ThreatExposure.lua` (`GetEnemyCeiling`, clamp por inimigo no `EvalDest`, `GetSaturation`); painel em **Rato Dev** `RATODBG_AIDebugUI.lua` | ⚠️ **não rodado em jogo** (28/08) |
+
+### B49 — o teto acompanha o bônus, em vez de cortá-lo
+
+O conserto não foi limitar cada inimigo a 100 — isso mataria o `SetupReadyPct`. Foi fazer o teto
+**acompanhar**: se um inimigo pode valer 115, "penalidade cheia" passa a ser `N × 115`.
+
+| com N=3, ready=115 | antes | depois |
+|---|---|---|
+| 3 prontos (115) | 345 → clampa 300 → **100%** | 345 / 345 → **100%** |
+| 3 neutros (100) | 300 → **100%** ← idêntico | 300 / 345 → **87%** |
+| 3 despreparados (75) | 225 → 75% | 225 / 345 → **65%** |
+
+O invariante volta a ser exato — *saturação = N inimigos no máximo* — e o bônus continua valendo,
+agora relativo a todo o resto. `GetEnemyCeiling` **deriva** de `SetupReadyPct` em vez de virar knob
+novo: dois números que precisam concordar é um que vai dessincronizar.
+
+O clamp passou a ser **por inimigo**, não só na soma. `ThreatEffectMods` aceita valores acima de
+100 por documentação, e multiplicado pelo `SetupReady` um único inimigo chegava a quase o dobro do
+teto sem nada barrando.
+
+### B49 — o preset `RATOAI_ThreatSaturation` nunca foi lido
+
+Medido no processo vivo (28/08):
+
+```
+const.RATOAI.ThreatSaturation        => nil
+const.RATOAI_ThreatSaturation        => 3
+```
+
+O ConstDef criado no editor (registrado no `metadata.lua` em `affected_resources`) define
+`const.RATOAI_ThreatSaturation` — **flat, com underscore**. O `GetSaturation` lê
+`const.RATOAI.ThreatSaturation` — **pontuado**. Nunca casam: quem manda é sempre o `or 3`
+hardcoded, e mexer naquele preset no editor não tem efeito nenhum.
+
+Os dois valerem 3 hoje é coincidência, e é o que escondeu isso. **Não corrigido de propósito** —
+mudar a fonte de verdade de uma constante de calibragem é decisão do autor, não minha. Para ligar,
+basta `const.RATOAI.ThreatSaturation or const.RATOAI_ThreatSaturation or 3` (conferido ao vivo que
+o acesso direto funciona, apesar de `const` ter metatable).
+
+### B49 — a normalização virou pontos de score no painel
+
+O painel mostrava `saturacao 345 | Penalty -100 | Weight 100` e deixava a divisão por conta do
+leitor. Ninguém faz essa conta de cabeça no meio de um turno — e é isso que fazia a saturação
+parecer arbitrária. O rollover agora abre com:
+
+```
+ESCALA: 1 inimigo no maximo = -33  |  piso da policy = -100  |  satura em 3 inimigos
+  Penalty -100 x Weight 100%, teto por inimigo 115, saturacao 345 (MaxThreat compartilhado)
+```
+
+e fecha em `SOMA 115 de 345 (33% da saturacao) -> EvalDest -33 -> somado no tile: -33`. Os dois
+números do topo já vêm **com o Weight aplicado** — é o valor que de fato chega no `AIScoreDest`;
+o `EvalDest` sozinho não tem Weight e mostrar sem ele seria mostrar um número que não existe em
+lugar nenhum.
+
+No cabeçalho do tile (camada de influência), `[bruta | cancelada | liquido]` era impresso
+**sempre** — e quando a cobertura não cancela nada, que é o caso comum, os três eram idênticos ao
+total logo ao lado. Era o principal ruído visual da camada. Agora só aparece quando há diferença, e
+no lugar entra `(1 inim max -33 | piso -100 | soma 115/345)`.
+
+**Monotonicidade, para registro:** o denominador é `GetEnemyCeiling() × MaxThreat` — duas
+constantes, não depende de quantos inimigos existem. E toda contribuição é ≥ 0 (`ramp ≥ 0`,
+`uncovered ∈ [0,100]`, `fator ≥ 0`, `face ∈ [costly, ready]`). Somar um inimigo só pode piorar o
+tile. O caso perverso do cabeçalho do `CoverCancels` (inimigo a mais *melhorando* a nota em 49
+pontos) era o regime de duas policies com clamps dessincronizados; conferido no `items.lua`: zero
+instâncias com `CoverCancels false`, zero referências a `SeekCover`. Aquele regime está morto.
+
+### B49 — o painel divergia em três termos
+
+`Decompose` (`RATODBG_AIDebugUI.lua`) **reimplementa** a conta por inimigo, e tinha derivado:
+chamava `RATOAI_ThreatRamp` **sem o `curve`** (desde sempre), e nunca aplicou `ThreatEffectMods`,
+`RATOAI_SetupFactor` nem `RATOAI_ThreatCounts`. Convergido.
+
+Os fatores por inimigo entram nos **dois** lados (bruta e líquida) de propósito: aplicar só na
+líquida jogaria o efeito deles dentro de `cancelada`, que quer dizer "o que a **cobertura** tirou"
+e passaria a mentir. Resta uma diferença de arredondamento de ±1 ponto contra o `EvalDest` (o
+painel combina os fatores antes de aplicar; a policy aplica em sequência).
 
 ### B46 — a fórmula mora no GBO3, não aqui
 

@@ -311,6 +311,97 @@ DefineClass.AIPolicyThreatExposure = {
             min = 1,
             max = 30
         }, {
+            ---------------------------------------------------------------------------
+            ---- CUSTO DE PREPARO -- quanto AP falta ao inimigo para me acertar BEM
+            ----
+            ---- NAO e vies inventado: e mecanica do GBO3 que a policy ignorava. Ela so
+            ---- olhava distancia e cobertura, entao um inimigo mirando exatamente para o
+            ---- tile e um inimigo de costas, despreparado, contavam a mesma ameaca.
+            ----
+            ---- A FONTE (Unit:GetShootingStanceAP, FUNCTIONS_CombatAP.lua:3-58):
+            ----
+            ----     ap_rotate = Clamp(ShootingConeAngle(self, weapon, target) * Scale.AP,
+            ----                       0, ap_stance + Get_AimCost(self))
+            ----     ...
+            ----     if stance     then return ap_rotate       ---- ja preparado: so girar
+            ----     elseif aim<1  then return ap_hipfire       ---- tiro de quadril
+            ----     end           return ap_stance             ---- preparar do zero
+            ----
+            ---- Tres leituras que so aparecem medindo, e que definem o modelo:
+            ----
+            ---- 1. `ShootingConeAngle` conta em MEIOS-CONES (`OverwatchAngle / 2`, divisao
+            ----    INTEIRA). Dentro do meio-cone, girar custa 0. Cada meio-cone a mais
+            ----    custa 1 AP.
+            ----
+            ---- 2. `GetHipfire_StanceAP` esta marcada `---- not used` e retorna 0 SEMPRE
+            ----    (FUNCTIONS_CombatAP.lua:129-139). Ou seja: quem NAO esta em stance nao
+            ----    fica impedido de atirar -- fica impedido de atirar BEM. O preco do
+            ----    hipfire e CTH, nao AP. Por isso o custo modelado aqui e o do tiro de
+            ----    QUALIDADE, e para quem esta fora de stance ele e `ap_stance`.
+            ----
+            ---- 3. O teto NAO e um numero fixo: e `ap_stance + Get_AimCost`, e varia
+            ----    bastante por arma. Medido ao vivo em 28/08:
+            ----
+            ----      Gewehr98  arco 5.4g   ap_stance 5000   teto 6000  (6 meios-cones)
+            ----      DoubleBbl arco 7.5g   ap_stance 3000   teto 4000  (4 meios-cones)
+            ----      MP40      arco 11g    ap_stance 2000   teto 3000  (3 meios-cones)
+            ----      UZI       arco 12.7g  ap_stance 2000   teto 3000  (3 meios-cones)
+            ----
+            ---- O MODELO. Tudo vira UMA moeda -- AP para o tiro de qualidade -- e essa
+            ---- moeda e normalizada pelo mesmo teto que o proprio jogo usa no Clamp:
+            ----
+            ----     em stance      -> ap_rotate (0 .. teto), pelo angulo ate ESTE tile
+            ----     fora de stance -> ap_stance  (preparar do zero)
+            ----     custo 0        -> SetupReadyPct     (pronto, alinhado: pior para mim)
+            ----     custo == teto  -> SetupCostlyPct    (caro para ele: melhor para mim)
+            ----
+            ---- E o que torna os dois estados COMPARAVEIS em vez de mundos separados:
+            ---- como o teto e `ap_stance + aim_cost`, estar fora de stance cai
+            ---- naturalmente em `ap_stance / (ap_stance + aim_cost)` do caminho -- um
+            ---- pouco MENOS ruim que estar em stance apontado para o lado oposto. Isso
+            ---- nao foi escolhido: e o que os numeros do jogo dizem, e faz sentido
+            ---- (girar 180 graus custa mais que preparar do zero virado para onde quiser).
+            ----
+            ---- O gradiente e ESCALONADO, nao suave, e de proposito: o custo em AP e
+            ---- inteiro. Suavizar o lado do angulo deixaria de ser comparavel com o lado
+            ---- do `ap_stance`, que e um AP de verdade -- e comparar os dois e o ponto.
+            ---- A resolucao dos degraus vem da arma (3 a 6 passos, tabela acima).
+            ----
+            ---- Deliberadamente FRACO: o inimigo pode virar, e virar satura. Isto e
+            ---- desempate entre tiles parecidos, nao argumento.
+            ---------------------------------------------------------------------------
+            id = "SetupBias",
+            name = "Custo de preparo do inimigo enviesa a ameaca",
+            help = "Pesa cada inimigo por quanto AP falta a ele para dar um tiro BOM " ..
+                "neste tile: em stance e alinhado = 0 (ameaca cheia); em stance e fora " ..
+                "do arco = custo de girar; fora de stance = custo de entrar em stance.\n" ..
+                "Emplacamento (overwatch permanente) gira de graca, entao conta sempre " ..
+                "como pronto. Sem arma de fogo nao se aplica.",
+            editor = "bool",
+            default = true
+        }, {
+            id = "SetupReadyPct",
+            name = "Ameaca de quem esta PRONTO (%)",
+            help = "Multiplicador quando o inimigo pode atirar bem aqui sem gastar AP " ..
+                "nenhum (em stance, tile dentro do meio-cone). 100 = sem efeito.\n" ..
+                "0 = usar const.RATOAI.ThreatSetupReady (recomendado -- e o valor " ..
+                "ajustavel no console sem recarregar mod).",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 300
+        }, {
+            id = "SetupCostlyPct",
+            name = "Ameaca de quem esta DESPREPARADO (%)",
+            help = "Multiplicador quando o custo de preparo satura no teto do jogo " ..
+                "(ap_stance + aim_cost). 100 = sem efeito.\n" ..
+                "0 = usar const.RATOAI.ThreatSetupCostly. Para zerar de verdade use 1, " ..
+                "nao 0 -- 0 aqui significa 'herdar a constante'.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 300
+        }, {
             id = "RequireLOS",
             name = "Ignorar tiles que ninguem enxerga",
             help = "Zera a ameaca quando o cache de LOS do motor diz que NENHUM inimigo " ..
@@ -347,12 +438,52 @@ end
 ---- que mantem esta policy e a Seek Cover na MESMA normalizacao -- pre-requisito para o
 ---- cancelamento entre cobertura e exposicao. Ver o cabecalho de const.RATOAI.ThreatSaturation
 ---- em AIPOLICYPOS_CustomSeekCover.lua.
+---------------------------------------------------------------------------------------------------
+---- TETO DE UM INIMIGO SO  (BUGFIX B49)
+----
+---- Quanto vale, no maximo, UM inimigo maximamente ameacador. Era 100 implicitamente, e o
+---- `SetupReadyPct = 115` quebrou isso sem ninguem notar: um inimigo passou a poder valer 115 e a
+---- saturacao (100 x N) deixou de significar "N inimigos".
+----
+---- Medido na pratica com N = 3 e ready = 115, ANTES do conserto:
+----     3 prontos       -> 345, clampado em 300 -> 100% da penalidade
+----     3 neutros (100) -> 300                  -> 100% da penalidade   <-- IDENTICO
+----     3 despreparados -> 225                  ->  75%
+---- Ou seja, "pronto" e "neutro" eram indistinguiveis: o bonus so conseguia chegar ao teto mais
+---- cedo, nunca registrar acima dele. `SetupCostly` carregava sinal em toda a faixa e
+---- `SetupReady` virava headroom desperdicado.
+----
+---- O conserto NAO e cortar o bonus -- ele deve mesmo poder aumentar. E fazer o teto acompanhar:
+---- se um inimigo pode valer 115, entao "penalidade cheia" passa a ser N x 115. O invariante volta
+---- a ser exato e o bonus continua valendo, agora relativo a todo o resto:
+----     3 prontos       -> 345 / 345 -> 100%
+----     3 neutros       -> 300 / 345 ->  87%
+----     3 despreparados -> 225 / 345 ->  65%
+----
+---- Deriva do `SetupReadyPct` em vez de virar knob novo, de proposito: dois numeros que precisam
+---- concordar e um que vai dessincronizar. Mudar o bonus reescala o teto sozinho.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:GetEnemyCeiling()
+    local ceiling = 100
+    if self.SetupBias and const.RATOAI.ThreatSetupBias ~= false then
+        local ready = (self.SetupReadyPct or 0) > 0 and self.SetupReadyPct or
+                          (const.RATOAI.ThreatSetupReady or 100)
+        ceiling = Max(ceiling, ready)
+    end
+    return ceiling
+end
+
+---- Ameaca que equivale a penalidade cheia: N inimigos no teto de um so.
+---- ATENCAO ao ler `const.RATOAI.ThreatSaturation`: medido no processo vivo (28/08) que ele e
+---- **nil**. O ConstDef criado no editor registra `const.RATOAI_ThreatSaturation` (flat, com
+---- underscore), nao a versao pontuada -- entao quem manda e sempre o `or 3` aqui embaixo, e
+---- mexer naquele preset no editor nao tem efeito nenhum.
 function AIPolicyThreatExposure:GetSaturation()
     local n = self.MaxThreat
     if not n or n <= 0 then
         n = const.RATOAI.ThreatSaturation or 3
     end
-    return 100 * Max(1, n)
+    return self:GetEnemyCeiling() * Max(1, n)
 end
 
 ---- alcance do inimigo, em unidades de mundo
@@ -519,6 +650,119 @@ end
 ---------------------------------------------------------------------------------------------------
 const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
 
+---------------------------------------------------------------------------------------------------
+---- CUSTO DE PREPARO -- magnitudes compartilhadas (ver a property SetupBias)
+----
+---- Moram aqui e nao so no preset porque sao os numeros que se quer A/B no console sem recarregar
+---- mod. As properties `SetupReadyPct` / `SetupCostlyPct` em 0 (default) caem nestes -- mesmo
+---- idioma do `MaxThreat` -> `ThreatSaturation` logo acima.
+----
+---- FRACOS DE PROPOSITO: desempatam tiles parecidos, nao devem inverter uma diferenca real de
+---- cobertura ou distancia.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.ThreatSetupReady = 150 ---- custo 0: em stance e alinhado (ou emplacado)
+const.RATOAI.ThreatSetupCostly = 50 ---- custo no teto do jogo (ap_stance + aim_cost)
+
+---- Valvula MESTRA: derruba o termo em TODAS as instancias sem mexer em preset. Mesmo par
+---- "declarar aqui + ler com `~= false`" do const.RATOAI.ExposedProne -- declarada de proposito
+---- em vez de deixar nil: knob que nao aparece no `const.RATOAI` e knob que ninguem acha, e o
+---- teste `== nil` nao pode ser o que define o default (ver o cabecalho do CONSTANTS_AI_source).
+const.RATOAI.ThreatSetupBias = true
+
+---------------------------------------------------------------------------------------------------
+---- Constantes de preparo POR INIMIGO (nao dependem do destino) -- resolvidas uma vez e guardadas
+---- no context, como o RATOAI_ThreatEnemyFactor faz.
+----
+---- Devolve `false` quando nao ha o que pesar: sem arma de fogo (o GetShootingStanceAP inteiro
+---- retorna 0 para nao-Firearm) ou teto degenerado.
+----
+---- Campos:
+----   stance    -- ja esta em shooting_stance / emplacado
+----   free_rot  -- gira de graca (overwatch PERMANENTE; o GBO3 zera o ap_rotate,
+----                FUNCTIONS_CombatAP.lua:36-40). Conta sempre como pronto.
+----   half      -- meio-cone em minutos (`OverwatchAngle / 2`), o arco onde girar custa 0
+----   ap_stance -- custo de preparar do zero, para quem esta FORA de stance
+----   cap       -- o mesmo teto do Clamp do jogo: ap_stance + Get_AimCost
+----
+---- Divisao inteira em toda parte de proposito: e o que a mecanica original faz
+---- (`angle_dif = target_angle / cone_angle`), e float aqui vazaria para o NetUpdateHash.
+---------------------------------------------------------------------------------------------------
+function RATOAI_SetupParams(enemy, context)
+    local cache = context and context.__ratoai_setup
+    if cache then
+        local hit = cache[enemy]
+        if hit ~= nil then
+            return hit
+        end
+    elseif context then
+        cache = {}
+        context.__ratoai_setup = cache
+    end
+
+    local params = false
+    local weapon = enemy:GetActiveWeapons()
+    if weapon and IsKindOf(weapon, "Firearm") then
+        local ap_stance = GetWeapon_StanceAP(enemy, weapon)
+        local cap = ap_stance + Get_AimCost(enemy)
+        if cap > 0 then
+            local ow = g_Overwatch[enemy]
+            params = {
+                ---- mesmo teste de "ja preparado" do GetShootingStanceAP:13-15
+                stance = enemy:HasStatusEffect("shooting_stance") or
+                    enemy:HasStatusEffect("ManningEmplacement") or
+                    enemy:HasStatusEffect("StationedMachineGun") or false,
+                free_rot = (ow and ow.permanent) or false,
+                half = (weapon.OverwatchAngle or 0) / 2,
+                ap_stance = ap_stance,
+                cap = cap
+            }
+        end
+    end
+
+    if cache then
+        cache[enemy] = params
+    end
+    return params
+end
+
+---------------------------------------------------------------------------------------------------
+---- Multiplicador da ameaca deste inimigo sobre ESTE tile, em %. 100 = sem efeito.
+----
+---- Reproduz o ramo do `GetShootingStanceAP` que se aplica ao inimigo e normaliza pelo teto do
+---- proprio jogo. `AngleToPoint` e a mesma leitura do `GetShootingAngleDiff` do GBO3 -- conferido
+---- ao vivo que bate exatamente com `AngleDiff(CalcOrientation(pos, alvo), GetOrientationAngle())`.
+---------------------------------------------------------------------------------------------------
+function RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
+    local p = RATOAI_SetupParams(enemy, context)
+    if not p then
+        return 100
+    end
+
+    local cost
+    if p.free_rot then
+        cost = 0 ---- emplacamento: gira de graca, esta sempre pronto
+    elseif p.stance then
+        if p.half <= 0 then
+            return 100 ---- arma sem cone declarado: nao da para medir o angulo
+        end
+        ---- MESMA conta do ShootingConeAngle: meios-cones INTEIROS fora do eixo
+        local widths = abs(enemy:AngleToPoint(target_pos)) / p.half
+        cost = Min(widths * const.Scale.AP, p.cap)
+    else
+        ---- fora de stance: o tiro de qualidade custa preparar do zero. O hipfire nao entra
+        ---- porque ele nao custa AP nenhum -- o preco dele e CTH, e isso ja aparece noutro lugar.
+        cost = Min(p.ap_stance, p.cap)
+    end
+
+    if cost <= 0 then
+        return ready_pct
+    end
+    if cost >= p.cap then
+        return costly_pct
+    end
+    return ready_pct - MulDivRound(ready_pct - costly_pct, cost, p.cap)
+end
+
 function RATOAI_ThreatEnemyFactor(enemy, context)
     local mods = const.RATOAI.ThreatEffectMods
     if not mods or next(mods) == nil then
@@ -612,6 +856,24 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     local near = (self.CoverNearTiles or 0) * const.SlabSizeX
     local curve = Clamp(self.FalloffCurve or 0, 0, 100)
 
+    ---- custo de preparo: resolvido UMA vez, fora do laco por inimigo (ver property SetupBias).
+    ---- `const.RATOAI.ThreatSetupBias = false` derruba para todas as instancias sem tocar preset.
+    local setup = self.SetupBias and (const.RATOAI.ThreatSetupBias ~= false)
+    local ready_pct, costly_pct
+    if setup then
+        ready_pct = (self.SetupReadyPct or 0) > 0 and self.SetupReadyPct or
+                        (const.RATOAI.ThreatSetupReady or 100)
+        costly_pct = (self.SetupCostlyPct or 0) > 0 and self.SetupCostlyPct or
+                         (const.RATOAI.ThreatSetupCostly or 100)
+        ---- os dois em 100 nao mudam nada: pula o trabalho por inimigo
+        if ready_pct == 100 and costly_pct == 100 then
+            setup = false
+        end
+    end
+
+    ---- BUGFIX (B49): teto de UM inimigo. Ver o cabecalho de GetEnemyCeiling.
+    local ceiling = self:GetEnemyCeiling()
+
     local threat = 0
 
     for _, enemy in ipairs(context.enemies or empty_table) do
@@ -624,7 +886,9 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
 
         ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora
         local alive = enemy and not (enemy:IsDead() or enemy:IsDowned())
-        if visible and alive then
+        ---- DEBUG (D8): filtro de isolamento do painel. Sempre true em partida normal.
+        local conta = RATOAI_ThreatCounts(enemy)
+        if visible and alive and conta then
             local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(att_pos) then
                 local d = att_pos:Dist(target_pos)
@@ -649,6 +913,39 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                     contrib = MulDivRound(contrib, fator, 100)
                 end
 
+                ---- custo de preparo. Multiplicativo e no fim, como o hook de status effect logo
+                ---- acima -- as duas perguntas sao independentes: uma e "quao capaz este inimigo
+                ---- esta", a outra "quao barato e para ele me dar um tiro BOM aqui".
+                local face = 100
+                if setup then
+                    face = RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
+                    if face ~= 100 then
+                        contrib = MulDivRound(contrib, face, 100)
+                    end
+                end
+
+                ---------------------------------------------------------------------------
+                ---- BUGFIX (B49): CLAMP POR INIMIGO, e nao so na soma.
+                ----
+                ---- Antes o unico teto era `Min(threat, saturation)` la embaixo -- na SOMA.
+                ---- Isso deixava um inimigo so estourar o que a escala diz que ele pode
+                ---- valer, e ai a saturacao parava de significar "N inimigos": bastava um
+                ---- com fatores multiplicativos favoraveis para pesar como dois.
+                ----
+                ---- `ThreatEffectMods` aceita valores acima de 100 por documentacao (">100
+                ---- tambem vale se algum efeito deve AGRAVAR a ameaca"), e o
+                ---- `SetupReadyPct` ja passa de 100 no default. Multiplicados, um unico
+                ---- inimigo chegava a quase o dobro do teto -- sem nada barrando.
+                ----
+                ---- Com o clamp aqui, `ceiling` e por construcao "o maximo que UM inimigo
+                ---- vale", e `saturation = N x ceiling` volta a ser literalmente "N
+                ---- inimigos no maximo". O bonus de estar pronto continua valendo: ele
+                ---- entra no proprio `ceiling`.
+                ---------------------------------------------------------------------------
+                if contrib > ceiling then
+                    contrib = ceiling
+                end
+
                 threat = threat + contrib
 
                 if trace then
@@ -662,6 +959,25 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                         if fator ~= 100 then
                             near_note = near_note ..
                                             string.format(" | status: ameaca x%d%%", fator)
+                        end
+                        if face ~= 100 then
+                            local sp = RATOAI_SetupParams(enemy, context)
+                            local como
+                            if not sp then
+                                como = "?"
+                            elseif sp.free_rot then
+                                como = "emplacado (gira gratis)"
+                            elseif sp.stance then
+                                como = string.format("stance, %dg fora do arco de %dg",
+                                                     abs(enemy:AngleToPoint(target_pos)) // 60,
+                                                     sp.half // 60)
+                            else
+                                como = string.format("FORA de stance (entrar custa %d)",
+                                                     sp.ap_stance)
+                            end
+                            near_note = near_note ..
+                                            string.format(" | PREPARO: %s, teto %s -> x%d%%", como,
+                                                          sp and tostring(sp.cap) or "?", face)
                         end
                         trace[#trace + 1] = string.format(
                                             "  %s: %st / alcance %st%s -> peso %d" ..
@@ -683,20 +999,46 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             end
         elseif trace then
             trace[#trace + 1] = string.format("  %s: PULADO (%s)", tostring(enemy.session_id),
-                                          not alive and "abatido/morto" or
-                                              ("nao visivel, modo " ..
-                                                  tostring(self.visibility_mode)))
+                                          not conta and "FILTRO ThreatOnly" or
+                                              (not alive and "abatido/morto" or
+                                                  ("nao visivel, modo " ..
+                                                      tostring(self.visibility_mode))))
         end
     end
 
     if trace then
         local saturation = self:GetSaturation()
-        local head = string.format("inimigos em context.enemies: %d | saturacao %d %s " ..
-                                       "| Penalty %d | Weight %d\n" ..
-                                       "modo: %s | plato %s | stance %s",
-                                   #(context.enemies or empty_table), saturation,
-                                   (not self.MaxThreat or self.MaxThreat <= 0) and "(compartilhada)" or
-                                       "(MaxThreat proprio)", self.Penalty, self.Weight or 100,
+
+        -------------------------------------------------------------------------------------
+        ---- LINHA DE ESCALA -- traduz a normalizacao para pontos de score.
+        ----
+        ---- O painel mostrava `saturacao 345 | Penalty -100 | Weight 100` e deixava a divisao
+        ---- por conta do leitor. Ninguem faz essa conta de cabeca no meio de um turno, e o
+        ---- resultado e a saturacao parecer arbitraria. Aqui ela vira o que se quer saber:
+        ---- quanto vale UM inimigo, e onde e o piso.
+        ----
+        ---- `por_inimigo` e o score de um inimigo no teto; `piso` e o score com a soma saturada
+        ---- (o maximo que esta policy consegue tirar do tile). Os dois ja com o Weight aplicado,
+        ---- que e o numero que de fato chega no AIScoreDest -- o EvalDest sozinho ainda nao tem
+        ---- o Weight, e mostrar sem ele seria mostrar um numero que nao existe em lugar nenhum.
+        -------------------------------------------------------------------------------------
+        local w = self.Weight or 100
+        local piso = MulDivRound(self.Penalty, w, 100)
+        local por_inimigo = MulDivRound(MulDivRound(self.Penalty, ceiling, saturation), w, 100)
+        local n_inim = MulDivRound(saturation, 1, Max(1, ceiling))
+
+        local escala = string.format(
+                           "ESCALA: 1 inimigo no maximo = %d  |  piso da policy = %d  |  " ..
+                               "satura em %d inimigos\n" ..
+                               "  Penalty %d x Weight %d%%, teto por inimigo %d, saturacao %d %s",
+                           por_inimigo, piso, n_inim, self.Penalty, w, ceiling, saturation,
+                           (not self.MaxThreat or self.MaxThreat <= 0) and "(MaxThreat compartilhado)" or
+                               "(MaxThreat proprio)")
+
+        local head = escala .. "\n" ..
+                         string.format("inimigos em context.enemies: %d\n" ..
+                                           "modo: %s | plato %s | stance %s",
+                                   #(context.enemies or empty_table),
                                    cancels and
                                        string.format("cobertura CANCELA (confianca %d%%%s)",
                                                      Clamp(self.CoverTrust or 100, 0, 100),
@@ -715,10 +1057,15 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                            string.format(" | teto %dt", self.RangeCapTiles) or "") ..
                                        (curve > 0 and string.format(" | curva %d%%", curve) or ""),
                                    tostring(stance or "-"))
-        local tail = string.format("  SOMA %d / %d -> EvalDest %d", threat, saturation,
-                                   threat > 0 and
-                                       MulDivRound(self.Penalty, Min(threat, saturation), saturation) or
-                                       0)
+        ---- O rodape fecha a conta ate o numero que o AIScoreDest de fato soma no tile. Antes
+        ---- parava no EvalDest, que ainda nao tem o Weight -- e era o ultimo lugar onde faltava
+        ---- uma divisao mental para amarrar o painel ao score.
+        local eval = threat > 0 and
+                         MulDivRound(self.Penalty, Min(threat, saturation), saturation) or 0
+        local tail = string.format("  SOMA %d de %d (%d%% da saturacao)  ->  EvalDest %d" ..
+                                       "  ->  somado no tile: %d", threat, saturation,
+                                   MulDivRound(100, Min(threat, saturation), saturation), eval,
+                                   MulDivRound(eval, w, 100))
         context.dest_threat_exposure_debug = context.dest_threat_exposure_debug or {}
         context.dest_threat_exposure_debug[dest] =
             head .. "\n" .. table.concat(trace, "\n") .. "\n" .. tail

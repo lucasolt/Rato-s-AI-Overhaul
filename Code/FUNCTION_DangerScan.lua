@@ -161,11 +161,33 @@ const.RATOAI.PathHarmfulGas = {teargas = true, toxicgas = true}
 const.RATOAI.PathOverwatchPlateau = 6 ---- tiles de penalidade cheia. 6 = const.Weapons.PointBlankRange
 const.RATOAI.PathOverwatchCurve = 0 ---- 0 = queda linear; 100 = quadratica (afunda a cauda longa)
 
+---------------------------------------------------------------------------------------------------
+---- QUEM A IA ENXERGA PARA EFEITO DE CONE  ("team" | "self" | "all")
+----
+---- Existe por CONSISTENCIA: toda policy de posicao do mod expoe `visibility_mode`
+---- (ThreatExposure, CustomSeekCover, CustomWeaponRange, GrenadeRange, MGSetupPosScore...), e este
+---- arquivo era o unico lugar do mod com o modo CRAVADO no codigo. Isso e ruim nao pelo default --
+---- "team" e o certo -- mas porque impede A/B e esconde a decisao de quem for calibrar depois.
+----
+----   "team" (default) -- `HasVisibilityTo(unit.team, enemy)`. A IA nao evita cone que o time dela
+----            nao avistou. E o fair play do mod: evitar um cone invisivel seria cheat.
+----   "self" -- so o que ESTA unidade enxerga agora. Mais restrito que o jogo: o overwatch dispara
+----            contra ela independente de quem avistou, entao "self" a deixa levar tiro que o time
+----            sabia estar la. Util para isolar, ruim para jogar.
+----   "all"  -- ignora visibilidade. Tira a variavel da equacao ao depurar; e cheat em partida.
+----
+---- ATENCAO, e vale para os tres modos: as duas tabelas sao calculadas UMA vez no AICreateContext,
+---- a partir da posicao ATUAL da unidade (`SOURCE_AICreateContext.lua:200-201`). Ou seja, o modo e
+---- constante do TURNO e nao varia por destino -- nenhum deles responde "o que eu enxergaria de
+---- la". Visibilidade liga/desliga o inimigo inteiro da conta, nunca cria gradiente entre tiles.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.PathOverwatchVisibility = "team"
+
 ---- PISO: cruzar nunca e de graca. Sem ele, um cone cruzado exatamente na borda contribui ZERO --
 ---- e o inimigo ainda leva o tiro, so que com CTH ruim. E a diferenca entre "pouco perigoso" e
 ---- "inofensivo", e a rampa sozinha nao sabe expressar a primeira.
 ---- Em % da PathOverwatchPenalty. 0 desliga o piso e devolve a rampa crua.
-const.RATOAI.PathOverwatchMinPct = 15
+const.RATOAI.PathOverwatchMinPct = 15 --15
 
 ---------------------------------------------------------------------------------------------------
 ---- EXPLOSIVO TIMED NO TILE FINAL
@@ -269,8 +291,7 @@ local function build_hazards(context)
     ---- Cones de overwatch inimigos.
     ----
     ---- Iterar `context.enemies` e nao `g_Overwatch` de proposito: assim a visibilidade sai de
-    ---- graca da tabela que o context ja montou. A IA nao pode evitar um cone que o time dela nao
-    ---- enxerga -- isso seria cheat, e este mod nao cheata.
+    ---- graca das tabelas que o context ja montou.
     ----
     ---- `LightStep` desliga o gatilho de overwatch no movimento
     ---- (UnitOverwatch.lua:1313: `trigger_type == "move" and not HasPerk(self, "LightStep")`).
@@ -278,10 +299,13 @@ local function build_hazards(context)
     ---------------------------------------------------------------------------------------------
     local ow = {}
     if not HasPerk(unit, "LightStep") then
+        local vis_mode = const.RATOAI.PathOverwatchVisibility
         for _, enemy in ipairs(context.enemies or empty_table) do
             local data = g_Overwatch[enemy]
-            if data and (data.num_attacks or 0) > 0 and
-                (context.enemy_visible_by_team and context.enemy_visible_by_team[enemy]) and
+            ---- DEBUG (D8): `RATOAI_ThreatCounts` e o filtro de isolamento do painel do Rato Dev.
+            ---- Sempre true em partida normal -- ver o cabecalho dele em UTIL.lua.
+            if data and (data.num_attacks or 0) > 0 and RATOAI_ThreatCounts(enemy) and
+                RATOAI_EnemyVisible(context, enemy, vis_mode) and
                 not (enemy:IsDead() or enemy:IsDowned()) and data.pos and (data.dist or 0) > 0 then
                 ow[#ow + 1] = {
                     pos = data.pos,
@@ -312,6 +336,10 @@ local function build_hazards(context)
         ow_plateau = (const.RATOAI.PathOverwatchPlateau or 0) * SLAB,
         ow_curve = const.RATOAI.PathOverwatchCurve or 0,
         ow_floor = Clamp(const.RATOAI.PathOverwatchMinPct or 0, 0, 100),
+        ---- so para o overlay: sem isto nao da para distinguir "nenhum cone visivel" de
+        ---- "o modo de visibilidade filtrou todos", que e o tipo de silencio que ja custou uma
+        ---- investigacao inteira nesta feature.
+        ow_vis = const.RATOAI.PathOverwatchVisibility or "team",
         ---- postura de MOVIMENTO, nao a do destino: os voxels intermediarios sao atravessados
         ---- andando. A postura do destino so e adotada no EndMovement, ja no fim.
         move_stance = context.archetype and context.archetype.MoveStance or unit.stance,
@@ -572,9 +600,10 @@ function RATOAI_PathDanger(context, dest, x, y, z)
         context.dest_path_danger_debug = context.dest_path_danger_debug or {}
         context.dest_path_danger_debug[dest] = string.format(
                                                    "gas/fogo no trajeto: %d\n" ..
-                                                       "cones cruzados: %d%s\n" ..
+                                                       "cones cruzados: %d de %d visiveis (modo %s)%s\n" ..
                                                        "  total %d (teto %d) -> score %d", cost,
-                                                   cones, #partes > 0 and
+                                                   cones, #hz.ow, tostring(hz.ow_vis),
+                                                   #partes > 0 and
                                                        ("\n  " .. table.concat(partes, "\n  ")) or "",
                                                    total, cap, -capped)
     end

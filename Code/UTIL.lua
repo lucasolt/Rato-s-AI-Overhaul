@@ -155,4 +155,74 @@ end
 function RATOAI_GetCloseRange()
     return rat_close_range() or (((const.Weapons.PointBlankRange * 2) + (1)) * const.SlabSizeX)
 end
+
+---------------------------------------------------------------------------------------------------
+---- DEBUG (D8): ISOLAR QUEM CONTA COMO AMEACA
+----
+---- Ferramenta de ANALISE, nao mecanismo de jogo. Com varios inimigos em campo, os efeitos da
+---- AIPolicyThreatExposure (rampa de distancia, cancelamento por cobertura, postura, custo de
+---- preparo) chegam ao tile todos SOMADOS -- e um numero que e a soma de quatro coisas nao deixa
+---- verificar nenhuma delas. Restringindo a ameaca a UM inimigo, cada termo fica legivel.
+----
+---- `const.RATOAI.ThreatOnly` -- conjunto de session_id. Vazio/false = todos contam (o normal).
+----     const.RATOAI.ThreatOnly = {MD = true}                        -- so o MD
+----     const.RATOAI.ThreatOnly = {MD = true, Grizzly = true}        -- os dois
+----     const.RATOAI.ThreatOnly = false                              -- volta ao normal
+----
+---- Mesmo idioma do `const.RATOAI.AimDebugUnit`, que ja filtra o log de mira por session_id.
+---- O painel do mod *Rato Dev* escreve nesta tabela pelos toggles da pagina Controles -- ver o
+---- contrato cross-mod no fim deste bloco.
+----
+---- ONDE MORDE: so nas leituras de AMEACA (AIPolicyThreatExposure e os cones de overwatch do
+---- FUNCTION_DangerScan). NAO filtra `context.enemies`, de proposito -- fazer isso mudaria em quem
+---- a IA atira, e ai o teste deixaria de ser sobre o scoring de posicao e passaria a ser sobre
+---- outra coisa. Alvo continua sendo escolhido entre todos.
+----
+---- DEIXE DESLIGADO EM PARTIDA VALENDO. Ligado, a IA fica cega para a ameaca de quem esta fora da
+---- lista e vai parar em lugar idiota. E para inspecionar um turno, nao para jogar.
+----
+---- CONTRATO CROSS-MOD: o *Rato Dev* (repo separado, `Code/RATODBG_AIDebugUI.lua`) le e escreve
+---- `const.RATOAI.ThreatOnly` por session_id, e chama `IModeAIDebug:Process` para recalcular. Se o
+---- formato desta tabela mudar (por handle, por exemplo), o painel de la para de funcionar em
+---- silencio -- do mesmo jeito que aconteceu com o `dbg_expected` (ver CLAUDE.md).
+---------------------------------------------------------------------------------------------------
+const.RATOAI.ThreatOnly = false
+
+---- `true` = este inimigo conta como ameaca. Uma leitura de tabela quando o filtro esta desligado,
+---- que e o caso normal e o unico que roda em partida.
+function RATOAI_ThreatCounts(enemy)
+    local only = const.RATOAI.ThreatOnly
+    if not only or next(only) == nil then
+        return true
+    end
+    return only[enemy.session_id] and true or false
+end
+
+---------------------------------------------------------------------------------------------------
+---- LEITURA DE VISIBILIDADE -- forma unica dos tres modos
+----
+---- O trio `if "self" -> enemy_visible / elseif "team" -> enemy_visible_by_team / else true` esta
+---- escrito a mao em cinco lugares do mod (ThreatExposure, CustomSeekCover x2, CustomFlanking,
+---- CustomWeaponRange). Esta funcao e a mesma conta num lugar so, para o codigo novo nao virar o
+---- sexto. As policies existentes NAO foram convertidas -- conversao em massa de caminho quente
+---- pede medicao, e nao havia motivo para arriscar junto com outra mudanca.
+----
+---- Valor desconhecido cai em "team", que e o default E o modo seguro. Note que isto e o OPOSTO
+---- do que o `scope_ok` do FUNCTION_DangerScan faz (la, desconhecido cai no permissivo) -- e de
+---- proposito: la o risco de um typo e desligar um mecanismo em silencio; aqui o risco e a IA
+---- passar a enxergar o que nao devia, que e cheat. Em cada caso o fallback e o lado seguro.
+----
+---- LEMBRE (vale para os tres modos): as duas tabelas sao calculadas UMA vez no AICreateContext, a
+---- partir da posicao ATUAL da unidade (SOURCE_AICreateContext.lua:200-201). O modo e constante do
+---- TURNO -- nao varia por destino, e nenhum deles responde "o que eu enxergaria de la".
+---------------------------------------------------------------------------------------------------
+function RATOAI_EnemyVisible(context, enemy, mode)
+    if mode == "all" then
+        return true
+    end
+    if mode == "self" then
+        return (context.enemy_visible and context.enemy_visible[enemy]) and true or false
+    end
+    return (context.enemy_visible_by_team and context.enemy_visible_by_team[enemy]) and true or false
+end
 -- GetPackedPosAndStance(unit, stance)
