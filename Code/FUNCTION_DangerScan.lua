@@ -115,7 +115,7 @@ const.RATOAI.PathFirePenalty = 60 ---- por VOXEL em alcance de fogo atravessado
 ---- so colado no atirador e TODO o resto do cone ficaria mais barato que antes -- a rampa sozinha
 ---- so enfraquece o mecanismo. 170 mantem o cruzamento de perto decisivo e deixa a rampa fazer o
 ---- trabalho dela na cauda. CALIBRAGEM POR RACIOCINIO, nao medida -- ajuste em campo.
-const.RATOAI.PathOverwatchPenalty = 170
+const.RATOAI.PathOverwatchPenalty = 100
 
 ---- Teto do total. Sem ele um caminho longo dentro da fumaca somaria centenas de pontos e
 ---- esmagaria todas as policies -- que e exatamente o erro que o `ScalePerDistance` antigo

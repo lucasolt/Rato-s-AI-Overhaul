@@ -1195,13 +1195,8 @@ return {
 						'MaxHits', 100,
 						'SoftK', 150,
 					}),
-					PlaceObj('AIPolicyMGSetupPosScore', {
-						'Weight', 200,
-						'FirstEnemyScore', 60,
-						'ClusterBonus', 40,
-						'visibility_mode', "self",
-						'AllyPenalty', 0,
-						'ReserveAPforSetup', true,
+					PlaceObj('AIPolicyCustomWeaponRange', {
+						'RangeMax', 40,
 					}),
 				},
 				'TakeCoverChance', 0,
@@ -1259,7 +1254,7 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeMin', 20,
-				'RangeMax', 30,
+				'RangeMax', 40,
 				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
@@ -1267,10 +1262,8 @@ return {
 				'Indoors', false,
 			}),
 			PlaceObj('AIPolicyMGSetupPosScore', {
-				'Weight', 150,
-				'FirstEnemyScore', 60,
+				'FirstEnemyScore', 30,
 				'ClusterBonus', 40,
-				'RequireLOS', false,
 				'AllyPenalty', 0,
 			}),
 		},
@@ -1803,15 +1796,14 @@ return {
 		BaseMovementWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
+				'OptLocWeight', 200,
 				'TakeCoverChance', 0,
 			}),
 		},
 		Comment = "used to advance toward last known enemy location",
 		FallbackAction = "overwatch",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyLastEnemyPos', {
-				'Weight', 500,
-			}),
+			PlaceObj('AIPolicyLastEnemyPos', nil),
 		},
 		OptLocSearchRadius = 80,
 		group = "System",
