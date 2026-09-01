@@ -37,9 +37,38 @@ rules as the player** — with no AP cheats. Depends on **GBO3 ≥ 3.51** and **
 
 Optional integration with CUAE (enemy loot/weapons).
 
+## Commits
+
+When you implement code changes, COMMIT them so they can identified later
+
 ## Debugging the game
 
 See "DEBUG SERVER.md" for instructions on connecting to the debug server and retrieving realtime data from the running game.
+
+Prefer measuring the live process over reasoning from memory or from screenshots. `tools/dap_probe.py`
+evaluates Lua in the running game without a breakpoint, and `loadfile("AppData/Mods/<mod-id>/Code/
+FILE.lua")` through it is a real syntax check — there is no Lua interpreter on this machine.
+
+## Reading files
+
+- Grep to locate before reading. Read a whole file only when it is new to the session and small
+  (under ~200 lines).
+- In a large file, read the slice: `Read` with `offset`/`limit` around the line Grep found.
+- Do not re-read a file to verify an edit that was just applied — `Edit` would have failed loudly.
+- Exception: when changing behavior rather than looking something up, read wide enough to see the
+  whole call chain. A narrow read hides an early return above the match or an override below it.
+  Here that usually means the `SOURCE_*` replacement together with the policy or action that
+  reaches it.
+
+## Delegating searches
+
+Use the `ja3-source` subagent for questions answered outside this mod's `Code/` — engine APIs,
+call sites in `ModTools\Src`, how GBO3 implements a mechanic the AI has to match, whether a
+sibling mod reads a property, and preset or load-order lookups in any `items.lua`/`metadata.lua`.
+It returns `file:line` findings instead of loading large read-only files into the main conversation.
+
+Keep reasoning and editing in the main session. A subagent's summary is lossy, which is fine for
+"where is X" and wrong for "is this logic correct".
 
 ## `Code/` structure — prefix = override type
 
