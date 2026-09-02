@@ -55,8 +55,8 @@ RATOAI_RecomputeDebugFlag()
 ----   RATOAI_RecomputeDebugFlag()          => RATOAI_Debug vira true
 ---- Ou seja: as entradas estavam todas certas e faltava so alguem chamar a recomputacao. O B16
 ---- foi diagnosticado e escrito, mas o gancho nunca foi ligado -- por isso o sintoma voltou
----- parecendo outro bug (as linhas de detalhe do painel sumindo, atribuidas ao rename dbg->trace
----- e depois ao B44).
+---- parecendo outro bug (as linhas de detalhe do painel sumindo, atribuidas ao rename do campo de
+---- debug para `trace` e depois ao B44).
 OnMsg.ClassesBuilt = RATOAI_RecomputeDebugFlag
 OnMsg.ModsReloaded = RATOAI_RecomputeDebugFlag
 OnMsg.CombatStart = RATOAI_RecomputeDebugFlag

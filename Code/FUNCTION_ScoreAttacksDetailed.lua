@@ -463,8 +463,8 @@ RATOAI_LastExpected = {}
 ---- BUGFIX (B44): a chave do memo `__ratoai_expected`, construida em UM lugar so.
 ----
 ---- O SINTOMA. O painel "Resultado esperado" do mod `Rato Dev` parou de mostrar o detalhe tiro a
----- tiro (`RATODBG_AIDebugUI.lua:1199`, `local d = e.trace`). Foi atribuido ao rename de `dbg` para
----- `trace`, porque os dois aconteceram na mesma janela -- mas os dois lados daquele rename estao
+---- tiro (`RATODBG_AIDebugUI.lua:1199`, `local d = e.trace`). Foi atribuido ao rename do campo de
+---- debug para `trace`, porque os dois aconteceram na mesma janela -- mas os dois lados dele estao
 ---- corretos e casam: aqui se grava `trace = trace` (memo) e `trace = slot and slot.trace`
 ---- (dbg_expected), e la se le `e.trace`.
 ----
