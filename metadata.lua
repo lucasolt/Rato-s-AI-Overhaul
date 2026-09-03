@@ -2,7 +2,7 @@ return PlaceObj('ModDef', {
 	'title', "Rato's AI Overhaul",
 	'description', "[h1]Intro[/h1]\n\nThis AI Overhaul is designed to enhance the enemies AI to fully integrate and utilize the custom mechanics introduced in Rato's Gameplay Balance and Overhaul 3. \n\nThe core philosophy behind this mod is [b]fair play[/b]. As much as possible, the AI operates under the same rules and restrictions as the player, promoting a balanced and engaging experience without implementing unfair advantages or cheating. Every new introduced action taken by the AI will respect the constraints of available AP. As much as possible, artificial constraints or \"cheats\" from vanilla were removed.\n\nIt is the main objective here to make the AI not only more competitive but also more immersive.\n\nIt is [b]highly[/b] recommended that you use CUAE for enemy loot distribution, which can be found here: https://steamcommunity.com/sharedfiles/filedetails/?id=3148282483\n\n[h2]Features[/h2]\n\n\n[h3]Shooting Stance AI logic:[/h3]\n[list]\n[*]The AI will now evaluate if it should remain in Shooting Stance instead of moving around, using a robust logic considering AP to enter stance, cover, enemies in range and more.\n[/list]\n[h3]Signature Actions:[/h3]\n[list]\n[*]Special actions used by the AI will now be selected based on the dynamic contextual situation. Instead of a unit having 50% chance of using Autofire, for example, it will have a chance based on distance to enemies, recoil, snapshot or hipfire penalties etc. This will apply to all types of special actions, so the AI will consider its weapon and skills values, as well as its position in the battlefield, when deciding to use limb shots, overwatch etc. The enemies will also be able to use single shot instead of burst fire on some occasions.\n\n[*][b]Prepare Weapon[/b] - The AI will be able to use the Prepare Weapon action when it is positioning itself, entering Shooting Stance.\n\n[*][b]Dynamism[/b] - The AI will also be able to use different types of these special actions in a more dynamic form. For example, if using a weapon capable of Mobile Shots, even Soldiers will use it, not only Skirmishers. \n[/list]\n	\n[h3]Night Combat Enhancement[/h3]\n[list]\n[*]Units now throw flares at enemies during night time engagements for improved visibility and tactical advantage.\n[/list]\n\n[h3]Improved Tactics for Grenadiers and Machine Gunners[/h3]\n[list]\n[*]Increased grenade usage for both offensive and tactical purposes. Grenadiers will use grenades frequently, while infantry may use it from time to time or if a good situation appears. Grenadiers and MG units are more adept at targeting enemies in cover, prioritizing cover destruction. Increased the use of Machine Gun setup action, and created a custom positioning logic for it.\n[/list]\n\n[h3]Positioning:[/h3]\n[list]\n\n[*][b]Experimental Flanking Logic[/b] - Custom experimental logic improves AI flanking behaviors for more effective positioning and tactical maneuvers.\n\n[*][b]Behavioral Adjustments[/b] - Added extra logic, so the AI will try to avoid being flanked or exposed at close range. The AI will use the last enemy position to evaluate where to go to cover if there is no enemy visible. Overall the AI will use more cover.\n\n[*][b]Retreating[/b] - Snipers now swap to handguns and adopt retreat behaviors when enemies close in.\n\n[*][b]Stance[/b] -  At the end of the turn, if the AI has AP, it will try to crouch or go prone.\n\n[/list]\n[h3]Source AI Mechanics Overhaul:[/h3]\n[list]\n\n[*]Revamped source functions governing AI decision-making. Added recoil calculation, point blank, cover, and other mechanics changes from GBO. \nThe AI will take into account Bolt Action costs when making decisions.\n[*]Fixed  some issues and behaviors in the vanilla AI.\n[*]Removed some artificial limitations the vanilla AI had, like a limited number of attacks per turn. They will use their AP.\n[/list]\n\n[h3]Options:[/h3]\n[list]\n\n[*][b]Lore-Friendly Weapon Progression (CUAE)[/b] - Added a (subjective) lore-friendly progression system for weapons added by CUAE. Can be disabled.\n\n[*][b]Improve Explosives Stats[/b] - This option will moderately improve the enemies Explosive stat. Specialists (like Grenadier) will have a bigger boost. Some enemies will also have a small Dexterity boost. Highly recommended if using Rato's Explosive Overhaul 2. Restart after applying.\n\n[*][b]Boost Stats[/b] - This option will apply a moderate stat boost to enemy units, based on their Roles. Can be disabled.\n[/list]\n\n\nIf you want to buy me a coffee you can do so here: https://www.buymeacoffee.com/rato_modder\n\nMany features here are very experimental, so feedback is highly appreciated!\n",
 	'image', "Mod/RATOAI/Images/ai_capa.jpg",
-	'last_changes', "2.0\n\nThe AI will pay reload costs",
+	'last_changes', "[h1]Rato's AI Overhaul 2.0[/h1]\n\n[list]\n[*] A lot of performance gains\n\n[*]The AI now pays AP to reload. Vanilla reloaded enemy weapons for free, at the very start of the turn, so this also changes the AP the whole turn is planned with.\n[*]Enemy weapons can jam, AI will pay AP to unjam it\n\n[*]New [b]Threat Exposure[/b] policy will make the AI not kamikaze\n[*]Someone in shooting stance aiming at the tile generates more threat than someone out of stance or facing the wrong way, priced in the AP it would cost them to turn or set up.\n[*]Cover evaluation is a real distance-weighted average now. \n[*]New [b]Encircle Enemy[/b] policy: the first policy in the mod that reads team vs team instead of unit vs enemy. Squads push around the flanks of the enemy formation instead of all converging into the same frontal bubble.\n[*]New [b]Custom Weapon Range[/b] policy: measures range to the enemy it actually chose to shoot, not \"is there any enemy somewhere in my band\". A sniper standing on top of someone no longer scores full marks because there is another enemy far away.\n[*]A good spot no longer loses its value just because the unit is already standing on it.\n[*]Flanking now scores the [b]gradient[/b] of cover it strips from the target instead of a binary in-cover flip\n\n[*]The AI now will try to not cross tear gas, toxic gas, fire and Overwatch cone.\n[*]The AI avoids finishing its turn inside the blast radius of timed explosivs\n\n[*]Archetypes can be set to go [b]prone when exposed[/b]: on a tile with no cover at all the unit lies down instead of standing, while tiles with cover keep the crouch rule.\n[*]Prone-preferring units now actually arrive prone at their destination.\n\n\n\n[*]Special actions are now weighted by expected hits compared to the standard attack\n[*]New [b]sustained fire[/b] option: when a unit picks a firing mode it keeps it for the rest of the turn, instead of firing once and silently reverting to the weapon's default attack. The scoring already assumed a whole turn of that mode.\n[*]The AI now [b]chooses[/b] to shoot from the hip up close instead of always paying to prepare the weapon. Point blank the hipfire penalty is nearly nothing while preparing costs one to two whole shots.\n[*]Burst fire counts as multiple hits when scoring, not one.\n[*]The recoil aim surcharge will be considered in AI planning\n[*]When a burst does not fit the remaining AP, the AI degrades to single shot instead of doing nothing.\n[*]The aim loop no longer buys an aim level and only then discovers no shot fits, returning zero attacks.\n[*]Deal Damage is normalized instead of returning a raw, unbounded number that grew with proximity - which is what made units throw themselves into exposed positions.\n\n[*]Body part targeting now shoots the body part its weight describes; the two had drifted apart because of unordered iteration.\n[*]Aimed shots logic reworked.\n[*]Signature actions no longer vanish when the chosen destination is the same tile with a different stance - which hit every archetype whose preferred stance differs from its current one.\n[*]Prepare weapon logic for AI changed, it will choose to do so organically now\n\n\n[*][b]Boost Stats now defaults to Disabled[/b] (was Hardest) turn it back on if you want more suffering.\n[/list]",
 	'SpellCheck', true,
 	'dependencies', {
 		PlaceObj('ModDependency', {
@@ -21,7 +21,7 @@ return PlaceObj('ModDef', {
 	'id', "RATOAI",
 	'author', "rato",
 	'version_major', 2,
-	'version', 4634,
+	'version', 4640,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -91,15 +91,10 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIPrecalcConeTargetZones.lua",
 		"Code/FUNCTION_GunnerBehaviors.lua",
 		"Code/SOURCE_ReliabilityCheck.lua",
-		"UnitData/AdonisStormer_Elite_copy.lua",
-		"UnitData/AdonisSquadLeader_copy.lua",
-		"UnitData/AdonisFlanker_copy.lua",
-		"UnitData/AdonisAssault_copy.lua",
-		"UnitData/SuperSoldier_Assault_copy.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
-		BoostStatsDifficulty = "Hard",
+		BoostStatsDifficulty = "Disabled",
 		CUAELoreProgression = true,
 		DontBoostMilitia = false,
 		DontChangeEquip = false,
@@ -107,8 +102,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1788049581,
-	'code_hash', 333990878707678266,
+	'saved', 1788382083,
+	'code_hash', -4423764251654195518,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "ConstDef",
@@ -199,31 +194,6 @@ return PlaceObj('ModDef', {
 			'Class', "AIArchetype",
 			'Id', "TheMajor",
 			'ClassDisplayName', "AI Archetype",
-		}),
-		PlaceObj('ModResourcePreset', {
-			'Class', "UnitDataCompositeDef",
-			'Id', "AdonisStormer_Elite_copy",
-			'ClassDisplayName', "Unit",
-		}),
-		PlaceObj('ModResourcePreset', {
-			'Class', "UnitDataCompositeDef",
-			'Id', "AdonisSquadLeader_copy",
-			'ClassDisplayName', "Unit",
-		}),
-		PlaceObj('ModResourcePreset', {
-			'Class', "UnitDataCompositeDef",
-			'Id', "AdonisFlanker_copy",
-			'ClassDisplayName', "Unit",
-		}),
-		PlaceObj('ModResourcePreset', {
-			'Class', "UnitDataCompositeDef",
-			'Id', "AdonisAssault_copy",
-			'ClassDisplayName', "Unit",
-		}),
-		PlaceObj('ModResourcePreset', {
-			'Class', "UnitDataCompositeDef",
-			'Id', "SuperSoldier_Assault_copy",
-			'ClassDisplayName', "Unit",
 		}),
 	},
 	'steam_id', "3411008594",

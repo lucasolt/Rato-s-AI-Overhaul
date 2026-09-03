@@ -1,0 +1,105 @@
+[h1]Rato's AI Overhaul 2.0[/h1]
+
+Biggest release so far. The whole decision layer of the AI was reworked: how it picks a tile, how it picks an action, and what it is allowed to get for free. Requires GBO3 3.51+ and JA3_CommonLib 1.5+.
+
+[h2]Fair play - the AI stops getting things for free[/h2]
+[list]
+[*]The AI now pays AP to reload. Vanilla reloaded enemy weapons for free, at the very start of the turn, so this also changes the AP the whole turn is planned with.
+[*]Reload cost is read from the weapon (GBO3 values), so rebalancing reload in GBO3 now moves what the AI pays too.
+[*]Enemy weapons can jam and lose Condition. Vanilla explicitly excluded the AI from both - it was the same check, so enemy guns never jammed and never wore out.
+[*]The AI can unjam its weapon, paying AP and Condition for it, like the player.
+[*]Loot economy note: a weapon taken from an enemy that fought a long fight now comes in worse condition.
+[*]Mechanical on the archetype is now a real difficulty dial - it decides how well an enemy clears a jam.
+[/list]
+
+[h2]Positioning[/h2]
+[list]
+[*]New [b]Threat Exposure[/b] policy: how much threat actually reaches this tile, as its own weighted question - separate from cover.
+[*]Threat now knows whether the enemy is [b]ready[/b]: someone in shooting stance aiming at the tile counts far more than someone out of stance or facing the wrong way, priced in the AP it would cost them to turn or set up.
+[*]A sniper caught out of stance is now nearly as harmless as a sniper aiming the other way - entering stance costs him almost a full turn of aim.
+[*]Cover evaluation is a real distance-weighted average now. Enemies far out of range used to dilute the score, so a tile with perfect cover against the only enemy that could reach it scored a quarter of what it deserved.
+[*]New [b]Encircle Enemy[/b] policy: the first policy in the mod that reads team vs team instead of unit vs enemy. Squads push around the flanks of the enemy formation instead of all converging into the same frontal bubble.
+[*]New [b]Stay Near Allies[/b] policy: squad cohesion, so units stop wandering off alone.
+[*]New [b]Custom Weapon Range[/b] policy: measures range to the enemy it actually chose to shoot, not "is there any enemy somewhere in my band". A sniper standing on top of someone no longer scores full marks because there is another enemy far away.
+[*]Flanking now scores the [b]gradient[/b] of cover it strips from the target instead of a binary in-cover flip - small improvements in angle finally count.
+[*]High Ground rebalanced: it was applying its weight squared and had no ceiling, so on a vertical map it alone decided where everyone went. It is now capped and shaped like the real CTH gain - the first floor is worth a lot, each floor after that very little.
+[*]Proximity policy fixed - its default "min" mode returned 0 no matter the weight, so it never did anything. Affects Panicked units and civilians.
+[*]End-of-turn destination choice now actually uses the scores. The vanilla roulette summed packed positions instead of scores, which made "stay where you are" win nearly every time - all your positioning weights only decided who made the shortlist, never who won.
+[*]Take Cover was a complete no-op and now works.
+[*]A good spot no longer loses its value just because the unit is already standing on it.
+[/list]
+
+[h2]Danger on the way, not just at the end[/h2]
+[list]
+[*]The AI now pays for the [b]path[/b], not only the destination tile: crossing tear gas, toxic gas and fire costs it, and so does walking through an Overwatch cone.
+[*]Overwatch is charged per cone crossed, not per tile, and ramps with distance - clipping the far edge of a cone is cheaper than running past the shooter's nose.
+[*]Plain smoke is free to cross, as it should be - it blocks sight and hurts nobody.
+[*]Timed explosives are a question about where the turn [b]ends[/b], not about crossing - the AI avoids finishing its turn inside the blast radius.
+[*]By default path danger only shapes the end-of-turn choice. Applying it to the whole search deleted good positions behind a cone instead of making them expensive, which is not how the rest of the mod biases decisions.
+[/list]
+
+[h2]Stance[/h2]
+[list]
+[*]Archetypes can be set to go [b]prone when exposed[/b]: on a tile with no cover at all the unit lies down instead of standing, while tiles with cover keep the crouch rule.
+[*]That comes with an exclusion radius - nobody goes prone right on top of an enemy, where standing up costs AP and the field of fire is worse.
+[*]Prone-preferring archetypes no longer crawl across the map to reach an empty tile; they only lie down where it pays.
+[*]Prone-preferring units now actually arrive prone at their destination.
+[*]Stance is packed into the destination, so it is adopted during the movement phase - before the first shot - instead of being an end-of-turn afterthought.
+[*]Units crouch on any cover, low or high.
+[/list]
+
+[h2]Shooting and action choice[/h2]
+[list]
+[*]Special actions are now weighted by [b]expected hits compared to the standard attack[/b] - "how much does this earn me" - instead of by how much CTH the penalty eats.
+[*]New [b]sustained fire[/b] option: when a unit picks a firing mode it keeps it for the rest of the turn, instead of firing once and silently reverting to the weapon's default attack. The scoring already assumed a whole turn of that mode.
+[*]The AI now [b]chooses[/b] to shoot from the hip up close instead of always paying to prepare the weapon. Point blank the hipfire penalty is nearly nothing while preparing costs one to two whole shots.
+[*]Burst fire counts as multiple hits when scoring, not one.
+[*]The recoil aim surcharge finally reaches the planner - the AI was budgeting more shots than it could actually pay for, every turn.
+[*]When a burst does not fit the remaining AP, the AI degrades to single shot instead of doing nothing.
+[*]The aim loop no longer buys an aim level and only then discovers no shot fits, returning zero attacks.
+[*]Free move is no longer counted as attack AP, and stance cost is no longer forgotten in the early path.
+[*]Deal Damage is normalized instead of returning a raw, unbounded number that grew with proximity - which is what made units throw themselves into exposed positions.
+[*]It can now be scored [b]relative to the unit's own capability[/b] (a Goon's best shot is worth as much to a Goon as a Squad Leader's is to him) or [b]by what it takes to drop the target[/b], where overkill is worth nothing and finishing a wounded enemy is worth a lot.
+[*]Downed targets are properly discounted in every scoring mode, and a downed enemy no longer anchors positioning decisions.
+[*]Pindown scoring was disabled outright by a stray condition - it now runs.
+[*]Body part targeting now shoots the body part its weight describes; the two had drifted apart because of unordered iteration.
+[*]Aimed shots at a body part get credit for what they buy, not only the CTH they cost.
+[*]Signature actions no longer vanish when the chosen destination is the same tile with a different stance - which hit every archetype whose preferred stance differs from its current one.
+[*]Prepare Weapon now requires line of sight to an enemy - units were preparing into a wall and burning the AP for nothing.
+[/list]
+
+[h2]Machine gunners[/h2]
+[list]
+[*]MG positioning rewritten to answer one question: how many enemies fit in my cone if I set up on this tile.
+[*]Its angle gate never filtered anything, and both the angle and the visibility were measured from where the unit already stood - so every candidate tile scored the same. Both now come from the candidate tile.
+[*]The cone is planted from the [b]destination[/b] when the unit is about to move, not from where it is standing.
+[*]MG cones are now 70% of max range instead of always the maximum. Interrupts are limited, and a 38-tile cone spent its single interrupt on the first enemy to clip the edge, at a range where the shot was worthless.
+[*]Gunners no longer set up and then shoot someone outside their own cone.
+[*]MGSetup no longer disappears from the action list despite a positive position score.
+[*]The MG AP budget no longer subtracts free move the unit will not have when it executes.
+[*]"Attack" and "set up the MG" behaviors are scored on the same 0-100 scale, so the behavior roll actually compares them - previously one side returned a raw weight.
+[/list]
+
+[h2]Grenades and area attacks[/h2]
+[list]
+[*]Zone scoring now weighs enemies in prepared shooting stance and allies under threat.
+[*]The AP gate on grenade range was computed and thrown away, so it never fired - grenadiers now respect it.
+[/list]
+
+[h2]Archetypes and options[/h2]
+[list]
+[*]All archetype policy weights now live in one central table derived from the Soldier, so the whole roster stays consistent instead of drifting policy by policy.
+[*]New unit definitions for the Adonis squad (Assault, Flanker, Squad Leader, Elite Stormer) and the SuperSoldier Assault.
+[*][b]Boost Stats now defaults to Disabled[/b] (was Hardest). The AI changes in this version are a difficulty increase on their own - turn it back on if you want more.
+[/list]
+
+[h2]Under the hood[/h2]
+[list]
+[*]Heavy optimization pass on the hot paths: CTH memoized per aim level, recoil cached per distance bucket, per-destination loops no longer rebuilding tables and closures, and custom scoring only running for actions that are actually available.
+[*]All decision arithmetic is integer now - float in a synchronized path is the classic desync source.
+[*]Path danger is amortized over the movement tree, so scanning every destination's route costs about the same as scanning one, and a clean map costs a single table lookup per tile.
+[*]The debug overlay works again: the master flag was frozen off at load and the expected-result panel was keyed inconsistently, so both were silently dead.
+[/list]
+
+[h2]Note[/h2]
+Several of the new systems - encirclement, the MG cluster, weapon jamming, path danger and the readiness term in Threat Exposure - are new and experimental. Feedback is very welcome.

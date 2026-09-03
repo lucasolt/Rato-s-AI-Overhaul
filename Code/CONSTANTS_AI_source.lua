@@ -40,6 +40,7 @@ const.RATOAI = const.RATOAI or {}
 -- const.AIFriendlyFire_ScoreMod = 50 -- % of damage score evaluation remanining when an ally is in danger
 -- const.AIShootAboveCTH = 0
 
+const.AIShootAboveCTH = 1 -- due to aCTH 
 ---------------------------------------------------------------------------------------------------
 ---- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
 ----
