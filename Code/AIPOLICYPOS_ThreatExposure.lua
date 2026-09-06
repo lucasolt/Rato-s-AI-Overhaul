@@ -402,6 +402,61 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 300
         }, {
+            ---------------------------------------------------------------------------
+            ---- READINESS SHAPES THE FALLOFF, NOT JUST THE AMPLITUDE
+            ----
+            ---- `SetupReadyPct`/`SetupCostlyPct` scale the whole contribution by a
+            ---- constant -- the same multiplier at 2 tiles and at 25. The mechanic they
+            ---- proxy is not constant: being out of stance moves the enemy from the
+            ---- Snapshot CTH curve to the Hipfire one (CTH_hipfire_and_snapshot.lua:85-88
+            ---- forces aim = Max(1, aim) for stance / emplacement / permanent overwatch),
+            ---- and both curves are ramps in DISTANCE:
+            ----
+            ----   hipfire  = dist x MaxPenalty / MaxDistforPenalty   (-123 over 28 tiles)
+            ----   snapshot = idem                                    ( -61 over 40 tiles)
+            ----
+            ---- The gap between them is ~6 CTH at 2 tiles and ~80 at 28. Point blank,
+            ---- being unprepared costs almost nothing -- everything kills there, hipfire
+            ---- included. At range it is the whole shot.
+            ----
+            ---- So readiness is routed into `FalloffCurve` instead of the amplitude: the
+            ---- unprepared enemy gets `curve + spread`, the ready one keeps the policy
+            ---- own curve. RATOAI_ThreatRamp pins both ends of that curve -- 100 at the
+            ---- plateau, 0 at the weapon range -- so only the middle moves:
+            ----
+            ----   range 30, plateau 6, spread 100 (measured in the live process):
+            ----     d =  6   ready 100   unprepared 100   <- identical, point blank
+            ----     d =  7   ready  96   unprepared  92   <- still nearly identical
+            ----     d = 10   ready  83   unprepared  69
+            ----     d = 15   ready  62   unprepared  38
+            ----     d = 22   ready  33   unprepared  11
+            ----     d = 29   ready   4   unprepared   0   <- same cutoff, both ends pinned
+            ----
+            ---- NOT done by shrinking the enemy `range`, which is the tempting version
+            ---- (the two slopes differ by ~2.9x): the ramp returns a hard 0 past `range`,
+            ---- so an unprepared sniper at 20 tiles would weigh literally nothing and the
+            ---- AI would stand in the open in front of him -- he needs 5 AP to fix that
+            ---- and has a whole turn. The curve keeps the cutoff at the real range.
+            ----
+            ---- Driven by the raw cost/cap readiness, not by `face`: retuning
+            ---- SetupReadyPct must not silently move the curve. Turning this up means
+            ---- turning the amplitude spread DOWN (110/90), or the two double-count.
+            ----
+            ---- 0 = off (default -- no calibrated archetype moves).
+            ---------------------------------------------------------------------------
+            id = "SetupCurveSpread",
+            name = "Readiness bends the falloff (%)",
+            help = "Extra falloff curvature applied to an UNPREPARED enemy, on top of " ..
+                "FalloffCurve. 0 = off. 100 = a fully unprepared enemy decays " ..
+                "quadratically while a ready one keeps the policy own curve.\n" ..
+                "Leaves the weight at the plateau (100) and at the weapon range (0) " ..
+                "untouched -- it cannot make a distant enemy vanish, only sink.\n" ..
+                "Needs `SetupBias` on.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 100
+        }, {
             id = "RequireLOS",
             name = "Ignorar tiles que ninguem enxerga",
             help = "Zera a ameaca quando o cache de LOS do motor diz que NENHUM inimigo " ..
@@ -427,6 +482,9 @@ function AIPolicyThreatExposure:GetEditorView()
     end
     if self.StanceCancels then
         partes[#partes + 1] = "postura"
+    end
+    if self.SetupBias and (self.SetupCurveSpread or 0) > 0 then
+        partes[#partes + 1] = string.format("preparo +%d%%", self.SetupCurveSpread)
     end
     if #partes == 0 then
         return "Threat Exposure"
@@ -754,13 +812,18 @@ function RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
         cost = Min(p.ap_stance, p.cap)
     end
 
+    ---- 2o retorno: prontidao normalizada em 0..100 (100 = atira bem aqui de graca).
+    ---- Sai de cost/cap e NAO do fator devolvido, para o `SetupCurveSpread` ficar
+    ---- independente dos knobs de amplitude. nil = nao ha o que pesar (os dois returns
+    ---- antecipados acima), e e por isso que o chamador pula a modulacao da curva.
+    local ready_t = 100 - MulDivRound(100, cost, p.cap)
     if cost <= 0 then
-        return ready_pct
+        return ready_pct, ready_t
     end
     if cost >= p.cap then
-        return costly_pct
+        return costly_pct, ready_t
     end
-    return ready_pct - MulDivRound(ready_pct - costly_pct, cost, p.cap)
+    return ready_pct - MulDivRound(ready_pct - costly_pct, cost, p.cap), ready_t
 end
 
 function RATOAI_ThreatEnemyFactor(enemy, context)
@@ -859,14 +922,17 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- custo de preparo: resolvido UMA vez, fora do laco por inimigo (ver property SetupBias).
     ---- `const.RATOAI.ThreatSetupBias = false` derruba para todas as instancias sem tocar preset.
     local setup = self.SetupBias and (const.RATOAI.ThreatSetupBias ~= false)
+    local spread = setup and Clamp(self.SetupCurveSpread or 0, 0, 100) or 0
     local ready_pct, costly_pct
     if setup then
         ready_pct = (self.SetupReadyPct or 0) > 0 and self.SetupReadyPct or
                         (const.RATOAI.ThreatSetupReady or 100)
         costly_pct = (self.SetupCostlyPct or 0) > 0 and self.SetupCostlyPct or
                          (const.RATOAI.ThreatSetupCostly or 100)
-        ---- os dois em 100 nao mudam nada: pula o trabalho por inimigo
-        if ready_pct == 100 and costly_pct == 100 then
+        ---- os dois em 100 nao mudam nada: pula o trabalho por inimigo. O `spread` entra
+        ---- no teste porque e o mesmo termo, e funciona com a amplitude neutra (100/100)
+        ---- -- que e justamente o pareamento recomendado.
+        if ready_pct == 100 and costly_pct == 100 and spread <= 0 then
             setup = false
         end
     end
@@ -893,7 +959,19 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             if IsValidPos(att_pos) then
                 local d = att_pos:Dist(target_pos)
                 local range, is_firearm, capped = self:GetEnemyRange(enemy)
-                local ramp = RATOAI_ThreatRamp(d, range, plateau, curve)
+
+                ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e
+                ---- nao so multiplicador da saida dela. Ver a property SetupCurveSpread.
+                local face, ready_t, curve_e = 100, nil, curve
+                if setup then
+                    face, ready_t = RATOAI_SetupFactor(enemy, context, target_pos, ready_pct,
+                                                       costly_pct)
+                    if spread > 0 and ready_t then
+                        curve_e = Min(100, curve + MulDivRound(spread, 100 - ready_t, 100))
+                    end
+                end
+
+                local ramp = RATOAI_ThreatRamp(d, range, plateau, curve_e)
 
                 ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
                 ---- contribuicao e a rampa crua, exatamente como antes.
@@ -913,15 +991,12 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                     contrib = MulDivRound(contrib, fator, 100)
                 end
 
-                ---- custo de preparo. Multiplicativo e no fim, como o hook de status effect logo
-                ---- acima -- as duas perguntas sao independentes: uma e "quao capaz este inimigo
-                ---- esta", a outra "quao barato e para ele me dar um tiro BOM aqui".
-                local face = 100
-                if setup then
-                    face = RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
-                    if face ~= 100 then
-                        contrib = MulDivRound(contrib, face, 100)
-                    end
+                ---- custo de preparo, lado da AMPLITUDE. Multiplicativo e no fim, como o hook
+                ---- de status effect logo acima -- as duas perguntas sao independentes: uma e
+                ---- "quao capaz este inimigo esta", a outra "quao barato e para ele me dar um
+                ---- tiro BOM aqui". O lado da FORMA ja entrou la em cima, na curva da rampa.
+                if face ~= 100 then
+                    contrib = MulDivRound(contrib, face, 100)
                 end
 
                 ---------------------------------------------------------------------------
@@ -960,7 +1035,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                             near_note = near_note ..
                                             string.format(" | status: ameaca x%d%%", fator)
                         end
-                        if face ~= 100 then
+                        if face ~= 100 or curve_e ~= curve then
                             local sp = RATOAI_SetupParams(enemy, context)
                             local como
                             if not sp then
@@ -978,6 +1053,11 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                             near_note = near_note ..
                                             string.format(" | PREPARO: %s, teto %s -> x%d%%", como,
                                                           sp and tostring(sp.cap) or "?", face)
+                            if curve_e ~= curve then
+                                near_note = near_note ..
+                                                string.format(" (pronto %d%% -> curva %d%%)",
+                                                              ready_t or 0, curve_e)
+                            end
                         end
                         trace[#trace + 1] = string.format(
                                             "  %s: %st / alcance %st%s -> peso %d" ..
@@ -1055,7 +1135,9 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                                tostring(tiles(stance_max_d))) or "") ..
                                        ((self.RangeCapTiles or 0) > 0 and
                                            string.format(" | teto %dt", self.RangeCapTiles) or "") ..
-                                       (curve > 0 and string.format(" | curva %d%%", curve) or ""),
+                                       (curve > 0 and string.format(" | curva %d%%", curve) or "") ..
+                                       (spread > 0 and
+                                           string.format(" | preparo curva +%d%%", spread) or ""),
                                    tostring(stance or "-"))
         ---- O rodape fecha a conta ate o numero que o AIScoreDest de fato soma no tile. Antes
         ---- parava no EvalDest, que ainda nao tem o Weight -- e era o ultimo lugar onde faltava
