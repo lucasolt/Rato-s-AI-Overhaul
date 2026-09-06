@@ -647,7 +647,7 @@ end
 ---- 2o retorno: a confianca efetiva usada (so overlay). 3o: qual fonte abateu --
 ---- "cobertura", "postura" ou nil.
 function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_firearm, dist,
-                                             stance_mitig, stance_max_d, stance_min_d)
+                                             stance_mitig, stance_max_d, stance_min_d, full)
     ---- nem cobertura nem postura param corpo a corpo: o RangeAttackTargetStanceCover
     ---- inteiro exige `IsKindOf(weapon1, "Firearm")`. Ameaca cheia, sem desconto.
     if not is_firearm then
@@ -656,8 +656,10 @@ function AIPolicyThreatExposure:GetUncovered(att_pos, target_pos, stance, is_fir
 
     dist = dist or att_pos:Dist(target_pos)
 
-    local full = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue(
-                     "Cover")
+    ---- `full` chega pronto do DestParams: e constante, e resolve-lo aqui custava um
+    ---- ResolveValue por inimigo POR destino. O fallback so serve a quem chamar de fora.
+    full = full or
+               Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue("Cover")
     local use, value = RATOAI_CoverCTH(att_pos, target_pos, stance)
     if use and full and full ~= 0 then
         local trust = self:GetCoverTrust(dist)
@@ -859,14 +861,7 @@ function RATOAI_ThreatEnemyFactor(enemy, context)
     return factor
 end
 
----------------------------------------------------------------------------------------------------
----- DIAGNOSTICO
-----
----- `const.RATOAI.ThreatDebug = true` no console faz cada destino guardar o passo a passo em
----- context.dest_threat_exposure_debug[dest], que o DEBUG.lua mostra no rollover do
----- voxel. Desligado, custa uma leitura de global por destino e nada mais.
----- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
----------------------------------------------------------------------------------------------------
+---- Chave do diagnostico; o cabecalho completo esta junto do EvalDest, la embaixo.
 if const.RATOAI.ThreatDebug == nil then
     const.RATOAI.ThreatDebug = false
 end
@@ -875,6 +870,275 @@ local function tiles(d)
     return d and (MulDivRound(d, 1, const.SlabSizeX)) or "?"
 end
 
+---------------------------------------------------------------------------------------------------
+---- LOS POR INIMIGO  (BUGFIX B50)
+----
+---- `g_AIDestEnemyLOSCache` responde "ALGUEM ve este destino" -- agregado sobre a equipe
+---- inteira, e so para os destinos que o `AIUpdateDestLosCache` chegou a processar (ele
+---- para cedo e vai removendo da lista os que ja foram vistos).
+----
+---- Medido em combate real, Rocketeer:23 x Smiley_FS, 2360 destinos:
+----     Smiley ENXERGA                                     69
+----     cache `nil` (nunca checado, o portao deixava passar) 2215
+----     cache `false`                                       10
+----     sem LOS do Smiley E sem cobertura -> ameaca CHEIA  1789
+----
+---- Ou seja: o portao antigo cobria 10 destinos de 2360. Cobertura tambem nao substitui
+---- LOS -- `GetCoverPercentage` so acha cobertura ADJACENTE ao tile, entao um tile escuro
+---- porque tem um predio inteiro na frente nao tem objeto de cobertura ao lado nenhum,
+---- devolve nil, e o inimigo entra com a rampa inteira. Sao duas perguntas diferentes:
+---- "tem parede no meu pe" e "ele consegue me ver".
+----
+---- CUSTO. Uma chamada BATELADA de CheckLOS por inimigo, sobre `context.destinations` --
+---- a lista que esta policy realmente pontua. Medido no processo vivo: 17 ms para 85
+---- destinos x 7 inimigos. A mesma conta sobre `all_destinations` (2360) custa 435 ms, e
+---- e por isso que a batelada NAO e sobre ela: as 17 instancias em items.lua estao todas
+---- em `EndTurnPolicies`, que roda por `context.destinations`; nenhuma em OptLocPolicies.
+---- Se algum dia uma entrar la, esta funcao passa a pagar o preco alto -- meca antes.
+----
+---- `nil` continua significando "nao da para saber" e NAO bloqueia, mesma escolha
+---- conservadora do portao antigo. A diferenca e que agora quase nunca e nil.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ThreatEnemyLOS(context, enemy, dest)
+    if not context or not dest then
+        return nil
+    end
+    local cache = context.__ratoai_enemy_los
+    if not cache then
+        cache = {}
+        context.__ratoai_enemy_los = cache
+    end
+
+    local ppos = context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy]
+    local per = cache[enemy]
+    if per == nil then
+        per = false
+        local dests = context.destinations
+        if ppos and dests and #dests > 0 then
+            local srcs, tgts = {}, {}
+            for i = 1, #dests do
+                srcs[i] = dests[i]
+                tgts[i] = ppos
+            end
+            local _, data = CheckLOS(tgts, srcs, enemy:GetSightRadius())
+            if data then
+                per = {}
+                for i = 1, #dests do
+                    per[dests[i]] = not not data[i]
+                end
+            end
+        end
+        cache[enemy] = per
+    end
+
+    if not per then
+        return nil
+    end
+    local hit = per[dest]
+    if hit ~= nil then
+        return hit
+    end
+
+    ---- destino fora da batelada -- o painel de debug avalia tiles avulsos. Uma raia so,
+    ---- memoizada na mesma tabela, entao um rollover repetido nao paga de novo.
+    if not ppos then
+        return nil
+    end
+    local _, data = CheckLOS({ppos}, {dest}, enemy:GetSightRadius())
+    hit = not not (data and data[1])
+    per[dest] = hit
+    return hit
+end
+
+---------------------------------------------------------------------------------------------------
+---- NUCLEO COMPARTILHADO -- constantes do destino + contribuicao de um inimigo
+----
+---- O `EvalDest` daqui e o `Decompose` do painel (Rato Dev/RATODBG_AIDebugUI.lua) precisam
+---- da MESMA conta, e enquanto cada um resolvia a sua eles divergiam em silencio a cada
+---- knob novo. Ja tinha acontecido tres vezes -- `FalloffCurve`, `ThreatEffectMods` e o
+---- custo de preparo, cada um patchado no painel depois do fato -- e o `SetupCurveSpread`
+---- foi a quarta. Agora ha um caminho de calculo so; o painel consome estes dois metodos.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:SeesEnemy(context, enemy)
+    local mode = self.visibility_mode
+    if mode == "self" then
+        return (context.enemy_visible and context.enemy_visible[enemy]) and true or false
+    elseif mode == "team" then
+        return (context.enemy_visible_by_team and context.enemy_visible_by_team[enemy]) and true or
+                   false
+    end
+    return true
+end
+
+---- Constantes do destino: nada aqui depende do inimigo, entao o laco por inimigo so consome.
+function AIPolicyThreatExposure:DestParams(dest)
+    local _, _, _, stance_idx = stance_pos_unpack(dest)
+    local p = {
+        ---- STANCE do proprio dest: e a que a unidade adota ao chegar (AIBehavior:EndMovement).
+        ---- So importa quando cobertura ou postura entram na conta -- GetCoverPercentage zera
+        ---- cobertura BAIXA para quem esta de pe (Cover.lua:283-285).
+        stance = StancesList[stance_idx],
+        cancels = self.CoverCancels,
+        plateau = (self.PlateauTiles or 0) * const.SlabSizeX,
+        near = (self.CoverNearTiles or 0) * const.SlabSizeX,
+        curve = Clamp(self.FalloffCurve or 0, 0, 100),
+        ceiling = self:GetEnemyCeiling(),
+        ---- hoisted: era um ResolveValue por inimigo POR destino, dentro do GetUncovered,
+        ---- num arquivo cujo proprio comentario manda manter ResolveValue fora do laco quente
+        full = Presets.ChanceToHitModifier.Default.RangeAttackTargetStanceCover:ResolveValue(
+            "Cover")
+    }
+
+    ---- so vale com CoverCancels ligado -- desligado, esta policy e a classica (ameaca crua)
+    ---- e quem credita protecao e a AIPolicyCustomSeekCover, por fora. Abater aqui por postura
+    ---- reintroduziria o desalinhamento de clamp que o CoverCancels existe para resolver.
+    if p.cancels then
+        p.stance_mitig, p.stance_max_d, p.stance_min_d = self:GetStanceRamp(p.stance)
+    end
+
+    local setup = self.SetupBias and (const.RATOAI.ThreatSetupBias ~= false)
+    p.spread = setup and Clamp(self.SetupCurveSpread or 0, 0, 100) or 0
+    if setup then
+        p.ready_pct = (self.SetupReadyPct or 0) > 0 and self.SetupReadyPct or
+                          (const.RATOAI.ThreatSetupReady or 100)
+        p.costly_pct = (self.SetupCostlyPct or 0) > 0 and self.SetupCostlyPct or
+                           (const.RATOAI.ThreatSetupCostly or 100)
+        ---- os dois em 100 nao mudam nada: pula o trabalho por inimigo. O `spread` entra no
+        ---- teste porque e o mesmo termo, e funciona com a amplitude neutra (100/100) -- que
+        ---- e justamente o pareamento recomendado.
+        if p.ready_pct == 100 and p.costly_pct == 100 and p.spread <= 0 then
+            setup = false
+        end
+    end
+    p.setup = setup
+    return p
+end
+
+---------------------------------------------------------------------------------------------------
+---- Contribuicao de UM inimigo neste destino. Devolve `bruta, liquida`:
+----   bruta   -- rampa ja pesada por status effect e preparo, SEM cobertura
+----   liquida -- a mesma, depois do abatimento por cobertura/postura
+---- A diferenca entre as duas e exatamente o que a camada "Cobertura CANCELOU" mostra.
+----
+---- O clamp do teto cai sobre a BRUTA e a liquida sai dela ja clampada. Assim `ceiling`
+---- continua querendo dizer "o maximo que UM inimigo vale" (BUGFIX B49) e o abatimento por
+---- cobertura nunca precisa competir com o clamp -- que era a fonte do caso perverso que o
+---- proprio CoverCancels existe para matar.
+----
+---- `out` (opcional, REUTILIZAVEL entre iteracoes) recebe os detalhes para o trace e para o
+---- painel. Passar a mesma tabela no laco inteiro mantem o custo em zero alocacoes.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_pos, p, out)
+    if out then
+        out.skip, out.los, out.fonte, out.trust = nil, nil, nil, nil
+        out.ready_t, out.capped, out.d, out.range = nil, nil, nil, nil
+        out.ramp, out.uncovered, out.face, out.fator, out.curve_e = nil, nil, nil, nil, nil
+    end
+
+    if not self:SeesEnemy(context, enemy) then
+        if out then
+            out.skip = "nao visivel, modo " .. tostring(self.visibility_mode)
+        end
+        return 0, 0
+    end
+    ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora
+    if not (IsValid(enemy) and not (enemy:IsDead() or enemy:IsDowned())) then
+        if out then
+            out.skip = "abatido/morto"
+        end
+        return 0, 0
+    end
+    ---- DEBUG (D8): filtro de isolamento do painel. Sempre true em partida normal.
+    if not RATOAI_ThreatCounts(enemy) then
+        if out then
+            out.skip = "FILTRO ThreatOnly"
+        end
+        return 0, 0
+    end
+
+    local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
+    if not IsValidPos(att_pos) then
+        if out then
+            out.skip = "posicao invalida"
+        end
+        return 0, 0
+    end
+
+    ---- BUGFIX (B50): quem nao me ve nao me ameaca. Ver o cabecalho de RATOAI_ThreatEnemyLOS.
+    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest) == false then
+        if out then
+            out.skip, out.los = "sem LOS", false
+        end
+        return 0, 0
+    end
+
+    local d = att_pos:Dist(target_pos)
+    local range, is_firearm, capped = self:GetEnemyRange(enemy)
+
+    ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e nao so
+    ---- multiplicador da saida dela. Ver a property SetupCurveSpread.
+    local face, ready_t, curve_e = 100, nil, p.curve
+    if p.setup then
+        face, ready_t = RATOAI_SetupFactor(enemy, context, target_pos, p.ready_pct, p.costly_pct)
+        if p.spread > 0 and ready_t then
+            curve_e = Min(100, p.curve + MulDivRound(p.spread, 100 - ready_t, 100))
+        end
+    end
+
+    local ramp = RATOAI_ThreatRamp(d, range, p.plateau, curve_e)
+
+    ---- `uncovered` fica 100 no modo classico: a policy nao olha cobertura e a contribuicao
+    ---- e a rampa crua, exatamente como antes do CoverCancels existir.
+    local uncovered, trust, fonte = 100, nil, nil
+    if p.cancels and ramp > 0 then
+        uncovered, trust, fonte = self:GetUncovered(att_pos, target_pos, p.stance, is_firearm, d,
+                                                    p.stance_mitig, p.stance_max_d, p.stance_min_d,
+                                                    p.full)
+    end
+
+    ---- status effect e custo de preparo escalam a capacidade DESTE inimigo, e por isso
+    ---- entram na BRUTA -- os dois lados. Aplicar so na liquida jogaria o efeito deles
+    ---- dentro de "cancelada", que quer dizer "o que a COBERTURA tirou" e passaria a mentir.
+    local fator = RATOAI_ThreatEnemyFactor(enemy, context)
+    local mods = fator
+    if face ~= 100 then
+        mods = MulDivRound(mods, face, 100)
+    end
+
+    local bruta = (mods == 100) and ramp or MulDivRound(ramp, mods, 100)
+    if bruta > p.ceiling then
+        bruta = p.ceiling
+    end
+    local liquida = (uncovered == 100) and bruta or MulDivRound(bruta, uncovered, 100)
+
+    if out then
+        out.d, out.range, out.capped = d, range, capped
+        out.ramp, out.uncovered, out.trust, out.fonte = ramp, uncovered, trust, fonte
+        out.face, out.ready_t, out.curve_e, out.fator = face, ready_t, curve_e, fator
+        out.is_firearm = is_firearm
+    end
+    return bruta, liquida
+end
+
+---- Normalizacao final: `saturation` inimigos no teto == penalidade cheia. Sem o teto o score
+---- cresceria com o numero de inimigos e esmagaria as outras policies -- que e exatamente o
+---- erro que o ScalePerDistance antigo cometia. Metodo porque o painel precisa da MESMA linha.
+function AIPolicyThreatExposure:Normalize(soma)
+    if not soma or soma <= 0 then
+        return 0
+    end
+    local sat = self:GetSaturation()
+    return MulDivRound(self.Penalty, Min(soma, sat), sat)
+end
+
+---------------------------------------------------------------------------------------------------
+---- DIAGNOSTICO
+----
+---- `const.RATOAI.ThreatDebug = true` no console faz cada destino guardar o passo a passo em
+---- context.dest_threat_exposure_debug[dest], que o DEBUG.lua mostra no rollover do voxel.
+---- Desligado, custa uma leitura de tabela por destino e nada mais. Ligue, passe o mouse no
+---- tile, leia, desligue -- constroi string para TODO destino.
+---------------------------------------------------------------------------------------------------
 function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     if not dest then
         return 0
@@ -882,10 +1146,10 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
 
     local trace = const.RATOAI.ThreatDebug and {} or nil
 
-    ---- Portao de LOS. Distingue `false` (o motor CHECOU e ninguem ve) de `nil` (nunca
-    ---- checou -- destino fora de all_destinations). Tratar nil como "sem LOS" zeraria
-    ---- silenciosamente tiles que so nao entraram na batelada do AIUpdateDestLosCache,
-    ---- entao nil segue contando ameaca normalmente.
+    ---- Portao de LOS agregado, do motor. Continua valendo como atalho BARATO: se ele diz que
+    ---- NINGUEM ve o tile, nao ha o que somar e nem vale abrir o laco. Distingue `false` (o
+    ---- motor CHECOU e ninguem ve) de `nil` (nunca checou), e nil segue passando -- o portao
+    ---- que de fato resolve o caso agora e o por inimigo, dentro do EnemyContribution.
     if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false then
         return 0
     end
@@ -895,199 +1159,68 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         return 0
     end
 
-    ---- STANCE do proprio dest: e a que a unidade adota ao chegar (AIBehavior:EndMovement).
-    ---- So importa quando a cobertura entra na conta -- GetCoverPercentage zera cobertura
-    ---- BAIXA para quem esta de pe (Cover.lua:283).
-    local cancels = self.CoverCancels
-    local stance
-    if cancels or self.StanceCancels then
-        local _, _, _, stance_idx = stance_pos_unpack(dest)
-        stance = StancesList[stance_idx]
-    end
-
-    ---- constante do destino: resolvida UMA vez, fora do laco por inimigo.
-    ---- So vale com CoverCancels ligado -- desligado, esta policy e a classica (ameaca
-    ---- crua) e quem credita protecao e a AIPolicyCustomSeekCover, por fora. Abater aqui
-    ---- por postura reintroduziria o desalinhamento de clamp entre as duas que o proprio
-    ---- CoverCancels existe para resolver (ver o cabecalho daquela property).
-    local stance_mitig, stance_max_d, stance_min_d
-    if cancels then
-        stance_mitig, stance_max_d, stance_min_d = self:GetStanceRamp(stance)
-    end
-
-    local plateau = (self.PlateauTiles or 0) * const.SlabSizeX
-    local near = (self.CoverNearTiles or 0) * const.SlabSizeX
-    local curve = Clamp(self.FalloffCurve or 0, 0, 100)
-
-    ---- custo de preparo: resolvido UMA vez, fora do laco por inimigo (ver property SetupBias).
-    ---- `const.RATOAI.ThreatSetupBias = false` derruba para todas as instancias sem tocar preset.
-    local setup = self.SetupBias and (const.RATOAI.ThreatSetupBias ~= false)
-    local spread = setup and Clamp(self.SetupCurveSpread or 0, 0, 100) or 0
-    local ready_pct, costly_pct
-    if setup then
-        ready_pct = (self.SetupReadyPct or 0) > 0 and self.SetupReadyPct or
-                        (const.RATOAI.ThreatSetupReady or 100)
-        costly_pct = (self.SetupCostlyPct or 0) > 0 and self.SetupCostlyPct or
-                         (const.RATOAI.ThreatSetupCostly or 100)
-        ---- os dois em 100 nao mudam nada: pula o trabalho por inimigo. O `spread` entra
-        ---- no teste porque e o mesmo termo, e funciona com a amplitude neutra (100/100)
-        ---- -- que e justamente o pareamento recomendado.
-        if ready_pct == 100 and costly_pct == 100 and spread <= 0 then
-            setup = false
-        end
-    end
-
-    ---- BUGFIX (B49): teto de UM inimigo. Ver o cabecalho de GetEnemyCeiling.
-    local ceiling = self:GetEnemyCeiling()
-
+    local p = self:DestParams(dest)
+    local out = trace and {} or nil
     local threat = 0
 
     for _, enemy in ipairs(context.enemies or empty_table) do
-        local visible = true
-        if self.visibility_mode == "self" then
-            visible = context.enemy_visible[enemy]
-        elseif self.visibility_mode == "team" then
-            visible = context.enemy_visible_by_team[enemy]
-        end
+        local bruta, liquida = self:EnemyContribution(context, enemy, dest, target_pos, p, out)
+        threat = threat + liquida
 
-        ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora
-        local alive = enemy and not (enemy:IsDead() or enemy:IsDowned())
-        ---- DEBUG (D8): filtro de isolamento do painel. Sempre true em partida normal.
-        local conta = RATOAI_ThreatCounts(enemy)
-        if visible and alive and conta then
-            local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
-            if IsValidPos(att_pos) then
-                local d = att_pos:Dist(target_pos)
-                local range, is_firearm, capped = self:GetEnemyRange(enemy)
-
-                ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e
-                ---- nao so multiplicador da saida dela. Ver a property SetupCurveSpread.
-                local face, ready_t, curve_e = 100, nil, curve
-                if setup then
-                    face, ready_t = RATOAI_SetupFactor(enemy, context, target_pos, ready_pct,
-                                                       costly_pct)
-                    if spread > 0 and ready_t then
-                        curve_e = Min(100, curve + MulDivRound(spread, 100 - ready_t, 100))
-                    end
+        if trace then
+            local id = tostring(enemy.session_id)
+            if out.skip then
+                trace[#trace + 1] = string.format("  %s: PULADO (%s)", id, out.skip)
+            elseif not p.cancels then
+                trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d", id,
+                                                  tostring(tiles(out.d)),
+                                                  tostring(tiles(out.range)),
+                                                  out.capped and " (teto)" or "", out.ramp)
+            else
+                local nota = ""
+                ---- so anota quando o raio realmente mordeu -- senao poluiria toda linha do
+                ---- overlay com um numero que nunca muda
+                if out.trust and p.near > 0 and out.d < p.near then
+                    nota = string.format(" | COLADO: confianca %d%%", out.trust)
                 end
-
-                local ramp = RATOAI_ThreatRamp(d, range, plateau, curve_e)
-
-                ---- `uncovered` e 100 no modo classico: a policy nao olha cobertura e a
-                ---- contribuicao e a rampa crua, exatamente como antes.
-                local uncovered, trust, fonte = 100, nil, nil
-                if cancels and ramp > 0 then
-                    uncovered, trust, fonte = self:GetUncovered(att_pos, target_pos, stance,
-                                                                is_firearm, d, stance_mitig,
-                                                                stance_max_d, stance_min_d)
+                if out.fator ~= 100 then
+                    nota = nota .. string.format(" | status: ameaca x%d%%", out.fator)
                 end
-                local contrib = (uncovered == 100) and ramp or MulDivRound(ramp, uncovered, 100)
-
-                ---- hook: status effect do inimigo enfraquece a ameaca dele. Depois do
-                ---- abatimento por cobertura/postura porque sao coisas independentes --
-                ---- um cara cego atras de mim me ameaca pouco pelos dois motivos.
-                local fator = RATOAI_ThreatEnemyFactor(enemy, context)
-                if fator ~= 100 then
-                    contrib = MulDivRound(contrib, fator, 100)
-                end
-
-                ---- custo de preparo, lado da AMPLITUDE. Multiplicativo e no fim, como o hook
-                ---- de status effect logo acima -- as duas perguntas sao independentes: uma e
-                ---- "quao capaz este inimigo esta", a outra "quao barato e para ele me dar um
-                ---- tiro BOM aqui". O lado da FORMA ja entrou la em cima, na curva da rampa.
-                if face ~= 100 then
-                    contrib = MulDivRound(contrib, face, 100)
-                end
-
-                ---------------------------------------------------------------------------
-                ---- BUGFIX (B49): CLAMP POR INIMIGO, e nao so na soma.
-                ----
-                ---- Antes o unico teto era `Min(threat, saturation)` la embaixo -- na SOMA.
-                ---- Isso deixava um inimigo so estourar o que a escala diz que ele pode
-                ---- valer, e ai a saturacao parava de significar "N inimigos": bastava um
-                ---- com fatores multiplicativos favoraveis para pesar como dois.
-                ----
-                ---- `ThreatEffectMods` aceita valores acima de 100 por documentacao (">100
-                ---- tambem vale se algum efeito deve AGRAVAR a ameaca"), e o
-                ---- `SetupReadyPct` ja passa de 100 no default. Multiplicados, um unico
-                ---- inimigo chegava a quase o dobro do teto -- sem nada barrando.
-                ----
-                ---- Com o clamp aqui, `ceiling` e por construcao "o maximo que UM inimigo
-                ---- vale", e `saturation = N x ceiling` volta a ser literalmente "N
-                ---- inimigos no maximo". O bonus de estar pronto continua valendo: ele
-                ---- entra no proprio `ceiling`.
-                ---------------------------------------------------------------------------
-                if contrib > ceiling then
-                    contrib = ceiling
-                end
-
-                threat = threat + contrib
-
-                if trace then
-                    if cancels then
-                        ---- so anota quando o raio realmente mordeu -- senao poluiria
-                        ---- toda linha do overlay com um numero que nunca muda
-                        local near_note = ""
-                        if trust and near > 0 and d < near then
-                            near_note = string.format(" | COLADO: confianca %d%%", trust)
-                        end
-                        if fator ~= 100 then
-                            near_note = near_note ..
-                                            string.format(" | status: ameaca x%d%%", fator)
-                        end
-                        if face ~= 100 or curve_e ~= curve then
-                            local sp = RATOAI_SetupParams(enemy, context)
-                            local como
-                            if not sp then
-                                como = "?"
-                            elseif sp.free_rot then
-                                como = "emplacado (gira gratis)"
-                            elseif sp.stance then
-                                como = string.format("stance, %dg fora do arco de %dg",
-                                                     abs(enemy:AngleToPoint(target_pos)) // 60,
-                                                     sp.half // 60)
-                            else
-                                como = string.format("FORA de stance (entrar custa %d)",
-                                                     sp.ap_stance)
-                            end
-                            near_note = near_note ..
-                                            string.format(" | PREPARO: %s, teto %s -> x%d%%", como,
-                                                          sp and tostring(sp.cap) or "?", face)
-                            if curve_e ~= curve then
-                                near_note = near_note ..
-                                                string.format(" (pronto %d%% -> curva %d%%)",
-                                                              ready_t or 0, curve_e)
-                            end
-                        end
-                        trace[#trace + 1] = string.format(
-                                            "  %s: %st / alcance %st%s -> peso %d" ..
-                                                " | exposto %d%% (%s) -> contribui %d%s",
-                                            tostring(enemy.session_id), tostring(tiles(d)),
-                                            tostring(tiles(range)), capped and " (teto)" or "",
-                                            ramp, uncovered, tostring(fonte or "nada"), contrib,
-                                            near_note)
+                if out.face ~= 100 or out.curve_e ~= p.curve then
+                    local sp = RATOAI_SetupParams(enemy, context)
+                    local como
+                    if not sp then
+                        como = "?"
+                    elseif sp.free_rot then
+                        como = "emplacado (gira gratis)"
+                    elseif sp.stance then
+                        como = string.format("stance, %dg fora do arco de %dg",
+                                             abs(enemy:AngleToPoint(target_pos)) // 60,
+                                             sp.half // 60)
                     else
-                        trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d",
-                                                      tostring(enemy.session_id),
-                                                      tostring(tiles(d)), tostring(tiles(range)),
-                                                      capped and " (teto)" or "", ramp)
+                        como = string.format("FORA de stance (entrar custa %d)", sp.ap_stance)
+                    end
+                    nota = nota ..
+                               string.format(" | PREPARO: %s, teto %s -> x%d%%", como,
+                                             sp and tostring(sp.cap) or "?", out.face)
+                    if out.curve_e ~= p.curve then
+                        nota = nota .. string.format(" (pronto %d%% -> curva %d%%)",
+                                                     out.ready_t or 0, out.curve_e)
                     end
                 end
-            elseif trace then
-                trace[#trace + 1] = string.format("  %s: PULADO (posicao invalida)",
-                                              tostring(enemy.session_id))
+                trace[#trace + 1] = string.format(
+                                        "  %s: %st / alcance %st%s -> peso %d | exposto %d%% (%s)" ..
+                                            " -> bruta %d, liquida %d%s", id,
+                                        tostring(tiles(out.d)), tostring(tiles(out.range)),
+                                        out.capped and " (teto)" or "", out.ramp, out.uncovered,
+                                        tostring(out.fonte or "nada"), bruta, liquida, nota)
             end
-        elseif trace then
-            trace[#trace + 1] = string.format("  %s: PULADO (%s)", tostring(enemy.session_id),
-                                          not conta and "FILTRO ThreatOnly" or
-                                              (not alive and "abatido/morto" or
-                                                  ("nao visivel, modo " ..
-                                                      tostring(self.visibility_mode))))
         end
     end
 
     if trace then
         local saturation = self:GetSaturation()
+        local ceiling = p.ceiling
 
         -------------------------------------------------------------------------------------
         ---- LINHA DE ESCALA -- traduz a normalizacao para pontos de score.
@@ -1096,11 +1229,6 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         ---- por conta do leitor. Ninguem faz essa conta de cabeca no meio de um turno, e o
         ---- resultado e a saturacao parecer arbitraria. Aqui ela vira o que se quer saber:
         ---- quanto vale UM inimigo, e onde e o piso.
-        ----
-        ---- `por_inimigo` e o score de um inimigo no teto; `piso` e o score com a soma saturada
-        ---- (o maximo que esta policy consegue tirar do tile). Os dois ja com o Weight aplicado,
-        ---- que e o numero que de fato chega no AIScoreDest -- o EvalDest sozinho ainda nao tem
-        ---- o Weight, e mostrar sem ele seria mostrar um numero que nao existe em lugar nenhum.
         -------------------------------------------------------------------------------------
         local w = self.Weight or 100
         local piso = MulDivRound(self.Penalty, w, 100)
@@ -1112,38 +1240,39 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                "satura em %d inimigos\n" ..
                                "  Penalty %d x Weight %d%%, teto por inimigo %d, saturacao %d %s",
                            por_inimigo, piso, n_inim, self.Penalty, w, ceiling, saturation,
-                           (not self.MaxThreat or self.MaxThreat <= 0) and "(MaxThreat compartilhado)" or
-                               "(MaxThreat proprio)")
+                           (not self.MaxThreat or self.MaxThreat <= 0) and
+                               "(MaxThreat compartilhado)" or "(MaxThreat proprio)")
+
+        local modo = p.cancels and
+                         string.format("cobertura CANCELA (confianca %d%%%s)",
+                                       Clamp(self.CoverTrust or 100, 0, 100), (p.near > 0) and
+                                           string.format(", caindo a %d%% dentro de %st",
+                                                         Clamp(self.CoverTrustNear or 0, 0, 100),
+                                                         tostring(tiles(p.near))) or "") or
+                         "classico (so ameaca)"
+
+        local extras = tostring(tiles(p.plateau)) .. "t" ..
+                           ((p.stance_mitig or 0) > 0 and
+                               string.format(" | postura %s abate ate %d%% em %st",
+                                             tostring(p.stance), p.stance_mitig,
+                                             tostring(tiles(p.stance_max_d))) or "") ..
+                           ((self.RangeCapTiles or 0) > 0 and
+                               string.format(" | teto %dt", self.RangeCapTiles) or "") ..
+                           (p.curve > 0 and string.format(" | curva %d%%", p.curve) or "") ..
+                           (p.spread > 0 and
+                               string.format(" | preparo curva +%d%%", p.spread) or "") ..
+                           (self.RequireLOS and " | LOS por inimigo" or "")
 
         local head = escala .. "\n" ..
                          string.format("inimigos em context.enemies: %d\n" ..
                                            "modo: %s | plato %s | stance %s",
-                                   #(context.enemies or empty_table),
-                                   cancels and
-                                       string.format("cobertura CANCELA (confianca %d%%%s)",
-                                                     Clamp(self.CoverTrust or 100, 0, 100),
-                                                     (near > 0) and
-                                                         string.format(
-                                                             ", caindo a %d%% dentro de %st",
-                                                             Clamp(self.CoverTrustNear or 0, 0, 100),
-                                                             tostring(tiles(near))) or "") or
-                                       "classico (so ameaca)", tostring(tiles(plateau)) .. "t" ..
-                                       ((stance_mitig or 0) > 0 and
-                                           string.format(
-                                               " | postura %s abate ate %d%% em %st",
-                                               tostring(stance), stance_mitig,
-                                               tostring(tiles(stance_max_d))) or "") ..
-                                       ((self.RangeCapTiles or 0) > 0 and
-                                           string.format(" | teto %dt", self.RangeCapTiles) or "") ..
-                                       (curve > 0 and string.format(" | curva %d%%", curve) or "") ..
-                                       (spread > 0 and
-                                           string.format(" | preparo curva +%d%%", spread) or ""),
-                                   tostring(stance or "-"))
+                                       #(context.enemies or empty_table), modo, extras,
+                                       tostring(p.stance or "-"))
+
         ---- O rodape fecha a conta ate o numero que o AIScoreDest de fato soma no tile. Antes
         ---- parava no EvalDest, que ainda nao tem o Weight -- e era o ultimo lugar onde faltava
         ---- uma divisao mental para amarrar o painel ao score.
-        local eval = threat > 0 and
-                         MulDivRound(self.Penalty, Min(threat, saturation), saturation) or 0
+        local eval = self:Normalize(threat)
         local tail = string.format("  SOMA %d de %d (%d%% da saturacao)  ->  EvalDest %d" ..
                                        "  ->  somado no tile: %d", threat, saturation,
                                    MulDivRound(100, Min(threat, saturation), saturation), eval,
@@ -1153,13 +1282,5 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             head .. "\n" .. table.concat(trace, "\n") .. "\n" .. tail
     end
 
-    if threat <= 0 then
-        return 0
-    end
-
-    ---- normaliza: saturacao inimigos com peso 100 == penalidade cheia. Sem o teto o
-    ---- score cresceria com o numero de inimigos e esmagaria as outras policies -- que
-    ---- e exatamente o erro que o ScalePerDistance antigo cometia.
-    local saturation = self:GetSaturation()
-    return MulDivRound(self.Penalty, Min(threat, saturation), saturation)
+    return self:Normalize(threat)
 end
