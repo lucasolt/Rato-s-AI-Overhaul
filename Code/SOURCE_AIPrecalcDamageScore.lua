@@ -233,6 +233,16 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     ---- chamada, cobrindo todos os destinos do laco abaixo.
     local recoil_cache = {}
 
+    ---- BUGFIX (B51): o modo de CTH e do JOGO, nao do par (destino, alvo) -- resolvido uma vez
+    ---- aqui em vez de por iteracao do laco quente. O jogador pode voltar ao "Old CTH" nas
+    ---- opcoes do GBO3 a qualquer momento, e ai tudo abaixo volta ao caminho antigo.
+    local angular_cth = RATOAI_AngularOn(weapon, action, unit)
+
+    ---- Cache de razoes de rajada do B51, com a MESMA vida do recoil_cache acima: a escada e
+    ---- semeada com o recuo herdado, e esse offset muda a cada ataque que a unidade dispara.
+    ---- Guardado no context (e nao local) so porque quem preenche e o RATOAI_ScoreAttacksDetailed.
+    context.__ratoai_cone_ratios = nil
+
     for j, upos in ipairs(destinations) do
         local ux, uy, uz, ustance_idx = stance_pos_unpack(upos)
         local ustance = StancesList[ustance_idx]
@@ -333,9 +343,16 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                     ---- GBO_GetROF, bloco de MG) depende so de arma/atacante/acao.
                     ---- O `dist` ja entra numa interpolacao linear grosseira, entao
                     ---- quantizar por slab custa menos de um ponto de CTH.
+                    ---- BUGFIX (B51): no aCTH este numero nao entra em conta nenhuma. A rajada
+                    ---- degrada pela escada do cone (RATOAI_ConeRatios) e o recuo persistente
+                    ---- saiu da CTH -- ver o cabecalho do B51 em FUNCTION_ScoreAttacksDetailed.
+                    ---- Pular a chamada tira um get_recoil por (destino, alvo) do laco quente;
+                    ---- `recoil_score[target]` fica 0, que e o que o modelo diz, e o fallback de
+                    ---- PenaltyScale no AutoFire_CustomScoring vira neutro em vez de modular por
+                    ---- uma penalidade que o jogo nao aplica mais.
                     local recoil_cth = 0
 
-                    if IsKindOf(weapon, "Firearm") then
+                    if not angular_cth and IsKindOf(weapon, "Firearm") then
                         local by_dist = recoil_cache[target]
                         if not by_dist then
                             by_dist = {}

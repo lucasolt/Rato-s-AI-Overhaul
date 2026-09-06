@@ -226,3 +226,51 @@ function RATOAI_EnemyVisible(context, enemy, mode)
     return (context.enemy_visible_by_team and context.enemy_visible_by_team[enemy]) and true or false
 end
 -- GetPackedPosAndStance(unit, stance)
+
+---------------------------------------------------------------------------------------------------
+---- aCTH -- O MODELO ANGULAR ESTA LIGADO PARA ESTE ATAQUE?
+----
+---- O jogador escolhe o modo nas opcoes do GBO3 ("aCTH" / "aCTH Lite" / "Old CTH") e pode voltar
+---- ao antigo a qualquer momento; o unico escritor de `const.Combat.Aperture.Enabled` e o
+---- `GBO_ApplyApertureCTHMode` (GBO3/Code/__ApertureParams.lua:36). Toda decisao da IA que dependa
+---- do modelo passa por aqui, e nao por uma leitura solta do const: `Rat_AngularActive` tambem
+---- descarta arma que nao e Firearm e ataque corpo a corpo -- os casos em que nao ha cone nenhum
+---- e o caminho antigo continua sendo o correto, com o modo angular ligado ou nao.
+----
+---- A diferenca entre "aCTH" e "aCTH Lite" NAO importa deste lado: as duas resolvem o CTH pelo
+---- cone e degradam a rajada pela mesma escada. So a consequencia do erro muda (simular a bala
+---- contra rolar a chance), e isso e da resolucao, nao da estimativa.
+---------------------------------------------------------------------------------------------------
+function RATOAI_AngularOn(weapon, action, attacker)
+    return Rat_AngularActive(weapon, action, attacker) and true or false
+end
+
+---------------------------------------------------------------------------------------------------
+---- RAZAO DE CTH DO TIRO `i` CONTRA O TIRO 1 DA RAJADA -- direto do GBO3, nunca reimplementada.
+----
+---- No modelo angular o cano SOBE tiro a tiro (segunda ordem, com regime incontrolavel quando a
+---- forca nao cobre o calibre) e o tiro `i` vale uma FRACAO do primeiro. Nao ha formula fechada a
+---- copiar para ca: quem produz a escada e `Rat_SimRecoilLadder`, e e a MESMA que a bala dispara.
+---- Reimplementar aqui seria repetir o erro que o `RECOIL_STACKS_PCT` ja custou uma vez.
+----
+---- `sigma` e o cone que o `CalcChanceToHit` acabou de resolver para ESTE ataque (`args.rat_sigma`,
+---- preenchido em GBO3/Code/SOURCE_UnitCalcChanceToHit.lua). Passando ele, a escada sai do cone
+---- REAL -- residuais, cobertura e recuo herdado ja dentro -- em vez de um cone geometrico sondado
+---- de novo. E o mesmo argumento que o `SOURCE_FirearmGetAttackResults` passa na hora do tiro.
+----
+---- Tabela VAZIA e resposta legitima (arma sem recuo modelado): quem le usa `ratios[i] or 100`,
+---- ou seja, nenhuma degradacao. `nil` significa outra coisa -- o modelo angular nao se aplica --
+---- e devolve o chamador ao caminho antigo.
+----
+---- pcall pelo mesmo motivo do `get_recoil` no `RATOAI_ExpectedFor`: a escada passa por perfil de
+---- recuo, componentes de arma e propriedades de calibre, e um mod de terceiro que quebre ali nao
+---- pode derrubar o turno da IA.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ConeRatios(unit, target, action, weapon, aim, attacker_pos, shots, sigma, body_part)
+    if (shots or 1) <= 1 or not RATOAI_AngularOn(weapon, action, unit) then
+        return nil
+    end
+    local ok, ratios = pcall(Rat_GetShotConeRatios, unit, target, body_part, action, weapon,
+                             aim or 0, false, attacker_pos, target:GetPos(), shots, sigma)
+    return (ok and type(ratios) == "table") and ratios or nil
+end

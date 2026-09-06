@@ -71,6 +71,35 @@ local recoil_pct_by_aim = {[0] = 100, [1] = 66, [2] = 33}
 ---- Constantes conferidas no processo vivo: MaxShotIndexForRecoilCTHLoss = 6,
 ---- MultishotMinCTH = 5.
 ---------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------
+---- BUGFIX (B51): com o aCTH ligado, a formula acima descreve um jogo que nao esta rodando.
+----
+---- O B21 copiou a expansao de rajada do GBO3 -- `original_cth - recoil * (b-1)`, um degrau fixo
+---- de pontos por bala. Ela continua certa no modo "Old CTH". Mas com o modelo angular ligado o
+---- `SOURCE_FirearmGetAttackResults` DESCARTA essa linha e usa outra
+---- (GBO3/Code/SOURCE_FirearmGetAttackResults.lua:250-305):
+----
+----     shot_cth = MulDivRound(original_cth, cone_ratios[i], 100)
+----
+---- e `cone_ratios` sai de `Rat_SimRecoilLadder`: o cano tem POSICAO e VELOCIDADE, o atirador
+---- corrige a velocidade com erro obrigatorio, e existe um regime em que a correcao NAO alcanca o
+---- coice (`CFMax < KickMag`, "sem forca para este calibre") -- ali a rajada sai do alvo por mais
+---- pericia que se tenha. Uma reta descendente nao tem como representar esse patamar: ela sempre
+---- diz que a 6a bala ainda vale alguma coisa. A IA estava comprando rajada em arma que nao
+---- controla e recusando rajada em arma que controla.
+----
+---- Por que a razao e nao os acertos esperados prontos. O `Rat_ExpectedHits` do GBO3 responde a
+---- pergunta inteira, mas resolve o CTH do primeiro tiro por dentro (`Rat_AttackCone` chama
+---- `CalcChanceToHit` de novo) -- e a IA JA tem esse numero memoizado por nivel de mira aqui.
+---- Pedir so a razao aproveita a memoizacao e devolve exatamente o mesmo total, porque e o que o
+---- `Rat_ExpectedHits` faz com ela: `cth1 + soma(cth1 * ratio[i] / 100)`.
+----
+---- O `aim_cth` some no ramo angular. Nao e simplificacao: no modelo angular mirar fecha o cone e
+---- o modifier "Aim" devolve `false` (GBO3/Code/CTH_aim.lua:32), entao nao ha bonus para a segunda
+---- bala perder. A `RATOAI_AimBonus` ja devolvia 0 por consequencia disso -- agora o codigo DIZ o
+---- motivo em vez de depender de os dois lados chegarem a zero por acidente.
+---------------------------------------------------------------------------------------------------
 ---- Valor do modificador `Aim` para um nivel, cacheado na tabela do chamador.
 ---- `cache` nil = arma de tiro unico: nao ha bala 2 para perder o bonus, devolve 0.
 local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
@@ -88,7 +117,9 @@ local function RATOAI_AimBonus(cache, aim_level, unit, target, action, weapon)
     return v
 end
 
-local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth)
+---- `ratios` (aCTH): razao de CTH por tiro vinda do GBO3 (RATOAI_ConeRatios). Quando presente,
+---- manda -- ver o bloco B51 acima. `nil` = modelo antigo, e ai valem `recoil_cth` e `aim_cth`.
+local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth, ratios)
     ---- BUGFIX (B24): tiro unico tambem clampa. Desde que o recoil persistente entra na
     ---- CTH do ataque (e nao na soma), `original_cth` pode chegar negativo aqui -- e um
     ---- ataque nunca pode CONTRIBUIR negativo para os acertos esperados. No caminho de
@@ -96,8 +127,22 @@ local function RATOAI_BurstHits(original_cth, shots, recoil_cth, aim_cth)
     if shots <= 1 then
         return Clamp(original_cth, 0, 100)
     end
-    local max_idx = const.Combat.MaxShotIndexForRecoilCTHLoss or 6
     local floor_cth = Min(const.Combat.MultishotMinCTH or 5, original_cth)
+
+    if ratios then
+        ---- aCTH: o piso e o clamp por bala continuam sendo os do jogo; so a degradacao muda
+        ---- de forma. Sem `aim_cth` de proposito -- no angular mirar FECHA O CONE e nao existe
+        ---- modifier "Aim" para a segunda bala perder (o ramo esta comentado no
+        ---- SOURCE_FirearmGetAttackResults justamente por isso).
+        local total = Max(floor_cth, Clamp(original_cth, 0, 100))
+        for b = 2, shots do
+            total = total + Max(floor_cth,
+                                Clamp(MulDivRound(original_cth, ratios[b] or 100, 100), 0, 100))
+        end
+        return total
+    end
+
+    local max_idx = const.Combat.MaxShotIndexForRecoilCTHLoss or 6
     local total = 0
     for b = 1, shots do
         ---- recoil_cth e negativo; Min(b-1, max_idx) congela a degradacao apos o teto
@@ -189,7 +234,35 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- segunda bala para perder bonus, e `RATOAI_AimBonus` devolve 0 sem alocar nada.
     ---- PERF (C11): funcao de arquivo, nao closure. Este trecho roda por par
     ---- (destino, alvo) e uma closure por par e exatamente o que o C11 tirou daqui.
-    local aim_cth_by_level = burst_shots > 1 and {} or nil
+    ---- BUGFIX (B51): o modo de CTH vale para o ataque inteiro -- resolvido uma vez, aqui.
+    local angular = RATOAI_AngularOn(weapon, action, unit)
+
+    ---- BUGFIX (B51): `nil` tambem quando o angular esta ligado -- ali o modifier "Aim" devolve
+    ---- `false` e a RATOAI_AimBonus so faria um CalcValue por nivel para chegar a zero.
+    local aim_cth_by_level = (burst_shots > 1 and not angular) and {} or nil
+
+    ---- BUGFIX (B51): com o aCTH ligado a degradacao da rajada vem da escada do GBO3, e a escada
+    ---- so pode ser pedida DEPOIS do CalcChanceToHit -- e ele quem resolve o cone e o devolve em
+    ---- `args.rat_sigma`. Cacheada por nivel de mira pelo mesmo motivo do `cth_by_aim` (PERF C1):
+    ---- dentro desta funcao alvo, acao e posicao sao fixos, so `args.aim` muda.
+    ---- Cache TAMBEM por (alvo, slab de distancia) no `context`, na mesma linha do PERF (C4) do
+    ---- recoil: a escada e Monte Carlo e este laco roda por destino.
+    local ratios_by_aim, ratios_slab
+    if angular and burst_shots > 1 then
+        local by_target = context.__ratoai_cone_ratios
+        if not by_target then
+            by_target = {}
+            context.__ratoai_cone_ratios = by_target
+        end
+        ratios_by_aim = by_target[target]
+        if not ratios_by_aim then
+            ratios_by_aim = {}
+            by_target[target] = ratios_by_aim
+        end
+        ---- slab da MESMA quantizacao do recoil (PERF C4): a razao e ainda menos sensivel a
+        ---- distancia que o recuo, porque numerador e denominador saem do mesmo cone.
+        ratios_slab = (target_dist / const.SlabSizeX) * 8
+    end
 
     ---- BUGFIX (B23a): pilhas de recoil PERSISTENTE acumuladas DENTRO desta sequencia.
     ----
@@ -234,8 +307,25 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         ---- pilhas (ApplyPersistantRecoilEffects remove tudo e soma 1), entao o ataque
         ---- seguinte volta a 1 pilha em vez de seguir contando. Agora `stacks` acompanha,
         ---- com a MESMA progressao que o planejador de AP usa em AICalcAttacksAndAim.
+        ----
+        ---- BUGFIX (B51): DESLIGADO no aCTH, e o motivo nao e "mudou de valor", e "deixou de
+        ---- existir". Com `Aperture.RecoilPersistOffset` a reacao de CTH do `Rat_recoil` nem
+        ---- roda (GBO3/CharacterEffect/Rat_recoil.lua:133) e o `get_recoil` do ramo de pilhas
+        ---- devolve 0. O recuo carregado virou ALONGAMENTO DO CONE no eixo em que o atirador
+        ---- estava lutando (`Rat_RecoilPersistSigma`), que recupera por AP gasto. Somar aqui os
+        ---- pontos do modelo antigo seria cobrar uma penalidade que o jogo nao cobra mais.
+        ----
+        ---- O que o angular ja ve: o recuo que a unidade carrega AGORA esta dentro do
+        ---- `CalcChanceToHit` acima (o cone e resolvido com `rat_vsigma`) e tambem dentro da
+        ---- escada da rajada, que e semeada com o mesmo offset herdado.
+        ---- O QUE FICA DE FORA: o recuo que os ataques 2..N deste MESMO plano vao gerar. Nao ha
+        ---- consulta pura para isso no GBO3 -- `Rat_RecoilPersistOffset` le o offset GRAVADO, e
+        ---- projetar exigiria rodar `Rat_RecoilStep` daqui, ou seja reimplementar a dinamica do
+        ---- outro lado da fronteira, que e exatamente o que o B51 acabou de tirar. O vies e
+        ---- OTIMISTA em sequencias longas de fogo sustentado, e o lugar de fechar isso e uma
+        ---- projecao pura no GBO3, nao uma copia aqui.
         local eff_cth = attack_mod
-        if i > 1 and aim_i < 3 and stacks > 0 then
+        if not angular and i > 1 and aim_i < 3 and stacks > 0 then
             local aim_pct = recoil_pct_by_aim[aim_i] or 100
             local recoil_penalty = MulDivRound(recoil_cth or 0, aim_pct * stacks, 100)
 
@@ -252,8 +342,20 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
             table.insert(context.cth_attacks_at[upos][target], eff_cth)
         end
 
+        local ratios
+        if ratios_by_aim then
+            local rkey = ratios_slab + aim_i
+            ratios = ratios_by_aim[rkey]
+            if ratios == nil then
+                ratios = RATOAI_ConeRatios(unit, target, action, weapon, aim_i, args.step_pos,
+                                           burst_shots, args.rat_sigma, "Torso") or false
+                ratios_by_aim[rkey] = ratios
+            end
+        end
+
         local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth, RATOAI_AimBonus(
-                                              aim_cth_by_level, aim_i, unit, target, action, weapon))
+                                              aim_cth_by_level, aim_i, unit, target, action, weapon),
+                                          ratios or nil)
         if trace then
             table.insert(context.burst_hits_at[upos][target], expanded)
         end
@@ -661,8 +763,12 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- nunca entrar em conta nenhuma. `get_recoil` passa por GetWepRecoil, GetRecoilOther,
     ---- GetCaliberStrRecoil e GBO_GetROF -- nao e barato, e era pago a toa em toda acao de tiro
     ---- unico. E no painel aparecia um "-99" que parecia explicar o numero e nao explicava nada.
+    ---- BUGFIX (B51): no aCTH o `get_recoil` nao alimenta mais nada -- a rajada degrada pela
+    ---- escada do cone e o recuo persistente saiu da CTH. Deixar de chama-lo tira uma passagem
+    ---- por GetWepRecoil/GetCaliberStrRecoil/GBO_GetROF por acao por turno.
+    local angular = RATOAI_AngularOn(weapon, action, unit)
     local recoil_cth = 0
-    local usa_recoil = shots > 1 or attacks > 1
+    local usa_recoil = not angular and (shots > 1 or attacks > 1)
     if usa_recoil and IsKindOf(weapon, "Firearm") then
         local ok_r, r = pcall(get_recoil, unit, target, target:GetPos(), action, weapon, nil, shots,
                               nil, nil, nil, nil, nil, attacker_pos)
@@ -678,7 +784,12 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
 
     ---- PERF (C1), mesma memoizacao: dentro deste laco so `args.aim` muda.
     local cth_by_aim = {}
-    local aim_cth_by_level = shots > 1 and {} or nil
+    ---- BUGFIX (B51): inerte no angular -- ver o gemeo em RATOAI_ScoreAttacksDetailed.
+    local aim_cth_by_level = (shots > 1 and not angular) and {} or nil
+    ---- BUGFIX (B51): razoes por nivel de mira, pelo mesmo motivo do `cth_by_aim`. Local e nao
+    ---- no context: aqui o laco e curto (uma acao candidata, um alvo) e o cache do caminho quente
+    ---- e do `default_attack`, com outro `num_shots`.
+    local ratios_by_aim = (angular and shots > 1) and {} or nil
     local hits, stacks = 0, 0
     ---- DEBUG (D7): o rendimento do PRIMEIRO ataque, isolado. E o que o ramo nao-sustentado
     ---- do RATOAI_ExpectedRatio credita a signature -- ela dispara uma vez so. Sai de graca:
@@ -698,14 +809,29 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ---- (B23a/B24): entra na CTH do ataque antes de expandir a rajada, e comeca em
         ---- zero porque as pilhas que a unidade ja carrega ja estao no CalcChanceToHit.
         local eff_cth = attack_mod
-        if i > 1 and aim_i < 3 and stacks > 0 then
+        ---- BUGFIX (B51): desligado no aCTH -- mesmo motivo do ramo gemeo em
+        ---- RATOAI_ScoreAttacksDetailed, documentado la.
+        if not angular and i > 1 and aim_i < 3 and stacks > 0 then
             local aim_pct = recoil_pct_by_aim[aim_i] or 100
             local recoil_penalty = MulDivRound(recoil_cth, aim_pct * stacks, 100)
             eff_cth = eff_cth + MulDivRound(recoil_penalty, RECOIL_STACKS_PCT, 100)
         end
 
+        local ratios
+        if ratios_by_aim then
+            ratios = ratios_by_aim[aim_i]
+            if ratios == nil then
+                ---- `body_part` vai junto: a escada e medida contra a silhueta que se esta
+                ---- mirando, e cabeca e torso nao produzem a mesma razao.
+                ratios = RATOAI_ConeRatios(unit, target, action, weapon, aim_i, attacker_pos,
+                                           shots, args.rat_sigma, body_part) or false
+                ratios_by_aim[aim_i] = ratios
+            end
+        end
+
         local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth, RATOAI_AimBonus(
-                                               aim_cth_by_level, aim_i, unit, target, action, weapon))
+                                               aim_cth_by_level, aim_i, unit, target, action, weapon),
+                                           ratios or nil)
         if i == 1 then
             hits_first = expandido
         end

@@ -6,11 +6,6 @@ function RATOAI_CUAEoptions()
             amount = 3 -- Three flare devices
         }
 
-        -- Fumaca e gas sao raros de proposito: a IA ainda nao usa cortina nem area denial
-        -- bem o bastante para justificar o volume. As granadas de Smoke/Tear que o jogo ja
-        -- distribui por LootDef nao sao tocadas -- isto aqui so limita o que NOS adicionamos.
-        -- Efeito colateral util do dedup por tipo (Loadout.lua:98): se a unidade ja veio com
-        -- fumaca do loadout base, esta policy e pulada e nao empilha em cima.
         local rare_gas = {type = {{"Smoke", 10}, {"Tear", 18}}, amount = 1}
 
         local role_table = {
@@ -34,7 +29,7 @@ function RATOAI_CUAEoptions()
                 },
 
                 extraUtility = {
-                    night_pack, {type = {{"Explosive", 40}, {"Flash", 50}}, amount = 1}, rare_gas
+                    night_pack, {type = {{"Explosive", 30}, {"Flash", 50}}, amount = 1}, rare_gas
                 }
             },
             Commander = {
@@ -45,7 +40,7 @@ function RATOAI_CUAEoptions()
             Demolitions = {
                 -- Granadeiro: volume ofensivo mantido, so o gas ficou raro.
                 extraUtility = {
-                    night_pack, {type = {{"Explosive", 70}, {"Timed", 100}}, amount = 3},
+                    night_pack, {type = {{"Explosive", 50}, {"Timed", 100}}, amount = 3},
                     {type = {{"Fire", 45}, {"Flash", 90}}, amount = 2},
                     {type = {{"Smoke", 20}, {"Tear", 35}}, amount = 1}
                 }
@@ -142,7 +137,7 @@ function RATOAI_AddExclusionCUAE()
     local end_game = {'BarretM82', 'AA12'}
 
     -- fix for too much sks 
-    local excl_table = {
+    local excl_table = { 
         Army = {"G11_1"},
         Adonis = {"G11_1"},
         Rebel = {'Type56A_1', 'Type56C_1', "G11_1"},
