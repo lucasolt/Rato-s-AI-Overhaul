@@ -4,27 +4,6 @@ const.RATOAI = const.RATOAI or {}
 
 ---------------------------------------------------------------------------------------------------
 ---- AIPolicyThreatExposure
-----
----- Responde UMA pergunta: "quanta ameaca alcanca este tile?"
-----
----- Existe porque a AIPolicyCustomSeekCover respondia duas perguntas ao mesmo tempo, e
----- mal. La, inimigos fora de alcance entravam no denominador valendo zero, entao um
----- tile com cobertura perfeita contra o unico inimigo que o alcanca pontuava 100/4 se
----- houvesse mais tres inimigos longe. Isso NAO era uma medida de ameaca -- era uma
----- diluicao acidental -- mas era a unica coisa no mod que penalizava "muita gente me
----- vendo" (o AIPolicyDontBeExposedAtCloserRange esta inteiro comentado e o
----- AvoidThreatenedAreas nao aparece no items.lua).
-----
----- Ao tornar a Seek Cover uma media ponderada de verdade, aquela diluicao sumiu. Este
----- arquivo devolve o sinal, agora separado e com peso proprio por archetype:
-----
-----   Seek Cover        -> "quao bem coberto eu estou contra quem me alcanca"  [Exposed, Base]
-----   Threat Exposure   -> "quanta gente me alcanca"                           [Penalty, 0]
-----
----- Usa RATOAI_ThreatRamp (definida em AIPOLICYPOS_CustomSeekCover.lua) -- a MESMA
----- rampa da Seek Cover, de proposito: as duas nao podem divergir de nocao de alcance.
-----
----- NAO esta ligada em nenhum archetype. Adicione onde quiser em items.lua.
 ---------------------------------------------------------------------------------------------------
 DefineClass.AIPolicyThreatExposure = {
     __parents = {"AIPositioningPolicy"},
@@ -34,6 +13,7 @@ DefineClass.AIPolicyThreatExposure = {
         {id = "end_of_turn", editor = "bool", default = true, read_only = true, no_edit = true},
         {id = "optimal_location", editor = "bool", default = true, read_only = true, no_edit = true},
         {
+            category = "Threat",
             id = "visibility_mode",
             name = "Visibility Mode",
             editor = "choice",
@@ -42,24 +22,12 @@ DefineClass.AIPolicyThreatExposure = {
                 return {"self", "team", "all"}
             end
         }, {
+            category = "Threat",
             id = "Penalty",
             name = "Penalidade (saturada)",
             help = "Score quando a ameaca atinge MaxThreat. O retorno vive em [Penalty, 0].",
             editor = "number",
             default = -100
-        }, {
-            id = "MaxThreat",
-            name = "Ameaca de saturacao",
-            help = "Quantos inimigos colados equivalem a penalidade cheia. 3 = tres inimigos " ..
-                "a queima-roupa, ou seis a meio alcance.\n" ..
-                "0 = usar a constante compartilhada const.RATOAI.ThreatSaturation (recomendado). " ..
-                "Um valor proprio aqui SO faz sentido se a Seek Cover deste archetype " ..
-                "estiver com ThreatRelative = 0; caso contrario as duas normalizam " ..
-                "diferente e o cancelamento entre cobertura e exposicao quebra sem aviso.",
-            editor = "number",
-            default = 0,
-            min = 0,
-            max = 20
         }, {
             ---------------------------------------------------------------------------
             ---- O CANCELADOR
@@ -87,6 +55,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- policies vira contagem dobrada. Tire ela da lista (ou zere o Weight).
             ---- A Seek Cover continua util sozinha em listas sem esta policy.
             ---------------------------------------------------------------------------
+            category = "Cover & Stance",
             id = "CoverCancels",
             name = "Cobertura cancela a ameaca (aqui dentro)",
             help = "Cada inimigo entra com rampa x (100 - cobertura). Cobertura total " ..
@@ -101,6 +70,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- zera a ameaca exatamente; com 70, cobertura total ainda deixa 30% da
             ---- ameaca de pe. E o botao de "quanto eu confio em cobertura", que e o mesmo
             ---- que "quanto eu prefiro sobreviver a avancar".
+            category = "Cover & Stance",
             id = "CoverTrust",
             name = "Confianca na cobertura (%)",
             help = "So com `CoverCancels` ligado. 100 = cobertura total cancela a ameaca " ..
@@ -134,6 +104,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- para 6 tiles (Rato-s-Gameplay-Balance-and-Overhaul-3/Code/__MainParams.lua:62).
             ---- 2-3 tiles e o ajuste conservador: pega so quem contorna a cobertura com 1 AP.
             ---------------------------------------------------------------------------
+            category = "Cover & Stance",
             id = "CoverNearTiles",
             name = "Raio de exclusao da cobertura (tiles)",
             help = "Abaixo desta distancia a confianca na cobertura cai de CoverTrust " ..
@@ -148,6 +119,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- O piso da rampa acima. Separado do CoverTrust de proposito: um controla
             ---- "quanto eu confio em cobertura", o outro "quanto eu desconfio dela com
             ---- o cara no meu colo". Sao dois botoes independentes.
+            category = "Cover & Stance",
             id = "CoverTrustNear",
             name = "Confianca na cobertura colado (%)",
             help = "Confianca aplicada com o inimigo a distancia 0. Interpola " ..
@@ -185,6 +157,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- e mais forte que o Prone -30 em qualquer distancia, entao dar prioridade
             ---- a ela e o resultado conservador -- a IA nunca superestima o tile.)
             ---------------------------------------------------------------------------
+            category = "Cover & Stance",
             id = "StanceCancels",
             name = "Postura do destino abate a ameaca",
             help = "Agachar/deitar no destino reduz a ameaca que chega nele, com o " ..
@@ -199,6 +172,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- acredita na postura exatamente como o jogo a paga. Abaixo disso ela
             ---- desconta -- util porque deitar tem custo de AP para desfazer, e um tile
             ---- so bom deitado e um tile do qual e caro sair.
+            category = "Cover & Stance",
             id = "StanceTrust",
             name = "Confianca na postura (%)",
             help = "So com `StanceCancels` ligado. 100 = a postura vale o que o GBO3 paga " ..
@@ -209,31 +183,10 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 100
         }, {
-            ---- Espelham os `max_dist` hardcoded do CTH_cover_prone.lua (24 e 26 tiles).
-            ---- Se aqueles mudarem no GBO3, mude estes junto -- sao o mesmo numero, e nao
-            ---- ha como ler de la (estao dentro do corpo da CalcValue, nao no preset).
-            id = "ProneMaxTiles",
-            name = "Distancia de saturacao do Prone (tiles)",
-            help = "Distancia em que deitado rende o PronePenalty CHEIO; abaixo dela o " ..
-                "beneficio cai linearmente ate zero. Espelha o max_dist = 24 do " ..
-                "CTH_cover_prone.lua do GBO3 -- mantenha os dois iguais.",
-            editor = "number",
-            default = 24,
-            min = 1,
-            max = 60
-        }, {
-            id = "CrouchMaxTiles",
-            name = "Distancia de saturacao do Crouch (tiles)",
-            help = "Idem para agachado. Espelha o max_dist = 26 do CTH_cover_prone.lua " ..
-                "do GBO3.",
-            editor = "number",
-            default = 26,
-            min = 1,
-            max = 60
-        }, {
             ---- Ver o cabecalho de RATOAI_ThreatRamp em AIPOLICYPOS_CustomSeekCover.lua
             ---- para o porque. Resumo: a rampa linear a partir do zero contradiz a curva
             ---- de precisao do jogo em toda a primeira metade do alcance.
+            category = "Range",
             id = "PlateauTiles",
             name = "Plato da rampa (tiles)",
             help = "Distancia ate onde o inimigo pesa 100 antes de a rampa comecar a " ..
@@ -265,6 +218,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- quem esta perto de mim AGORA".
             ----
             ---------------------------------------------------------------------------
+            category = "Range",
             id = "RangeCapTiles",
             name = "Teto de alcance considerado (tiles)",
             help = "Alcance maximo que qualquer inimigo pode ter aos olhos desta " ..
@@ -288,6 +242,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- de quem esta perto: aqui o gradiente proximo fica quase intacto.
             ---- Os dois se somam se voce ligar ambos.
             ---------------------------------------------------------------------------
+            category = "Range",
             id = "FalloffCurve",
             name = "Curvatura da queda (%)",
             help = "0 = queda linear do plato ate o alcance (default). " ..
@@ -299,6 +254,7 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 100
         }, {
+            category = "Range",
             id = "MeleeRange",
             name = "Alcance corpo a corpo (tiles)",
             help = "Alcance usado para inimigos sem arma de fogo.",
@@ -366,6 +322,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- Deliberadamente FRACO: o inimigo pode virar, e virar satura. Isto e
             ---- desempate entre tiles parecidos, nao argumento.
             ---------------------------------------------------------------------------
+            category = "Enemy Readiness",
             id = "SetupBias",
             name = "Custo de preparo do inimigo enviesa a ameaca",
             help = "Pesa cada inimigo por quanto AP falta a ele para dar um tiro BOM " ..
@@ -375,28 +332,6 @@ DefineClass.AIPolicyThreatExposure = {
                 "como pronto. Sem arma de fogo nao se aplica.",
             editor = "bool",
             default = true
-        }, {
-            id = "SetupReadyPct",
-            name = "Ameaca de quem esta PRONTO (%)",
-            help = "Multiplicador quando o inimigo pode atirar bem aqui sem gastar AP " ..
-                "nenhum (em stance, tile dentro do meio-cone). 100 = sem efeito.\n" ..
-                "0 = usar const.RATOAI.ThreatSetupReady (recomendado -- e o valor " ..
-                "ajustavel no console sem recarregar mod).",
-            editor = "number",
-            default = 0,
-            min = 0,
-            max = 300
-        }, {
-            id = "SetupCostlyPct",
-            name = "Ameaca de quem esta DESPREPARADO (%)",
-            help = "Multiplicador quando o custo de preparo satura no teto do jogo " ..
-                "(ap_stance + aim_cost). 100 = sem efeito.\n" ..
-                "0 = usar const.RATOAI.ThreatSetupCostly. Para zerar de verdade use 1, " ..
-                "nao 0 -- 0 aqui significa 'herdar a constante'.",
-            editor = "number",
-            default = 0,
-            min = 0,
-            max = 300
         }, {
             ---------------------------------------------------------------------------
             ---- READINESS SHAPES THE FALLOFF, NOT JUST THE AMPLITUDE
@@ -440,6 +375,7 @@ DefineClass.AIPolicyThreatExposure = {
             ----
             ---- 0 = off (default -- no calibrated archetype moves).
             ---------------------------------------------------------------------------
+            category = "Enemy Readiness",
             id = "SetupCurveSpread",
             name = "Readiness bends the falloff (%)",
             help = "Extra falloff curvature applied to an UNPREPARED enemy, on top of " ..
@@ -453,6 +389,7 @@ DefineClass.AIPolicyThreatExposure = {
             min = 0,
             max = 100
         }, {
+            category = "Information (LOS & Memory)",
             id = "RequireLOS",
             name = "Ignorar tiles que ninguem enxerga",
             help = "Zera a ameaca quando o cache de LOS do motor diz que NENHUM inimigo " ..
@@ -461,6 +398,47 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo. Custo: uma consulta de tabela, zero raycast novo.",
             editor = "bool",
             default = true
+        }, {
+            ---------------------------------------------------------------------------
+            ---- LOS NAO E FATO DE PERTO -- E UMA MEDICAO VOLATIL  (BUGFIX B54)
+            ----
+            ---- Mesmo argumento do `CoverNearTiles`, transposto. O portao de LOS mede
+            ---- contra a posicao ATUAL do inimigo, e mudar essa posicao e barato: girar
+            ---- custa 0 AP e um passo lateral custa 1. Um tile escuro visto de onde o
+            ---- inimigo esta AGORA, a 2 tiles, nao e um tile seguro -- e um tile a que
+            ---- ele chega com um passo. Nao e a LOS que vale menos de perto, e a MEDICAO
+            ---- que e volatil de perto: exatamente o argumento do CoverNearTiles.
+            ----
+            ---- Medido no processo vivo (LegionRaidLeader:771 x MD, 213 destinos, turno
+            ---- 6): o destino a 8 tiles do MD marcava ameaca ZERO, e o de 5 tiles
+            ---- descartava o MD inteiro do somatorio. Sao justamente as coberturas
+            ---- coladas no inimigo que a IA estava lendo como limpas.
+            ----
+            ---- Vira CONFIANCA e nao isencao, de proposito: isencao dura cria um degrau
+            ---- em N tiles, e degrau em score de posicionamento reaparece depois como
+            ---- "a IA se recusa a pisar naquele tile". Aqui a ausencia de LOS vale 100%
+            ---- da ameaca colado (nao acredito nela) e 0% em N tiles (acredito por
+            ---- inteiro). Entra no mesmo slot do `mem_pct`, e pela mesma razao.
+            ----
+            ---- Custo NEGATIVO: o teste de distancia fica ANTES da consulta de LOS e a
+            ---- dispensa. A batelada de CheckLOS ja e por inimigo sobre todos os
+            ---- destinos, entao nada novo passa a ser calculado.
+            ---------------------------------------------------------------------------
+            category = "Information (LOS & Memory)",
+            id = "LOSNearTiles",
+            name = "Raio de desconfianca do LOS (tiles)",
+            help = "Dentro desta distancia, o inimigo que NAO enxerga este tile deixa " ..
+                "de ser descartado e passa a pesar por confianca: 100% da ameaca " ..
+                "colado, caindo linearmente ate 0% nesta distancia.\n" ..
+                "0 = desligado: sem LOS e sem ameaca nenhuma, a qualquer distancia.\n" ..
+                "So tem efeito com `RequireLOS` ligado.",
+            editor = "number",
+            default = 6,
+            min = 0,
+            max = 30,
+            no_edit = function(self)
+                return not self.RequireLOS
+            end
         }, {
             ---------------------------------------------------------------------------
             ---- MEMORIA  (BUGFIX B52)
@@ -479,6 +457,7 @@ DefineClass.AIPolicyThreatExposure = {
             ---- e envelhece. O cheat seria o que a policy faz com inimigo VISIVEL --
             ---- ler `enemy:GetPos()` -- aplicado a quem ninguem esta vendo.
             ---------------------------------------------------------------------------
+            category = "Information (LOS & Memory)",
             id = "MemoryStandin",
             name = "Lembrar da ultima posicao vista",
             help = "Inimigo que sumiu continua pesando, a partir de onde foi visto " ..
@@ -489,6 +468,45 @@ DefineClass.AIPolicyThreatExposure = {
             editor = "bool",
             default = true
         }, {
+            category = "Advanced (constants & mirrors)",
+            id = "MaxThreat",
+            name = "Ameaca de saturacao",
+            help = "Quantos inimigos colados equivalem a penalidade cheia. 3 = tres inimigos " ..
+                "a queima-roupa, ou seis a meio alcance.\n" ..
+                "0 = usar a constante compartilhada const.RATOAI.ThreatSaturation (recomendado). " ..
+                "Um valor proprio aqui SO faz sentido se a Seek Cover deste archetype " ..
+                "estiver com ThreatRelative = 0; caso contrario as duas normalizam " ..
+                "diferente e o cancelamento entre cobertura e exposicao quebra sem aviso.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 20
+        }, {
+            category = "Advanced (constants & mirrors)",
+            id = "SetupReadyPct",
+            name = "Ameaca de quem esta PRONTO (%)",
+            help = "Multiplicador quando o inimigo pode atirar bem aqui sem gastar AP " ..
+                "nenhum (em stance, tile dentro do meio-cone). 100 = sem efeito.\n" ..
+                "0 = usar const.RATOAI.ThreatSetupReady (recomendado -- e o valor " ..
+                "ajustavel no console sem recarregar mod).",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 300
+        }, {
+            category = "Advanced (constants & mirrors)",
+            id = "SetupCostlyPct",
+            name = "Ameaca de quem esta DESPREPARADO (%)",
+            help = "Multiplicador quando o custo de preparo satura no teto do jogo " ..
+                "(ap_stance + aim_cost). 100 = sem efeito.\n" ..
+                "0 = usar const.RATOAI.ThreatSetupCostly. Para zerar de verdade use 1, " ..
+                "nao 0 -- 0 aqui significa 'herdar a constante'.",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 300
+        }, {
+            category = "Advanced (constants & mirrors)",
             id = "MemoryPct",
             name = "Confianca na memoria (%)",
             help = "Quanto vale a ameaca de um inimigo LEMBRADO, contra a de um " ..
@@ -503,6 +521,7 @@ DefineClass.AIPolicyThreatExposure = {
                 return not self.MemoryStandin
             end
         }, {
+            category = "Advanced (constants & mirrors)",
             id = "MemoryTurns",
             name = "Validade da memoria (turnos)",
             help = "Turnos ate a memoria valer zero. 1 = so o turno em que sumiu." .. "\n" ..
@@ -514,6 +533,30 @@ DefineClass.AIPolicyThreatExposure = {
             no_edit = function(self)
                 return not self.MemoryStandin
             end
+        }, {
+            ---- Espelham os `max_dist` hardcoded do CTH_cover_prone.lua (24 e 26 tiles).
+            ---- Se aqueles mudarem no GBO3, mude estes junto -- sao o mesmo numero, e nao
+            ---- ha como ler de la (estao dentro do corpo da CalcValue, nao no preset).
+            category = "Advanced (constants & mirrors)",
+            id = "ProneMaxTiles",
+            name = "Distancia de saturacao do Prone (tiles)",
+            help = "Distancia em que deitado rende o PronePenalty CHEIO; abaixo dela o " ..
+                "beneficio cai linearmente ate zero. Espelha o max_dist = 24 do " ..
+                "CTH_cover_prone.lua do GBO3 -- mantenha os dois iguais.",
+            editor = "number",
+            default = 24,
+            min = 1,
+            max = 60
+        }, {
+            category = "Advanced (constants & mirrors)",
+            id = "CrouchMaxTiles",
+            name = "Distancia de saturacao do Crouch (tiles)",
+            help = "Idem para agachado. Espelha o max_dist = 26 do CTH_cover_prone.lua " ..
+                "do GBO3.",
+            editor = "number",
+            default = 26,
+            min = 1,
+            max = 60
         }
     }
 }
@@ -534,6 +577,9 @@ function AIPolicyThreatExposure:GetEditorView()
     end
     if self.SetupBias and (self.SetupCurveSpread or 0) > 0 then
         partes[#partes + 1] = string.format("preparo +%d%%", self.SetupCurveSpread)
+    end
+    if self.RequireLOS and (self.LOSNearTiles or 0) > 0 then
+        partes[#partes + 1] = string.format("los %dt", self.LOSNearTiles)
     end
     if #partes == 0 then
         return "Threat Exposure"
@@ -636,6 +682,16 @@ function AIPolicyThreatExposure:GetCoverTrust(dist)
     ---- (trust - near_trust) pode ser negativo se alguem inverter os dois no editor;
     ---- o Clamp final segura isso sem virar buraco silencioso.
     return Clamp(near_trust + MulDivRound(trust - near_trust, dist, near), 0, 100)
+end
+
+---- Quanto vale a AUSENCIA de LOS contra UM inimigo, em %. Ver o cabecalho da property
+---- LOSNearTiles. 100 = colado, nao acredito no portao; 0 = longe, acredito por inteiro.
+function AIPolicyThreatExposure:LOSConfidence(dist)
+    local near = (self.LOSNearTiles or 0) * const.SlabSizeX
+    if near <= 0 or not dist or dist >= near then
+        return 0
+    end
+    return 100 - MulDivRound(100, dist, near)
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -1120,7 +1176,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.skip, out.los, out.fonte, out.trust = nil, nil, nil, nil
         out.ready_t, out.capped, out.d, out.range = nil, nil, nil, nil
         out.ramp, out.uncovered, out.face, out.fator, out.curve_e = nil, nil, nil, nil, nil
-        out.mem_pct, out.mem_age = nil, nil
+        out.mem_pct, out.mem_age, out.los_pct = nil, nil, nil
     end
 
     ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora.
@@ -1186,15 +1242,24 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         return 0, 0
     end
 
-    ---- BUGFIX (B50): quem nao me ve nao me ameaca. Ver o cabecalho de RATOAI_ThreatEnemyLOS.
-    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos) == false then
-        if out then
-            out.skip, out.los = "sem LOS", false
-        end
-        return 0, 0
-    end
-
     local d = att_pos:Dist(target_pos)
+
+    ---- BUGFIX (B50): quem nao me ve nao me ameaca. Ver o cabecalho de RATOAI_ThreatEnemyLOS.
+    ---- BUGFIX (B54): so a partir de LOSNearTiles. Mais perto que isso, "ele nao me ve" e uma
+    ---- medicao contra uma posicao que ele muda de graca, entao vira confianca em vez de portao.
+    local los_pct
+    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos) == false then
+        los_pct = self:LOSConfidence(d)
+        if los_pct <= 0 then
+            if out then
+                out.skip, out.los = "sem LOS", false
+            end
+            return 0, 0
+        end
+        if out then
+            out.los = false
+        end
+    end
     local range, is_firearm, capped = self:GetEnemyRange(enemy)
 
     ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e nao so
@@ -1235,6 +1300,11 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     if mem_pct then
         mods = MulDivRound(mods, mem_pct, 100)
     end
+    ---- BUGFIX (B54): mesmo slot, e pela mesma razao -- "posso estar errado sobre o que ele
+    ---- alcanca" e incerteza sobre a CAPACIDADE dele, nao algo que a cobertura deste tile tirou.
+    if los_pct then
+        mods = MulDivRound(mods, los_pct, 100)
+    end
 
     local bruta = (mods == 100) and ramp or MulDivRound(ramp, mods, 100)
     if bruta > p.ceiling then
@@ -1247,7 +1317,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.ramp, out.uncovered, out.trust, out.fonte = ramp, uncovered, trust, fonte
         out.face, out.ready_t, out.curve_e, out.fator = face, ready_t, curve_e, fator
         out.is_firearm = is_firearm
-        out.mem_pct, out.mem_age = mem_pct, mem_age
+        out.mem_pct, out.mem_age, out.los_pct = mem_pct, mem_age, los_pct
     end
     return bruta, liquida
 end
@@ -1285,8 +1355,12 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- BUGFIX (B52): `not self:HasMemoryStandin(context)` -- ver o cabecalho daquele metodo.
     ---- A ordem importa: `HasMemoryStandin` custa uma passada pelos inimigos UMA vez por turno,
     ---- e o teste de tabela a esquerda continua descartando a maioria dos destinos de graca.
-    if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false and
-        not self:HasMemoryStandin(context) then
+    ---- BUGFIX (B54): com LOSNearTiles o atalho tem o mesmo defeito -- ele afirma "ninguem ve
+    ---- este tile" e a policy passou a discordar disso de perto. Medido no cabecalho do
+    ---- RATOAI_ThreatEnemyLOS: o cache so responde `false` em 10 de 2360 destinos, entao abrir
+    ---- mao do atalho custa o laco completo em ~10 tiles por turno.
+    if self.RequireLOS and (self.LOSNearTiles or 0) <= 0 and g_AIDestEnemyLOSCache and
+        g_AIDestEnemyLOSCache[dest] == false and not self:HasMemoryStandin(context) then
         return 0
     end
 
@@ -1329,7 +1403,12 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                 ---- so anota quando o raio realmente mordeu -- senao poluiria toda linha do
                 ---- overlay com um numero que nunca muda
                 if out.trust and p.near > 0 and out.d < p.near then
-                    nota = string.format(" | COLADO: confianca %d%%", out.trust)
+                    ---- era `nota =`, que APAGAVA a linha LEMBRADO de um inimigo perto
+                    nota = nota .. string.format(" | COLADO: confianca %d%%", out.trust)
+                end
+                if out.los_pct then
+                    nota = nota .. string.format(" | SEM LOS, mas a %st: ameaca x%d%%",
+                                                 tostring(tiles(out.d)), out.los_pct)
                 end
                 if out.fator ~= 100 then
                     nota = nota .. string.format(" | status: ameaca x%d%%", out.fator)
@@ -1409,7 +1488,10 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                            (p.curve > 0 and string.format(" | curva %d%%", p.curve) or "") ..
                            (p.spread > 0 and
                                string.format(" | preparo curva +%d%%", p.spread) or "") ..
-                           (self.RequireLOS and " | LOS por inimigo" or "")
+                           (self.RequireLOS and
+                               (((self.LOSNearTiles or 0) > 0) and
+                                   string.format(" | LOS por inimigo (desconfia dentro de %dt)",
+                                                 self.LOSNearTiles) or " | LOS por inimigo") or "")
 
         local head = escala .. "\n" ..
                          string.format("inimigos em context.enemies: %d\n" ..
