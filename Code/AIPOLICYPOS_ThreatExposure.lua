@@ -465,6 +465,59 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo. Custo: uma consulta de tabela, zero raycast novo.",
             editor = "bool",
             default = true
+        }, {
+            ---------------------------------------------------------------------------
+            ---- MEMORIA  (BUGFIX B52)
+            ----
+            ---- Sem isto, um inimigo que quebra a linha de visao vale ZERO neste
+            ---- somatorio -- e o tile na frente da arma dele, que era o pior do mapa
+            ---- no turno passado, fica limpo neste. A IA anda para dentro do arco de
+            ---- tiro e o inimigo reaparece atirando. Nao le como cautela nem como peso
+            ---- mal calibrado: le como a IA nao ter memoria de um segundo atras.
+            ----
+            ---- Ligado, o inimigo invisivel continua na conta a partir da ultima
+            ---- posicao em que a EQUIPE dele o viu (RATOAI_LastSeenPos), com a ameaca
+            ---- descontada por MemoryPct e envelhecida ate MemoryTurns.
+            ----
+            ---- Nao e cheat: a posicao vem de uma leitura que a propria equipe fez,
+            ---- e envelhece. O cheat seria o que a policy faz com inimigo VISIVEL --
+            ---- ler `enemy:GetPos()` -- aplicado a quem ninguem esta vendo.
+            ---------------------------------------------------------------------------
+            id = "MemoryStandin",
+            name = "Lembrar da ultima posicao vista",
+            help = "Inimigo que sumiu continua pesando, a partir de onde foi visto " ..
+                "pela ultima vez, com desconto de confianca e prazo de validade." .. "\n" ..
+                "A memoria e da EQUIPE, nao da unidade -- entao com Visibility Mode " ..
+                "\"self\" o substituto ainda usa o que a equipe viu. E deliberado: " ..
+                "saber onde o inimigo estava e coisa que se repassa pelo radio.",
+            editor = "bool",
+            default = true
+        }, {
+            id = "MemoryPct",
+            name = "Confianca na memoria (%)",
+            help = "Quanto vale a ameaca de um inimigo LEMBRADO, contra a de um " ..
+                "visivel, no turno em que ele sumiu. Cai linearmente ate zero em " ..
+                "MemoryTurns." .. "\n" ..
+                "0 = usar const.RATOAI.ThreatMemoryPct (recomendado).",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 100,
+            no_edit = function(self)
+                return not self.MemoryStandin
+            end
+        }, {
+            id = "MemoryTurns",
+            name = "Validade da memoria (turnos)",
+            help = "Turnos ate a memoria valer zero. 1 = so o turno em que sumiu." .. "\n" ..
+                "0 = usar const.RATOAI.ThreatMemoryTurns (recomendado).",
+            editor = "number",
+            default = 0,
+            min = 0,
+            max = 10,
+            no_edit = function(self)
+                return not self.MemoryStandin
+            end
         }
     }
 }
@@ -710,6 +763,12 @@ end
 ---------------------------------------------------------------------------------------------------
 const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
 
+--TODO: add Pinned Down mod suppression effects
+const.RATOAI.ThreatEffectMods.Suppressed = 20
+const.RATOAI.ThreatEffectMods.Blinded = 20
+const.RATOAI.ThreatEffectMods.Inaccurate = 20
+const.RATOAI.ThreatEffectMods.dazed_flashbang = 30 
+
 ---------------------------------------------------------------------------------------------------
 ---- CUSTO DE PREPARO -- magnitudes compartilhadas (ver a property SetupBias)
 ----
@@ -720,8 +779,30 @@ const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
 ---- FRACOS DE PROPOSITO: desempatam tiles parecidos, nao devem inverter uma diferenca real de
 ---- cobertura ou distancia.
 ---------------------------------------------------------------------------------------------------
-const.RATOAI.ThreatSetupReady = 150 ---- custo 0: em stance e alinhado (ou emplacado)
-const.RATOAI.ThreatSetupCostly = 50 ---- custo no teto do jogo (ap_stance + aim_cost)
+---------------------------------------------------------------------------------------------------
+---- MEMORIA -- magnitudes compartilhadas (ver as properties MemoryPct / MemoryTurns)
+----
+---- Aqui e nao so no preset pelo mesmo motivo do bloco de preparo abaixo: sao os numeros que se
+---- quer A/B no console sem recarregar o mod.
+----
+---- ThreatMemoryPct = 60. Um inimigo lembrado NAO vale o mesmo que um visto -- ele pode ter
+---- saido, e a IA nao tem como saber. Mas tambem nao vale zero, que e o que a policy fazia: 60%
+---- deixa a memoria desempatar tiles e ainda perder para um inimigo de verdade no mesmo lugar.
+----
+---- ThreatMemoryTurns = 2. Dois turnos e mais ou menos o que uma unidade leva para atravessar o
+---- proprio alcance -- passado isso a posicao antiga nao diz mais nada e insistir nela seria
+---- pior que esquecer. O envelhecimento e LINEAR ate la, entao "sumiu agora" e "sumiu ha um
+---- turno" nao pesam igual.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.ThreatMemoryPct == nil then
+    const.RATOAI.ThreatMemoryPct = 60
+end
+if const.RATOAI.ThreatMemoryTurns == nil then
+    const.RATOAI.ThreatMemoryTurns = 2
+end
+
+const.RATOAI.ThreatSetupReady = 130--150 ---- custo 0: em stance e alinhado (ou emplacado)
+const.RATOAI.ThreatSetupCostly = 75--50 ---- custo no teto do jogo (ap_stance + aim_cost)
 
 ---- Valvula MESTRA: derruba o termo em TODAS as instancias sem mexer em preset. Mesmo par
 ---- "declarar aqui + ler com `~= false`" do const.RATOAI.ExposedProne -- declarada de proposito
@@ -899,7 +980,10 @@ end
 ---- `nil` continua significando "nao da para saber" e NAO bloqueia, mesma escolha
 ---- conservadora do portao antigo. A diferenca e que agora quase nunca e nil.
 ---------------------------------------------------------------------------------------------------
-function RATOAI_ThreatEnemyLOS(context, enemy, dest)
+---- BUGFIX (B52): `ppos_override` e a posicao LEMBRADA de um inimigo invisivel. O cache por
+---- inimigo continua valendo sem chave nova porque a escolha entre "posicao atual" e "posicao
+---- lembrada" e ESTAVEL dentro do turno: ou o inimigo esta visivel a chamada inteira, ou nao esta.
+function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override)
     if not context or not dest then
         return nil
     end
@@ -909,7 +993,8 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest)
         context.__ratoai_enemy_los = cache
     end
 
-    local ppos = context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy]
+    local ppos = ppos_override or
+                     (context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy])
     local per = cache[enemy]
     if per == nil then
         per = false
@@ -947,6 +1032,105 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest)
     local _, data = CheckLOS({ppos}, {dest}, enemy:GetSightRadius())
     hit = not not (data and data[1])
     per[dest] = hit
+    return hit
+end
+
+---------------------------------------------------------------------------------------------------
+---- MEMORIA VELHA DEMAIS PARA ACREDITAR  (BUGFIX B52)
+----
+---- Lembrar de onde o inimigo estava so ajuda enquanto nao da para conferir. Se a unidade ENXERGA
+---- o tile lembrado e nao ve ninguem la, a memoria esta objetivamente errada -- e continuar
+---- pesando por ela faz a IA se esconder de um fantasma que ela esta olhando.
+----
+---- E o mesmo criterio que o motor aplica ao `last_known_enemy_pos`: chegou a ter linha de visao
+---- para o ponto, apaga (CombatAI.lua:2489-2495). Aqui nao se apaga o registro -- outra unidade da
+---- equipe, de outro angulo, pode nao ter esse alcance -- so nao se usa nesta avaliacao.
+----
+---- Uma unica raia por inimigo por turno, memoizada no context: `dest` nao entra, porque a
+---- pergunta e sobre a unidade que decide, nao sobre o tile que ela avalia.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ThreatMemoryStale(context, enemy, ppos)
+    local unit = context and context.unit
+    if not unit or not ppos then
+        return false
+    end
+    local cache = context.__ratoai_mem_stale
+    if not cache then
+        cache = {}
+        context.__ratoai_mem_stale = cache
+    end
+    local hit = cache[enemy]
+    if hit ~= nil then
+        return hit
+    end
+    local pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(ppos))
+    hit = IsValidPos(pos) and CheckLOS(pos, unit, unit:GetSightRadius()) and true or false
+    cache[enemy] = hit
+    return hit
+end
+
+---------------------------------------------------------------------------------------------------
+---- Confianca nesta memoria, em %. 0 = nao usar (nunca vi, ou a memoria venceu).
+---- Linear: cheia no turno em que sumiu, zero em `turns`.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:MemoryConfidence(age)
+    if not age then
+        return 0
+    end
+    local turns = (self.MemoryTurns or 0) > 0 and self.MemoryTurns or
+                      (const.RATOAI.ThreatMemoryTurns or 0)
+    if turns <= 0 or age >= turns then
+        return 0
+    end
+    local base = (self.MemoryPct or 0) > 0 and self.MemoryPct or
+                     (const.RATOAI.ThreatMemoryPct or 0)
+    return MulDivRound(base, turns - age, turns)
+end
+
+---------------------------------------------------------------------------------------------------
+---- O ATALHO AGREGADO AINDA VALE?  (BUGFIX B52)
+----
+---- O `EvalDest` comeca com um atalho barato: se `g_AIDestEnemyLOSCache[dest]` e `false`, NINGUEM
+---- ve este tile, entao nao ha o que somar. Ele e do motor e e calculado sobre as posicoes REAIS
+---- dos inimigos -- inclusive as que esta equipe nao esta enxergando.
+----
+---- Com a memoria ligada isso deixa de ser um atalho e vira uma contradicao: a policy passa a
+---- afirmar "de onde eu vi ele por ultimo, ele alcanca este tile" e o atalho responde "nao, porque
+---- de onde ele esta AGORA ele nao alcanca" -- que e precisamente a informacao que a IA nao tem.
+---- Na pratica o atalho apagaria o recurso justamente no caso que ele existe para cobrir: o
+---- inimigo que saiu de vista e por isso parou de aparecer no cache.
+----
+---- Entao o atalho so vale quando nao ha memoria nenhuma em jogo neste turno. Uma passada pelos
+---- inimigos, memoizada por (context, instancia da policy) -- por instancia porque MemoryTurns e
+---- MemoryPct sao por preset e mudam a resposta.
+---------------------------------------------------------------------------------------------------
+function AIPolicyThreatExposure:HasMemoryStandin(context)
+    if not self.MemoryStandin then
+        return false
+    end
+    local cache = context.__ratoai_mem_any
+    if not cache then
+        cache = {}
+        context.__ratoai_mem_any = cache
+    end
+    local hit = cache[self]
+    if hit ~= nil then
+        return hit
+    end
+
+    hit = false
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValid(enemy) and not (enemy:IsDead() or enemy:IsDowned()) and
+            not self:SeesEnemy(context, enemy) then
+            local ppos, age = RATOAI_LastSeenPos(context.unit, enemy)
+            if ppos and self:MemoryConfidence(age) > 0 and
+                not RATOAI_ThreatMemoryStale(context, enemy, ppos) then
+                hit = true
+                break
+            end
+        end
+    end
+    cache[self] = hit
     return hit
 end
 
@@ -1033,20 +1217,53 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.skip, out.los, out.fonte, out.trust = nil, nil, nil, nil
         out.ready_t, out.capped, out.d, out.range = nil, nil, nil, nil
         out.ramp, out.uncovered, out.face, out.fator, out.curve_e = nil, nil, nil, nil, nil
+        out.mem_pct, out.mem_age = nil, nil
     end
 
-    if not self:SeesEnemy(context, enemy) then
-        if out then
-            out.skip = "nao visivel, modo " .. tostring(self.visibility_mode)
-        end
-        return 0, 0
-    end
-    ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora
+    ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora.
+    ---- SUBIU (B52): antes vinha depois do teste de visibilidade, mas morto nao ameaca nem de
+    ---- memoria -- e este teste e mais barato que consultar a memoria e conferir a validade dela.
     if not (IsValid(enemy) and not (enemy:IsDead() or enemy:IsDowned())) then
         if out then
             out.skip = "abatido/morto"
         end
         return 0, 0
+    end
+
+    -----------------------------------------------------------------------------------------------
+    ---- ONDE ELE ESTA -- ou, quando nao da para ver, onde ele estava  (BUGFIX B52)
+    ----
+    ---- `mem_pct` fica nil para inimigo VISIVEL: e o que distingue os dois regimes daqui para
+    ---- baixo, e nao um `100` que se confundiria com "lembrado, mas com confianca cheia".
+    -----------------------------------------------------------------------------------------------
+    local mem_pct, mem_age
+    local mem_ppos
+    if not self:SeesEnemy(context, enemy) then
+        if not self.MemoryStandin then
+            if out then
+                out.skip = "nao visivel, modo " .. tostring(self.visibility_mode)
+            end
+            return 0, 0
+        end
+
+        local ppos, age = RATOAI_LastSeenPos(context.unit, enemy)
+        mem_pct = ppos and self:MemoryConfidence(age) or 0
+        if mem_pct <= 0 then
+            if out then
+                out.skip = ppos and string.format("memoria vencida (%d turnos)", age or -1) or
+                               "nao visivel e nunca visto"
+            end
+            return 0, 0
+        end
+
+        if RATOAI_ThreatMemoryStale(context, enemy, ppos) then
+            if out then
+                out.skip = "memoria desmentida (enxergo o tile e ele nao esta la)"
+            end
+            return 0, 0
+        end
+
+        mem_ppos, mem_age = ppos, age
     end
     ---- DEBUG (D8): filtro de isolamento do painel. Sempre true em partida normal.
     if not RATOAI_ThreatCounts(enemy) then
@@ -1056,7 +1273,9 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         return 0, 0
     end
 
-    local att_pos = RATOAI_ValidatePosZ(enemy:GetPos())
+    ---- BUGFIX (B52): a posicao LEMBRADA quando nao ha visao. Ler `enemy:GetPos()` de um inimigo
+    ---- que ninguem esta vendo era a unica parte desta policy que a IA nao tinha como saber.
+    local att_pos = RATOAI_ValidatePosZ(mem_ppos and RATOAI_UnpackPos(mem_ppos) or enemy:GetPos())
     if not IsValidPos(att_pos) then
         if out then
             out.skip = "posicao invalida"
@@ -1065,7 +1284,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     end
 
     ---- BUGFIX (B50): quem nao me ve nao me ameaca. Ver o cabecalho de RATOAI_ThreatEnemyLOS.
-    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest) == false then
+    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos) == false then
         if out then
             out.skip, out.los = "sem LOS", false
         end
@@ -1077,8 +1296,11 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
 
     ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e nao so
     ---- multiplicador da saida dela. Ver a property SetupCurveSpread.
+    ---- BUGFIX (B52): sem preparo para inimigo LEMBRADO. O termo pergunta "ele esta em stance e
+    ---- ja apontado para este tile?", e stance e angulo sao estado ATUAL -- exatamente o que se
+    ---- perdeu junto com a visao. A posicao antiga a IA leu; a postura de agora, nao.
     local face, ready_t, curve_e = 100, nil, p.curve
-    if p.setup then
+    if p.setup and not mem_pct then
         face, ready_t = RATOAI_SetupFactor(enemy, context, target_pos, p.ready_pct, p.costly_pct)
         if p.spread > 0 and ready_t then
             curve_e = Min(100, p.curve + MulDivRound(p.spread, 100 - ready_t, 100))
@@ -1104,6 +1326,12 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     if face ~= 100 then
         mods = MulDivRound(mods, face, 100)
     end
+    ---- BUGFIX (B52): a confianca na memoria entra junto com os outros multiplicadores da
+    ---- CAPACIDADE deste inimigo, e por isso na BRUTA -- "posso estar errado sobre ele" e do
+    ---- mesmo tipo que "ele esta suprimido", e nao algo que a cobertura deste tile cancelou.
+    if mem_pct then
+        mods = MulDivRound(mods, mem_pct, 100)
+    end
 
     local bruta = (mods == 100) and ramp or MulDivRound(ramp, mods, 100)
     if bruta > p.ceiling then
@@ -1116,6 +1344,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.ramp, out.uncovered, out.trust, out.fonte = ramp, uncovered, trust, fonte
         out.face, out.ready_t, out.curve_e, out.fator = face, ready_t, curve_e, fator
         out.is_firearm = is_firearm
+        out.mem_pct, out.mem_age = mem_pct, mem_age
     end
     return bruta, liquida
 end
@@ -1150,7 +1379,11 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- NINGUEM ve o tile, nao ha o que somar e nem vale abrir o laco. Distingue `false` (o
     ---- motor CHECOU e ninguem ve) de `nil` (nunca checou), e nil segue passando -- o portao
     ---- que de fato resolve o caso agora e o por inimigo, dentro do EnemyContribution.
-    if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false then
+    ---- BUGFIX (B52): `not self:HasMemoryStandin(context)` -- ver o cabecalho daquele metodo.
+    ---- A ordem importa: `HasMemoryStandin` custa uma passada pelos inimigos UMA vez por turno,
+    ---- e o teste de tabela a esquerda continua descartando a maioria dos destinos de graca.
+    if self.RequireLOS and g_AIDestEnemyLOSCache and g_AIDestEnemyLOSCache[dest] == false and
+        not self:HasMemoryStandin(context) then
         return 0
     end
 
@@ -1172,12 +1405,24 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
             if out.skip then
                 trace[#trace + 1] = string.format("  %s: PULADO (%s)", id, out.skip)
             elseif not p.cancels then
-                trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d", id,
+                trace[#trace + 1] = string.format("  %s: %st / alcance %st%s -> peso %d%s", id,
                                                   tostring(tiles(out.d)),
                                                   tostring(tiles(out.range)),
-                                                  out.capped and " (teto)" or "", out.ramp)
+                                                  out.capped and " (teto)" or "", out.ramp,
+                                                  out.mem_pct and
+                                                      string.format(
+                                                          " | LEMBRADO ha %d turno(s), %d%%",
+                                                          out.mem_age or 0, out.mem_pct) or "")
             else
                 local nota = ""
+                ---- BUGFIX (B52): primeiro de todos, porque muda o que a LINHA INTEIRA significa
+                ---- -- distancia e alcance passam a ser medidos de um ponto que talvez ja nao
+                ---- tenha ninguem. Sem isto o overlay mostra uma ameaca sem fonte visivel e quem
+                ---- le procura o bug na rampa.
+                if out.mem_pct then
+                    nota = string.format(" | LEMBRADO: visto ha %d turno(s), confianca %d%%",
+                                         out.mem_age or 0, out.mem_pct)
+                end
                 ---- so anota quando o raio realmente mordeu -- senao poluiria toda linha do
                 ---- overlay com um numero que nunca muda
                 if out.trust and p.near > 0 and out.d < p.near then

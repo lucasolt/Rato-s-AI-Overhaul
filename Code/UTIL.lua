@@ -274,3 +274,101 @@ function RATOAI_ConeRatios(unit, target, action, weapon, aim, attacker_pos, shot
                              aim or 0, false, attacker_pos, target:GetPos(), shots, sigma)
     return (ok and type(ratios) == "table") and ratios or nil
 end
+
+---------------------------------------------------------------------------------------------------
+---- MEMORIA DE POSICAO DE INIMIGO  (BUGFIX B52)
+----
+---- O PROBLEMA. Toda policy que soma ameaca itera `context.enemies` e descarta quem nao esta
+---- visivel. O efeito colateral e que um inimigo que quebra a linha de visao DESAPARECE do
+---- modelo: o tile na frente de onde ele estava, que era o pior tile do mapa no turno passado,
+---- fica com ameaca zero neste. A IA entao anda para dentro do arco de tiro dele -- e o inimigo
+---- reaparece assim que atira. Do lado de quem joga isso nao le como cautela nem como erro de
+---- peso, le como a IA nao ter memoria de um segundo atras.
+----
+---- O QUE ESTA TABELA E. A ultima posicao em que CADA equipe viu CADA inimigo, com o turno em
+---- que a viu. Nao substitui `context.enemy_visible` -- e o que se usa QUANDO ele diz nao.
+----
+---- POR QUE NAO USAR O QUE O MOTOR JA TEM. Duas coisas existem e nenhuma serve:
+----   `unit.last_known_enemy_pos` (Unit.lua:335) e UMA posicao por observador, sobrescrita pelo
+----   ultimo inimigo visto (UnitAwareness.lua:689). Nao da para perguntar "onde estava AQUELE",
+----   que e exatamente a pergunta de um somatorio por inimigo.
+----   `enemy.last_attack_pos` (Unit.lua:285) e por inimigo e util, mas responde "de onde ele
+----   atirou pela ultima vez", nao "onde eu o vi pela ultima vez", e nao tem data -- nao da para
+----   envelhecer. Fica como segunda fonte possivel se um dia valer a pena.
+----
+---- POR EQUIPE, e nao global: memoria e conhecimento, e conhecimento de uma equipe nao e de
+---- outra. Global faria a IA lembrar do que o time do jogador viu, que e cheat.
+----
+---- SO EQUIPE NAO-JOGADOR: e a memoria da IA. Gravar para o jogador seria trabalho puro.
+----
+---- ARMAZENAMENTO, nao configuracao -- mesma excecao documentada do `RATOAI_LastExpected`, e
+---- pelo mesmo motivo: precisa ser global de escopo de arquivo, e nao cabe em const.RATOAI.
+---------------------------------------------------------------------------------------------------
+RATOAI_LastSeen = {}
+
+---- Combate novo, memoria nova. Mesmo criterio do motor com `last_attack_pos`, que ele zera no
+---- CombatEnd (UnitActions.lua:2801): o que se viu na luta passada nao informa esta.
+function RATOAI_ForgetSeenPositions()
+    RATOAI_LastSeen = {}
+end
+
+OnMsg.CombatStart = RATOAI_ForgetSeenPositions
+OnMsg.CombatEnd = RATOAI_ForgetSeenPositions
+OnMsg.NewMap = RATOAI_ForgetSeenPositions
+
+---------------------------------------------------------------------------------------------------
+---- Gravacao. `VisibilityUpdate` (Visibility.lua:1193) e o momento exato em que "ele sumiu" passa
+---- a ser verdade -- gravar aqui e gravar o ultimo instante em que ainda dava para ver.
+----
+---- Le `g_Visibility[team]` direto em vez de chamar `HasVisibilityTo` por inimigo: a tabela ja e
+---- o mapa [unidade] -> valor de visibilidade daquele observador (Visibility.lua:362), entao o
+---- laco percorre so quem a equipe DE FATO enxerga, e nao todo o outro time.
+----
+---- `pairs` sem ordem definida nao e risco de desync aqui: cada chave e escrita de forma
+---- independente e nada consome random. O conteudo final e o mesmo em qualquer ordem.
+---------------------------------------------------------------------------------------------------
+function OnMsg.VisibilityUpdate()
+    if not g_Combat then
+        return
+    end
+    local turn = g_Combat.current_turn or 0
+    for _, team in ipairs(g_Teams or empty_table) do
+        if not team.player_team and team.side ~= "neutral" then
+            local vis = g_Visibility and g_Visibility[team]
+            if vis then
+                local mem = RATOAI_LastSeen[team]
+                if not mem then
+                    mem = {}
+                    RATOAI_LastSeen[team] = mem
+                end
+                for seen, value in pairs(vis) do
+                    if IsKindOf(seen, "Unit") and (value or 0) >= const.uvVisible and
+                        not seen:IsDead() and team:IsEnemySide(seen.team) then
+                        local rec = mem[seen]
+                        if rec then
+                            rec.pos, rec.turn = GetPackedPosAndStance(seen), turn
+                        else
+                            mem[seen] = {pos = GetPackedPosAndStance(seen), turn = turn}
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+---------------------------------------------------------------------------------------------------
+---- Leitura. Devolve a posicao EMPACOTADA (pos + stance, a mesma moeda de
+---- `context.enemy_pack_pos_stance`) e a IDADE em turnos. `nil` = nunca vi este inimigo nesta
+---- luta, e ai nao ha memoria nenhuma a usar -- que e diferente de "a memoria expirou".
+---------------------------------------------------------------------------------------------------
+function RATOAI_LastSeenPos(unit, enemy)
+    local team = unit and unit.team
+    local mem = team and RATOAI_LastSeen[team]
+    local rec = mem and mem[enemy]
+    if not rec or not rec.pos then
+        return nil
+    end
+    local turn = (g_Combat and g_Combat.current_turn) or rec.turn
+    return rec.pos, Max(0, turn - rec.turn)
+end
