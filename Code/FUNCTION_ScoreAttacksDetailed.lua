@@ -179,11 +179,30 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     --     mod = mod + (unit:GetLastAttack() == target and modSameTarget or 0)
     -- end
 
-    local attacks, aims = AICalcAttacksAndAim(context, ap, target_dist)
+    local attacks, aims, _, _, in_stance = AICalcAttacksAndAim(context, ap, target_dist)
     local args = AIGetAttackArgs(context, action, "Torso", "None")
 
     args.step_pos = context.attacker_pos
     args.prediction = true
+
+    -----------------------------------------------------------------------------------------------
+    ---- BUGFIX (B53): DIZER ao CalcChanceToHit se a arma estara no ombro AQUI.
+    ----
+    ---- `Rat_EffectiveAim` sobe a mira para 1 quando o atirador tem `shooting_stance` -- lendo o
+    ---- estado da unidade AGORA. Mas este laco pergunta sobre um destino: mover destroi a stance
+    ---- (GBO3/Code/REACTIONS_ShootingStance.lua, OnMsg.UnitMovementDone), e o proprio planejador
+    ---- acima ja sabe disso -- ele devolve mira 0 para os tiles que exigem andar.
+    ----
+    ---- Sem o override, os dois lados se contradiziam em silencio: o plano dizia "vou disparar do
+    ---- quadril la" e o CTH respondia com o cone de ombro. Medido no Raider 775 (AK47, alvo a 5
+    ---- tiles, com shooting_stance): mira 0 e mira 1 devolviam 67 as duas, cone 131, enquanto o
+    ---- tiro de quadril de verdade vale 27 com cone 264. TODO destino ao redor saia com a mesma
+    ---- CTH do tile preparado, e por isso largar a posicao preparada nao custava nada no score.
+    ----
+    ---- `in_stance` vem do planejador (5o retorno), nao de uma copia da regra aqui: e a MESMA
+    ---- resposta que decide quantos ataques cabem no AP, entao os dois nao tem como divergir.
+    -----------------------------------------------------------------------------------------------
+    args.rat_stance = in_stance and true or false
 
     ---- PERF (C9): estas tabelas so sao lidas por IModeAIDebug:GetVoxelRolloverText.
     ---- Eram criadas por (destino, alvo) -- na casa dos milhares por turno --
@@ -659,7 +678,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- O laco do AIPrecalcDamageScore preenche os dois antes de chamar e limpa depois --
     ---- ou seja, aqui eles chegam nil. Reproduzir as MESMAS condicoes e o que mantem o
     ---- numerador comparavel com o denominador (dest_hit_score, que saiu daquele laco).
-    local ok_calc, attacks, aims, paid_stance, ap_left
+    local ok_calc, attacks, aims, paid_stance, ap_left, in_stance
 
     if action.id == "PinDown" then
         -------------------------------------------------------------------------------------------
@@ -691,14 +710,17 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         ok_calc = true
         if ap >= cost then
             local _, max_aim = unit:GetBaseAimLevelRange(action, target)
-            attacks, aims, paid_stance, ap_left = 1, {Max(1, max_aim or 3)}, true, 0
+            ---- BUGFIX (B53): `in_stance` = true pelo mesmo motivo de `paid_stance` -- o custo do
+            ---- snipe ja inclui a stance (COMBAT_ACTIONS.lua:455), entao ele dispara do ombro.
+            attacks, aims, paid_stance, ap_left, in_stance = 1, {Max(1, max_aim or 3)}, true, 0,
+                                                             true
         else
             attacks, aims, ap_left = 0, {}, ap
         end
     else
         local prev_pos, prev_target = context.attacker_pos, context.current_target
         context.attacker_pos, context.current_target = attacker_pos, target
-        ok_calc, attacks, aims, paid_stance, ap_left =
+        ok_calc, attacks, aims, paid_stance, ap_left, in_stance =
             pcall(AICalcAttacksAndAim, context, ap, dist, action, cost)
         context.attacker_pos, context.current_target = prev_pos, prev_target
     end
@@ -781,6 +803,11 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     local args = AIGetAttackArgs(context, action, body_part, "None", target)
     args.step_pos = attacker_pos
     args.prediction = true
+    ---- BUGFIX (B53): ver o cabecalho no RATOAI_ScoreAttacksDetailed. Aqui importa ainda mais --
+    ---- e este estimador que compara UMA acao contra o ataque padrao, e sem isto o plano que paga
+    ---- a stance e o que dispara do quadril chegavam com o mesmo CTH ao numerador e ao
+    ---- denominador da razao.
+    args.rat_stance = in_stance and true or false
 
     ---- PERF (C1), mesma memoizacao: dentro deste laco so `args.aim` muda.
     local cth_by_aim = {}

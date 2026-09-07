@@ -460,7 +460,12 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
         ---- `stance_cost` ja foi zerado la em cima e a conta continua valendo.
         ---- Max(0, ...) porque com num_atks == 0 a subtracao passaria do fim.
         -----------------------------------------------------------------------------------
-        return num_atks, aims, stance_cost > 0, Max(0, ap - stance_cost - cost)
+        ---- 5o retorno (B53): a arma vai estar NO OMBRO neste plano? E `has_stance` (ja estava, e
+        ---- nao se moveu) OU `stance_cost > 0` (vai pagar para entrar). Nao da para deduzir do 3o
+        ---- retorno: ele e `false` nos DOIS casos opostos -- "ja tenho, de graca" e "nao tenho AP,
+        ---- vou de quadril". Quem precisa disso e o `args.rat_stance` do CalcChanceToHit.
+        return num_atks, aims, stance_cost > 0, Max(0, ap - stance_cost - cost),
+               (has_stance or stance_cost > 0) and true or false
     end
 
     local remaining_ap = ap
@@ -565,11 +570,15 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     -- ic(#aims, aims)
     ---- mesmo portao do outro ramo de retorno
     if num_attacks <= 0 and not action_override then
-        local a, b, c, d = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
+        ---- BUGFIX (B53): `e` junto -- esta funcao recursa em AICalcAttacksAndAim, entao truncar
+        ---- em quatro descartava o 5o retorno e o plano degradado voltava sem saber de stance.
+        local a, b, c, d, e = RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
         if a then
-            return a, b, c, d
+            return a, b, c, d, e
         end
     end
 
-    return num_attacks, aims, stance_cost > 0, Max(0, ap_after_first)
+    ---- 5o retorno (B53): ver o cabecalho do outro `return` desta funcao.
+    return num_attacks, aims, stance_cost > 0, Max(0, ap_after_first),
+           (has_stance or stance_cost > 0) and true or false
 end
