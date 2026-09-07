@@ -372,3 +372,92 @@ function RATOAI_LastSeenPos(unit, enemy)
     local turn = (g_Combat and g_Combat.current_turn) or rec.turn
     return rec.pos, Max(0, turn - rec.turn)
 end
+
+---------------------------------------------------------------------------------------------------
+---- EXPOSICAO DO ALVO A PARTIR DO LoF QUE A IA JA PAGOU
+----
+---- O PROBLEMA. Rat_MeasureExposure (GBO3) mede a fracao do alvo que a bala alcanca, mas custa
+---- ~10 ms e o laco de destinos da IA nao pode paga-lo. Ela cai em A.CoverAIFallback, que usa
+---- `100 - GetCoverPercentage`. Medido no processo vivo, em cinco linhas de tiro num cenario de
+---- favela: GetCoverPercentage devolveu 0 nas CINCO, com exposicoes reais de 0%, 20%, 20%, 80% e
+---- 4%. Nao e uma versao grosseira da sondagem -- em terreno entulhado nao carrega sinal nenhum.
+---- Plantas, pilhas de pneu, cercas, tambores e toldos param bala e nao sao "cobertura" para o
+---- engine, que so conta os objetos designados encostados no alvo.
+----
+---- Consequencia medida: LegionRaider:776 escolhia Grizzly acreditando num tiro de 28% que a
+---- simulacao resolve em 2%.
+----
+---- A SOLUCAO NAO PRECISA DE RAIO NOVO. AIPrecalcDamageScore ja dispara, POR DESTINO, um
+---- GetLoFData batelado contra todos os alvos, com `step_pos` do destino candidato e
+---- `output_collisions`. Essa consulta E uma sondagem de silhueta: um raio por spot do corpo
+---- (cabeca, bracos, torso, virilha, pernas), presos ao esqueleto animado. So que o laco de varios
+---- destinos pedia `target_spot_group = "Torso"` e jogava os outros quatro fora.
+----
+---- Medido: pedir os cinco spots em vez de um custa 11,1 ms por destino contra 9,0 ms -- +23% numa
+---- consulta que ja estava sendo feita. O custo e a chamada, nao o numero de raios.
+----
+---- Concordancia com a sondagem completa, 20 pares atirador/alvo: 12 exatos, erro medio 9 pontos.
+---- Enviesa para CIMA nos extremos (100 onde a sondagem diz 57-81) porque estes raios usam a
+---- penetracao REAL da arma e a grade usa A.CoverPenetrationClass = 0. Discutivel qual das duas
+---- e a certa; esta e a que a bala vai encontrar.
+----
+---- Resolucao de 20% (cinco spots). Grossa, e incomparavelmente melhor que os 100% fixos.
+---------------------------------------------------------------------------------------------------
+const.RATOAI = const.RATOAI or {}
+
+---- Desliga o termo inteiro: o laco de destinos volta a pedir so o Torso e a exposicao volta a
+---- sair de A.CoverAIFallback. Lido a cada precalc, entao vale no console no meio do turno.
+if const.RATOAI.LoFExposure == nil then
+    const.RATOAI.LoFExposure = true
+end
+
+function RATOAI_LoFExposure(attack_data, target)
+    local lof = attack_data and attack_data.lof
+    if not lof or #lof == 0 or not IsValid(target) then
+        return nil
+    end
+    local n, reached = 0, 0
+    for _, l in ipairs(lof) do
+        n = n + 1
+        for _, h in ipairs(l.hits or empty_table) do
+            if h.obj == target then
+                reached = reached + 1
+                break
+            end
+        end
+    end
+    if n == 0 then
+        return nil
+    end
+    ---- um unico spot e o modo "Torso": a resposta so pode ser 0 ou 100 e nao vale como exposicao
+    ---- -- devolver 0 ali zeraria o alvo por causa de um pixel de cerca na frente do peito.
+    if n < 2 then
+        return nil
+    end
+    return MulDivRound(reached, 100, n)
+end
+
+---- A exposicao medida por (destino, alvo), para quem pontua o mesmo par sem ter o LoF em maos
+---- (RATOAI_ExpectedFor). Vive no context, entao morre com o turno junto com o resto do precalc.
+function RATOAI_SetExposed(context, upos, target, pct)
+    if not context or not upos or not target or pct == nil then
+        return
+    end
+    local by_dest = context.__ratoai_exposed
+    if not by_dest then
+        by_dest = {}
+        context.__ratoai_exposed = by_dest
+    end
+    local row = by_dest[upos]
+    if not row then
+        row = {}
+        by_dest[upos] = row
+    end
+    row[target] = pct
+end
+
+function RATOAI_GetExposed(context, upos, target)
+    local by_dest = context and context.__ratoai_exposed
+    local row = by_dest and by_dest[upos]
+    return row and row[target] or nil
+end

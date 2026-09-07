@@ -208,7 +208,13 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
             prediction = true,
             output_collisions = true
         }
-        if not destinations or #destinations > 1 then
+        ---- BUGFIX: o laco de varios destinos pedia so o Torso e jogava fora os outros quatro
+        ---- spots do corpo. Esses raios SAO uma sondagem de silhueta e respondem "quanto do alvo
+        ---- a bala alcanca daqui" -- a pergunta que a IA respondia com GetCoverPercentage, que em
+        ---- terreno entulhado devolve 0 de cobertura em linhas com 0% de exposicao real.
+        ---- Medido: 11,1 ms por destino contra 9,0 ms. O custo e a chamada, nao os raios.
+        ---- Ver RATOAI_LoFExposure (UTIL.lua) e const.RATOAI.LoFExposure.
+        if (not destinations or #destinations > 1) and not const.RATOAI.LoFExposure then
             lof_params.target_spot_group = "Torso"
         end
     end

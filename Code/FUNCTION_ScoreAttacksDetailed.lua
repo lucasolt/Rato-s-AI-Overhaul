@@ -204,6 +204,19 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     -----------------------------------------------------------------------------------------------
     args.rat_stance = in_stance and true or false
 
+    ---- A exposicao MEDIDA, no lugar do palpite. O `targets_attack_data` que chegou aqui e o
+    ---- GetLoFData batelado que AIPrecalcDamageScore ja disparou deste destino: contar os spots
+    ---- do corpo que a bala alcancou responde a mesma pergunta que Rat_MeasureExposure, sem raio
+    ---- novo. Sem isto o GBO3 cai em A.CoverAIFallback (GetCoverPercentage), que devolve 100%
+    ---- de exposicao em terreno entulhado. Ver RATOAI_LoFExposure (UTIL.lua).
+    args.rat_exposed = const.RATOAI.LoFExposure and
+                           RATOAI_LoFExposure(targets_attack_data and targets_attack_data[k],
+                                              target) or nil
+    ---- publicado para RATOAI_ExpectedFor, que pontua o MESMO par (destino, alvo) mas nao recebe
+    ---- o `targets_attack_data`. Sem isto o estimador compararia acoes com a exposicao palpitada
+    ---- enquanto o denominador dele usa a medida.
+    RATOAI_SetExposed(context, upos, target, args.rat_exposed)
+
     ---- PERF (C9): estas tabelas so sao lidas por IModeAIDebug:GetVoxelRolloverText.
     ---- Eram criadas por (destino, alvo) -- na casa dos milhares por turno --
     ---- e retidas ate o turno acabar.
@@ -808,6 +821,16 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- a stance e o que dispara do quadril chegavam com o mesmo CTH ao numerador e ao
     ---- denominador da razao.
     args.rat_stance = in_stance and true or false
+
+    ---- A exposicao MEDIDA, no lugar do palpite. O `targets_attack_data` que chegou aqui e o
+    ---- GetLoFData batelado que AIPrecalcDamageScore ja disparou deste destino: contar os spots
+    ---- do corpo que a bala alcancou responde a mesma pergunta que Rat_MeasureExposure, sem raio
+    ---- novo. Sem isto o GBO3 cai em A.CoverAIFallback (GetCoverPercentage), que devolve 100%
+    ---- de exposicao em terreno entulhado. Ver RATOAI_LoFExposure (UTIL.lua).
+    ---- a exposicao MEDIDA para este par (destino, alvo), gravada por RATOAI_ScoreAttacksDetailed
+    ---- -- aqui nao ha `targets_attack_data` para medir de novo. nil = o par nao passou por la, e
+    ---- o GBO3 volta ao proprio caminho. Ver RATOAI_LoFExposure (UTIL.lua).
+    args.rat_exposed = RATOAI_GetExposed(context, upos, target)
 
     ---- PERF (C1), mesma memoizacao: dentro deste laco so `args.aim` muda.
     local cth_by_aim = {}
