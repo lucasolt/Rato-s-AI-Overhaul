@@ -245,6 +245,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIPlayAttacks.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIPlayCombatAction",
+		'CodeFileName', "Code/SOURCE_AIPlayCombatAction.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIPolicyDealDamage",
 		'CodeFileName', "Code/SOURCE_AIPolicyDealDamage.lua",
 	}),
@@ -267,11 +271,11 @@ return {
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
-		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Default is "Hard". Restart after applying.',
+		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Restart after applying.',
 		'OnApply', function (self, value)
 			return
 		end,
-		'DefaultValue', "Disabled",
+		'DefaultValue', "Normal",
 		'ChoiceList', {
 			"Disabled",
 			"Normal",
@@ -312,13 +316,6 @@ return {
 		'DisplayName', "Disable Stats Boost for Militia",
 		'Help', "If checked, Militia units will not receive Stats Boost. Restart after applying.",
 	}),
-	PlaceObj('ModItemConstDef', {
-		Comment = "-- change to 2 if using visibility = self",
-		comment = "-- change to 2 if using visibility = self",
-		group = "Default",
-		id = "RATOAI_ThreatSaturation",
-		value = 3,
-	}),
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
 			PlaceObj('StandardAI', {
@@ -337,7 +334,7 @@ return {
 						'Weight', 200,
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -363,9 +360,13 @@ return {
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'Weight', 150,
+				'FlankMarginTiles', 6,
 				'DepthTiles', 4,
 				'LateralShare', 60,
 				'WingFraction', 60,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -547,14 +548,13 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 175,
 						'CoverTrust', 90,
-						'CoverNearTiles', 6,
 						'CoverTrustNear', 70,
 						'StanceTrust', 50,
 						'PlateauTiles', 0,
 						'MeleeRange', 6,
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -621,12 +621,15 @@ return {
 				'RangeMax', 40,
 				'Falloff', 12,
 			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
+			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'Weight', 150,
-				'FlankMarginTiles', 6,
+				'FlankMarginTiles', 4,
 				'WingFraction', 80,
 			}),
 		},
@@ -752,7 +755,7 @@ return {
 						'Range', 8,
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -766,6 +769,9 @@ return {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeMin', 35,
 				'RangeMax', 40,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -1040,11 +1046,10 @@ return {
 						'RangeMin', 30,
 						'RangeMax', 60,
 						'AllowedAoeTypes', set( "fire", "none", "smoke", "teargas", "toxicgas" ),
-						'SaveAP', true,
 						'Mode', "target",
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -1057,6 +1062,9 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 			PlaceObj('AIPolicyIndoorsOutdoors', {
 				'Weight', 50,
@@ -1071,8 +1079,8 @@ return {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 150,
 				'RangeBase', "Absolute",
-				'RangeMin', 8,
-				'RangeMax', 18,
+				'RangeMin', 6,
+				'RangeMax', 12,
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1324,7 +1332,7 @@ return {
 						'SoftK', 150,
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -1351,7 +1359,6 @@ return {
 						'Weight', 220,
 					}),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
 						'visibility_mode', "team",
 					}),
 				},
@@ -1367,6 +1374,9 @@ return {
 				'RangeMin', 12,
 				'RangeMax', 20,
 				'Falloff', 6,
+			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1700,7 +1710,7 @@ return {
 					}),
 					PlaceObj('AIPolicyThreatExposure', nil),
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 				},
@@ -1793,6 +1803,9 @@ return {
 			PlaceObj('AIPolicyStayNearAllies', {
 				'TargetDist', "average",
 			}),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
+			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -1812,7 +1825,7 @@ return {
 				'OptLocWeight', 400,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyTakeCover', {
-						'Weight', 50,
+						'Weight', 80,
 						'visibility_mode', "team",
 					}),
 					PlaceObj('AIPolicyThreatExposure', nil),
@@ -1824,6 +1837,9 @@ return {
 		FallbackAction = "overwatch",
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLastEnemyPos', nil),
+			PlaceObj('AIPolicyTakeCover', {
+				'visibility_mode', "team",
+			}),
 		},
 		OptLocSearchRadius = 80,
 		group = "System",

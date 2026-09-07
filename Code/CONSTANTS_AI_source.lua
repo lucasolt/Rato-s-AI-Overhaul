@@ -403,6 +403,9 @@ const.RATOAI.PronePackTiles = 26
 
 const.RATOAI.ExposedProne = true
 
+
+const.RATOAI.ThreatSaturation = 2
+
 ---------------------------------------------------------------------------------------------------
 ---- HOOK: STATUS EFFECTS QUE ENFRAQUECEM A AMEACA DE UM INIMIGO
 ----
@@ -430,6 +433,7 @@ const.RATOAI.ExposedProne = true
 ---- Contrato: devolver percentual >= 0; 100 = ameaca intacta.
 ---------------------------------------------------------------------------------------------------
 const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
+
 
 --TODO: add Pinned Down mod suppression effects
 const.RATOAI.ThreatEffectMods.Suppressed = 10

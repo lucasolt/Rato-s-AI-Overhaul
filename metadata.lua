@@ -21,7 +21,7 @@ return PlaceObj('ModDef', {
 	'id', "RATOAI",
 	'author', "rato",
 	'version_major', 2,
-	'version', 4662,
+	'version', 4685,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -86,6 +86,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIScoreReachableVoxels.lua",
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
+		"Code/SOURCE_AIPlayCombatAction.lua",
 		"Code/SOURCE_AIPolicyDealDamage.lua",
 		"Code/SOURCE_AIFindDestinations.lua",
 		"Code/SOURCE_AIPrecalcConeTargetZones.lua",
@@ -94,7 +95,7 @@ return PlaceObj('ModDef', {
 	},
 	'default_options', {
 		AddHWStoGunners = true,
-		BoostStatsDifficulty = "Disabled",
+		BoostStatsDifficulty = "Normal",
 		CUAELoreProgression = true,
 		DontBoostMilitia = false,
 		DontChangeEquip = false,
@@ -102,14 +103,9 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1788744223,
-	'code_hash', 6757374905679584155,
+	'saved', 1788750061,
+	'code_hash', -2088649732690920442,
 	'affected_resources', {
-		PlaceObj('ModResourcePreset', {
-			'Class', "ConstDef",
-			'Id', "RATOAI_ThreatSaturation",
-			'ClassDisplayName', "Constant",
-		}),
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
 			'Id', "Soldier",
