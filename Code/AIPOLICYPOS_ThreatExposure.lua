@@ -95,9 +95,30 @@ DefineClass.AIPolicyThreatExposure = {
             ---- ATENCAO -- isto NAO espelha a mecanica do jogo, ao contrario do
             ---- PlateauTiles. O RangeAttackTargetStanceCover
             ---- (Data/ChanceToHitModifier.lua:580-606) nao tem termo de distancia
-            ---- nenhum: cobertura vale os mesmos -20 de CTH a 1 tile e a 30. Isto e
-            ---- vies de risco da IA, deliberado, nao correcao de conta. Deixe em 0 se
-            ---- quiser a leitura crua do jogo.
+            ---- nenhum: cobertura vale os mesmos -20 de CTH a 1 tile e a 30. Deixe em 0
+            ---- se quiser a leitura crua do jogo.
+            ----
+            ---- MEDIDO (B55, 771 x 3 inimigos, 214 destinos, 170 pares com cobertura).
+            ---- A pergunta certa nao e "a cobertura sobrevive a um passo qualquer" -- na
+            ---- media sobrevive a 96%, e essa media engana. Quem flanqueia escolhe o
+            ---- MELHOR tile, entao o que importa e se EXISTE uma casa alcancavel de onde
+            ---- a cobertura falha. Fracao de pares em que existe, contra a confianca que
+            ---- esta rampa ja aplica:
+            ----
+            ----   ate  4t   n= 13   quebra com 3 passos  85%  -> sobra 15%, rampa da 27%
+            ----   ate  9t   n= 20                        55%  -> sobra 45%, rampa da 60%
+            ----   ate 15t   n= 27                        33%  -> sobra 67%, rampa da 80%
+            ----   alem     n=110                         13%  -> sobra 87%, rampa da 80%
+            ----
+            ---- Ou seja: isto e menos "vies de risco" e mais uma aproximacao boa de uma
+            ---- propriedade geometrica real do mapa -- a rampa linear em 12 tiles segue a
+            ---- curva medida com erro de ~15 pontos, e erra para o lado conservador onde
+            ---- menos importa. As bandas de perto tem n pequeno (13 e 20, um tabuleiro
+            ---- so): trate a FORMA como estabelecida e os percentuais como indicativos.
+            ----
+            ---- Foi por isso que a sondagem por passos do B55 NAO foi estendida a
+            ---- cobertura: custaria 22-25 ms por turno para reproduzir esta curva. Ela so
+            ---- valeu para o LOS porque la 61% dos bloqueios caem com um passo.
             ----
             ---- 0 = desligado (default -- nao mexe em nenhum archetype ja calibrado).
             ---- Referencia natural: const.Weapons.PointBlankRange, que o GBO3 sobe de 4
