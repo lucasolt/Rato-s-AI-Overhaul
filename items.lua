@@ -336,16 +336,20 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		ExposedProne = true,
+		ExposedProneMinTiles = 10,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMin', 20,
-				'RangeMax', 35,
+				'RangeMin', 35,
 				'Falloff', 12,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
@@ -356,9 +360,6 @@ return {
 				'FullBonusDz', 4,
 				'DownhillMax', 0,
 				'Reference', "enemies",
-			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
 				'Weight', 150,
@@ -552,6 +553,10 @@ return {
 						'PlateauTiles', 0,
 						'MeleeRange', 6,
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
@@ -613,9 +618,8 @@ return {
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 80,
-				'RangeMin', 20,
-				'RangeMax', 30,
-				'Falloff', 4,
+				'RangeMax', 40,
+				'Falloff', 12,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -624,9 +628,6 @@ return {
 				'Weight', 150,
 				'FlankMarginTiles', 6,
 				'WingFraction', 80,
-			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -750,17 +751,21 @@ return {
 						'RangeBase', "Absolute",
 						'Range', 8,
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Soldier, Sniper, Control, Ordnance, Smoke, Explosives",
 		ExposedProne = true,
+		ExposedProneMinTiles = 10,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'RangeMin', 20,
-				'RangeMax', 35,
-				'Falloff', 6,
+				'RangeMin', 35,
+				'RangeMax', 40,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -768,9 +773,6 @@ return {
 			PlaceObj('AIPolicyHighGround', {
 				'DownhillMax', 30,
 				'Reference', "enemies",
-			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 100,
@@ -881,7 +883,7 @@ return {
 		},
 		Comment = "Keywords: Explosives",
 		ExposedProne = true,
-		ExposedProneMinTiles = 16,
+		ExposedProneMinTiles = 18,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyWeaponRange', {
 				'RangeBase', "Melee",
@@ -1041,12 +1043,17 @@ return {
 						'SaveAP', true,
 						'Mode', "target",
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
 		ExposedProne = true,
+		ExposedProneMinTiles = 10,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -1064,12 +1071,8 @@ return {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'Weight', 150,
 				'RangeBase', "Absolute",
-				'RangeMin', 6,
+				'RangeMin', 8,
 				'RangeMax', 18,
-				'Falloff', 4,
-			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1251,6 +1254,7 @@ return {
 			}),
 		},
 		ExposedProne = true,
+		ExposedProneMinTiles = 10,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeMin', 20,
@@ -1268,6 +1272,7 @@ return {
 			}),
 		},
 		OptLocSearchRadius = 80,
+		PrefStance = "Prone",
 		SignatureActions = {
 			PlaceObj('AIActionMGBurstFire', {
 				'CustomScoring', function (self, context)
@@ -1318,6 +1323,10 @@ return {
 						'MaxHits', 100,
 						'SoftK', 150,
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 0,
 			}),
@@ -1341,21 +1350,23 @@ return {
 					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 220,
 					}),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'TakeCoverChance', 50,
 			}),
 		},
 		Comment = "Keywords: Flank, Explosives",
 		ExposedProne = true,
+		ExposedProneMinTiles = 10,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeBase', "Absolute",
 				'RangeMin', 12,
 				'RangeMax', 20,
 				'Falloff', 6,
-			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
 			}),
 		},
 		OptLocSearchRadius = 80,
@@ -1437,10 +1448,11 @@ return {
 		},
 		Comment = "Keywords: Flank, Explosives",
 		OptLocPolicies = {
-			PlaceObj('AIPolicyWeaponRange', {
+			PlaceObj('AIPolicyCustomWeaponRange', {
 				'RangeBase', "Absolute",
-				'RangeMin', 10,
-				'RangeMax', 16,
+				'RangeMin', 12,
+				'RangeMax', 20,
+				'Falloff', 6,
 			}),
 			PlaceObj('AIPolicyLosToEnemy', {
 				'Weight', 50,
@@ -1687,6 +1699,10 @@ return {
 						'Weight', 80,
 					}),
 					PlaceObj('AIPolicyThreatExposure', nil),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
 				},
 				'SignatureActions', {
 					PlaceObj('AIActionMobileShot', {
@@ -1777,9 +1793,6 @@ return {
 			PlaceObj('AIPolicyStayNearAllies', {
 				'TargetDist', "average",
 			}),
-			PlaceObj('AIPolicyTakeCover', {
-				'visibility_mode', "team",
-			}),
 		},
 		OptLocSearchRadius = 80,
 		PrefStance = "Crouch",
@@ -1796,7 +1809,14 @@ return {
 		BaseMovementWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
-				'OptLocWeight', 200,
+				'OptLocWeight', 400,
+				'EndTurnPolicies', {
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 50,
+						'visibility_mode', "team",
+					}),
+					PlaceObj('AIPolicyThreatExposure', nil),
+				},
 				'TakeCoverChance', 0,
 			}),
 		},

@@ -40,7 +40,7 @@ const.RATOAI = const.RATOAI or {}
 -- const.AIFriendlyFire_ScoreMod = 50 -- % of damage score evaluation remanining when an ally is in danger
 -- const.AIShootAboveCTH = 0
 
-const.AIShootAboveCTH = 1 -- due to aCTH 
+const.AIShootAboveCTH = 2 -- due to aCTH 
 ---------------------------------------------------------------------------------------------------
 ---- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
 ----
@@ -403,3 +403,77 @@ const.RATOAI.PronePackTiles = 26
 
 const.RATOAI.ExposedProne = true
 
+---------------------------------------------------------------------------------------------------
+---- HOOK: STATUS EFFECTS QUE ENFRAQUECEM A AMEACA DE UM INIMIGO
+----
+---- Um inimigo suprimido, cego ou com a mira arruinada continua entrando na conta de
+---- ameaca com o peso inteiro -- a rampa so sabe distancia e alcance. Este hook e onde
+---- isso se corrige, sem tocar no resto da policy.
+----
+---- USO SIMPLES -- preencha a tabela, no console ou em qualquer arquivo do mod:
+----
+----   const.RATOAI.ThreatEffectMods.Suppressed = 40   -- suprimido ameaca 40% do normal
+----   const.RATOAI.ThreatEffectMods.Blinded    = 10
+----   const.RATOAI.ThreatEffectMods.Inaccurate = 70
+----
+---- Chave = id do CharacterEffect; valor = PERCENTUAL da ameaca que sobra (0 = inofensivo,
+---- 100 = sem efeito, >100 tambem vale se algum efeito deve AGRAVAR a ameaca). Efeitos
+---- simultaneos MULTIPLICAM: suprimido (40) + cego (10) = 4% da ameaca.
+----
+---- Deixei a tabela VAZIA de proposito: chutar ids de efeito daria um mecanismo que
+---- parece ligado e nao faz nada -- o erro que o BUGFIX B34 limpou. Vazia, o hook custa
+---- um `next()` por inimigo e devolve 100.
+----
+---- USO AVANCADO: troque a funcao inteira. Ela e global de escopo de arquivo, entao
+---- `RATOAI_ThreatEnemyFactor = function(enemy, context) ... end` num arquivo carregado
+---- DEPOIS deste substitui a logica (ex.: olhar municao, arma quebrada, moral).
+---- Contrato: devolver percentual >= 0; 100 = ameaca intacta.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.ThreatEffectMods = const.RATOAI.ThreatEffectMods or {}
+
+--TODO: add Pinned Down mod suppression effects
+const.RATOAI.ThreatEffectMods.Suppressed = 10
+const.RATOAI.ThreatEffectMods.Blinded = 10
+const.RATOAI.ThreatEffectMods.Inaccurate = 10
+const.RATOAI.ThreatEffectMods.dazed_flashbang = 20 
+
+---------------------------------------------------------------------------------------------------
+---- CUSTO DE PREPARO -- magnitudes compartilhadas (ver a property SetupBias)
+----
+---- Moram aqui e nao so no preset porque sao os numeros que se quer A/B no console sem recarregar
+---- mod. As properties `SetupReadyPct` / `SetupCostlyPct` em 0 (default) caem nestes -- mesmo
+---- idioma do `MaxThreat` -> `ThreatSaturation` logo acima.
+----
+---- FRACOS DE PROPOSITO: desempatam tiles parecidos, nao devem inverter uma diferenca real de
+---- cobertura ou distancia.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.ThreatSetupReady = 140--150 ---- custo 0: em stance e alinhado (ou emplacado)
+const.RATOAI.ThreatSetupCostly = 100--50 ---- custo no teto do jogo (ap_stance + aim_cost)
+
+---- Valvula MESTRA: derruba o termo em TODAS as instancias sem mexer em preset. Mesmo par
+---- "declarar aqui + ler com `~= false`" do const.RATOAI.ExposedProne -- declarada de proposito
+---- em vez de deixar nil: knob que nao aparece no `const.RATOAI` e knob que ninguem acha, e o
+---- teste `== nil` nao pode ser o que define o default (ver o cabecalho do CONSTANTS_AI_source).
+const.RATOAI.ThreatSetupBias = true
+
+---------------------------------------------------------------------------------------------------
+---- MEMORIA -- magnitudes compartilhadas (ver as properties MemoryPct / MemoryTurns)
+----
+---- Aqui e nao so no preset pelo mesmo motivo do bloco de preparo abaixo: sao os numeros que se
+---- quer A/B no console sem recarregar o mod.
+----
+---- ThreatMemoryPct = 60. Um inimigo lembrado NAO vale o mesmo que um visto -- ele pode ter
+---- saido, e a IA nao tem como saber. Mas tambem nao vale zero, que e o que a policy fazia: 60%
+---- deixa a memoria desempatar tiles e ainda perder para um inimigo de verdade no mesmo lugar.
+----
+---- ThreatMemoryTurns = 2. Dois turnos e mais ou menos o que uma unidade leva para atravessar o
+---- proprio alcance -- passado isso a posicao antiga nao diz mais nada e insistir nela seria
+---- pior que esquecer. O envelhecimento e LINEAR ate la, entao "sumiu agora" e "sumiu ha um
+---- turno" nao pesam igual.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.ThreatMemoryPct == nil then
+    const.RATOAI.ThreatMemoryPct = 85
+end
+if const.RATOAI.ThreatMemoryTurns == nil then
+    const.RATOAI.ThreatMemoryTurns = 2
+end
