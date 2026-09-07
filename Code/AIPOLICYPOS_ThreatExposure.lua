@@ -112,7 +112,7 @@ DefineClass.AIPolicyThreatExposure = {
                 "inimigo colado.\n" .. "0 = desligado: cobertura vale igual a qualquer distancia.\n" ..
                 "So tem efeito com `CoverCancels` ligado.",
             editor = "number",
-            default = 12,
+            default = 6,
             min = 0,
             max = 30
         }, {
@@ -400,42 +400,47 @@ DefineClass.AIPolicyThreatExposure = {
             default = true
         }, {
             ---------------------------------------------------------------------------
-            ---- LOS NAO E FATO DE PERTO -- E UMA MEDICAO VOLATIL  (BUGFIX B54)
+            ---- QUANTOS PASSOS QUEBRAM O BLOQUEIO  (BUGFIX B55)
             ----
-            ---- Mesmo argumento do `CoverNearTiles`, transposto. O portao de LOS mede
-            ---- contra a posicao ATUAL do inimigo, e mudar essa posicao e barato: girar
-            ---- custa 0 AP e um passo lateral custa 1. Um tile escuro visto de onde o
-            ---- inimigo esta AGORA, a 2 tiles, nao e um tile seguro -- e um tile a que
-            ---- ele chega com um passo. Nao e a LOS que vale menos de perto, e a MEDICAO
-            ---- que e volatil de perto: exatamente o argumento do CoverNearTiles.
+            ---- Substitui o LOSNearTiles do B54, que media a variavel errada. Geometria:
+            ---- inimigo na origem, destino a distancia D, obstaculo de meia-largura w a
+            ---- distancia b no caminho, f = b/D. O passo lateral que ele precisa dar para
+            ---- enxergar por fora do obstaculo e
             ----
-            ---- Medido no processo vivo (LegionRaidLeader:771 x MD, 213 destinos, turno
-            ---- 6): o destino a 8 tiles do MD marcava ameaca ZERO, e o de 5 tiles
-            ---- descartava o MD inteiro do somatorio. Sao justamente as coberturas
-            ---- coladas no inimigo que a IA estava lendo como limpas.
+            ----     s = w * D / (D - b) = w / (1 - f)
             ----
-            ---- Vira CONFIANCA e nao isencao, de proposito: isencao dura cria um degrau
-            ---- em N tiles, e degrau em score de posicionamento reaparece depois como
-            ---- "a IA se recusa a pisar naquele tile". Aqui a ausencia de LOS vale 100%
-            ---- da ameaca colado (nao acredito nela) e 0% em N tiles (acredito por
-            ---- inteiro). Entra no mesmo slot do `mem_pct`, e pela mesma razao.
+            ---- e o D CANCELA. A distancia do inimigo nao diz NADA sobre a solidez do
+            ---- bloqueio: um muro colado nele custa um passo a 2 tiles e um passo a 20.
+            ---- Quem decide e onde o obstaculo esta no caminho -- colado nele (f->0) nao
+            ---- protege ninguem, colado no destino (f->1) e intransponivel. O extremo
+            ---- f->1 ja esta coberto: obstaculo adjacente ao destino e exatamente o que o
+            ---- GetCoverPercentage mede, e o CoverCancels o trata. Falta o outro extremo.
             ----
-            ---- Custo NEGATIVO: o teste de distancia fica ANTES da consulta de LOS e a
-            ---- dispensa. A batelada de CheckLOS ja e por inimigo sobre todos os
-            ---- destinos, entao nada novo passa a ser calculado.
+            ---- Mede-se o EFEITO, nao a causa: de quantas casas vizinhas o inimigo
+            ---- passaria a enxergar este tile. `0 votos` = bloqueio solido, e a ameaca
+            ---- cai a zero exatamente como no portao antigo; `todos` = qualquer passo o
+            ---- quebra, e a ameaca fica cheia.
+            ----
+            ---- Medido no processo vivo (771 x MD, 214 destinos, turno 6): o MD nao
+            ---- enxerga 110 deles e so 43 sao bloqueios de verdade -- 61% caem com UM
+            ---- passo lateral. Custo, restrito aos destinos cegos: 8 direcoes 25 ms, 4
+            ---- cardeais 13 ms, e os dois concordam em 106 dos 110. Dai o default 4.
             ---------------------------------------------------------------------------
             category = "Information (LOS & Memory)",
-            id = "LOSNearTiles",
-            name = "Raio de desconfianca do LOS (tiles)",
-            help = "Dentro desta distancia, o inimigo que NAO enxerga este tile deixa " ..
-                "de ser descartado e passa a pesar por confianca: 100% da ameaca " ..
-                "colado, caindo linearmente ate 0% nesta distancia.\n" ..
-                "0 = desligado: sem LOS e sem ameaca nenhuma, a qualquer distancia.\n" ..
-                "So tem efeito com `RequireLOS` ligado.",
+            id = "LOSProbeSteps",
+            name = "Passos sondados ao redor do inimigo",
+            help = "Quantas casas vizinhas do inimigo sao testadas quando ele NAO " ..
+                "enxerga este tile. A ameaca dele passa a valer a fracao dessas casas " ..
+                "de onde ele enxergaria: nenhuma = bloqueio solido, ameaca zero; " ..
+                "todas = ameaca cheia.\n" ..
+                "0 = desligado: sem LOS e sem ameaca, como antes.\n" ..
+                "4 = as cardeais (recomendado). 8 inclui as diagonais e custa o dobro " ..
+                "para concordar em 96% dos casos.\n" ..
+                "Casas intransponiveis nao contam. So tem efeito com `RequireLOS`.",
             editor = "number",
-            default = 6,
+            default = 4,
             min = 0,
-            max = 30,
+            max = 8,
             no_edit = function(self)
                 return not self.RequireLOS
             end
@@ -578,8 +583,8 @@ function AIPolicyThreatExposure:GetEditorView()
     if self.SetupBias and (self.SetupCurveSpread or 0) > 0 then
         partes[#partes + 1] = string.format("preparo +%d%%", self.SetupCurveSpread)
     end
-    if self.RequireLOS and (self.LOSNearTiles or 0) > 0 then
-        partes[#partes + 1] = string.format("los %dt", self.LOSNearTiles)
+    if self.RequireLOS and (self.LOSProbeSteps or 0) > 0 then
+        partes[#partes + 1] = string.format("los +%d passos", self.LOSProbeSteps)
     end
     if #partes == 0 then
         return "Threat Exposure"
@@ -682,16 +687,6 @@ function AIPolicyThreatExposure:GetCoverTrust(dist)
     ---- (trust - near_trust) pode ser negativo se alguem inverter os dois no editor;
     ---- o Clamp final segura isso sem virar buraco silencioso.
     return Clamp(near_trust + MulDivRound(trust - near_trust, dist, near), 0, 100)
-end
-
----- Quanto vale a AUSENCIA de LOS contra UM inimigo, em %. Ver o cabecalho da property
----- LOSNearTiles. 100 = colado, nao acredito no portao; 0 = longe, acredito por inteiro.
-function AIPolicyThreatExposure:LOSConfidence(dist)
-    local near = (self.LOSNearTiles or 0) * const.SlabSizeX
-    if near <= 0 or not dist or dist >= near then
-        return 0
-    end
-    return 100 - MulDivRound(100, dist, near)
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -995,6 +990,127 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override)
 end
 
 ---------------------------------------------------------------------------------------------------
+---- DE QUANTOS PASSOS ELE ME VERIA  (BUGFIX B55)
+----
+---- A justificativa geometrica esta no cabecalho da property LOSProbeSteps. Resumo: a
+---- distancia do inimigo nao diz nada sobre a solidez de um bloqueio de LOS -- quem diz e
+---- onde o obstaculo esta no caminho, e isso o motor nao conta. `CheckLOS` e C e devolve
+---- so (valor, valores_por_alvo): nem objeto, nem posicao, nem tamanho do bloqueador.
+---- Achar o obstaculo exigiria bissecao ao longo do segmento, log2(D) raios por par --
+---- mais caro que medir o efeito. Entao mede-se o efeito.
+----
+---- CUSTO. Uma batelada de CheckLOS por casa vizinha, e SO sobre os destinos que o
+---- inimigo ja nao enxerga -- onde ele enxerga nao ha bloqueio nenhum para pesar. Medido
+---- (771 x MD, 110 destinos cegos de 214): 4 cardeais 13 ms, 8 direcoes 25 ms. Vale o
+---- mesmo aviso do RATOAI_ThreatEnemyLOS: isto e proporcional a `context.destinations`, e
+---- uma instancia desta policy em OptLocPolicies pagaria sobre `all_destinations`.
+---------------------------------------------------------------------------------------------------
+local RATOAI_LOSProbeDirs = {
+    ---- cardeais primeiro: LOSProbeSteps = 4 sonda exatamente estas
+    {1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+}
+
+---- `GetPassSlab` filtra e ancora o Z de uma vez: sondar de dentro de uma pedra devolveria
+---- uma linha de visao que nao existe, e um passo para onde ele nao pode ir nao e um passo.
+local function RATOAI_LOSProbePositions(epos, dirs)
+    local list, s = {}, const.SlabSizeX
+    for i = 1, dirs do
+        local d = RATOAI_LOSProbeDirs[i]
+        local pos = GetPassSlab(point(epos:x() + d[1] * s, epos:y() + d[2] * s))
+        if pos then
+            list[#list + 1] = pos
+        end
+    end
+    return list
+end
+
+---- Devolve (votos, sondadas). `nil` quando nao ha o que perguntar -- desligado, sem
+---- posicao, ou o inimigo encurralado sem nenhuma vizinha transponivel.
+function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs)
+    dirs = Min(dirs or 0, #RATOAI_LOSProbeDirs)
+    if dirs <= 0 or not context or not dest then
+        return nil
+    end
+    local cache = context.__ratoai_los_steps
+    if not cache then
+        cache = {}
+        context.__ratoai_los_steps = cache
+    end
+    ---- aninhado por `dirs`: duas instancias da policy com sondagens diferentes fazem
+    ---- perguntas diferentes, e compartilhar a resposta seria divergencia silenciosa
+    local by_dirs = cache[dirs]
+    if not by_dirs then
+        by_dirs = {}
+        cache[dirs] = by_dirs
+    end
+
+    local rec = by_dirs[enemy]
+    if not rec then
+        rec = {votes = {}, tested = 0}
+        by_dirs[enemy] = rec
+
+        local ppos = ppos_override or
+                         (context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy])
+        local epos = ppos and RATOAI_ValidatePosZ(RATOAI_UnpackPos(ppos)) or
+                         (IsValid(enemy) and enemy:GetPos())
+        if IsValidPos(epos) then
+            rec.radius = enemy:GetSightRadius()
+            rec.probes = RATOAI_LOSProbePositions(epos, dirs)
+            rec.tested = #rec.probes
+
+            ---- so os CEGOS: a primeira chamada aqui dentro monta a batelada base do
+            ---- RATOAI_ThreatEnemyLOS, as demais sao consulta de tabela
+            local blind, pts = {}, {}
+            for _, d in ipairs(context.destinations or empty_table) do
+                if RATOAI_ThreatEnemyLOS(context, enemy, d, ppos_override) == false then
+                    blind[#blind + 1] = d
+                    pts[#pts + 1] = RATOAI_ValidatePosZ(RATOAI_UnpackPos(d))
+                    rec.votes[d] = 0
+                end
+            end
+
+            for _, from in ipairs(rec.probes) do
+                if #blind == 0 then
+                    break
+                end
+                local srcs = {}
+                for i = 1, #pts do
+                    srcs[i] = from
+                end
+                local _, data = CheckLOS(pts, srcs, rec.radius)
+                if data then
+                    for i = 1, #blind do
+                        if data[i] then
+                            rec.votes[blind[i]] = rec.votes[blind[i]] + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if rec.tested <= 0 then
+        return nil
+    end
+    local votes = rec.votes[dest]
+    if votes == nil then
+        ---- destino fora da batelada -- o painel de debug avalia tiles avulsos
+        votes = 0
+        local tgt = RATOAI_ValidatePosZ(RATOAI_UnpackPos(dest))
+        if IsValidPos(tgt) then
+            for _, from in ipairs(rec.probes) do
+                local _, data = CheckLOS({tgt}, {from}, rec.radius)
+                if data and data[1] then
+                    votes = votes + 1
+                end
+            end
+        end
+        rec.votes[dest] = votes
+    end
+    return votes, rec.tested
+end
+
+---------------------------------------------------------------------------------------------------
 ---- MEMORIA VELHA DEMAIS PARA ACREDITAR  (BUGFIX B52)
 ----
 ---- Lembrar de onde o inimigo estava so ajuda enquanto nao da para conferir. Se a unidade ENXERGA
@@ -1176,7 +1292,8 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.skip, out.los, out.fonte, out.trust = nil, nil, nil, nil
         out.ready_t, out.capped, out.d, out.range = nil, nil, nil, nil
         out.ramp, out.uncovered, out.face, out.fator, out.curve_e = nil, nil, nil, nil, nil
-        out.mem_pct, out.mem_age, out.los_pct = nil, nil, nil
+        out.mem_pct, out.mem_age = nil, nil
+        out.los_pct, out.los_votes, out.los_tested = nil, nil, nil
     end
 
     ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora.
@@ -1243,13 +1360,26 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     end
 
     local d = att_pos:Dist(target_pos)
+    local range, is_firearm, capped = self:GetEnemyRange(enemy)
+
+    ---- BUGFIX (B55): fora de alcance a rampa ja daria 0, e sair aqui poupa o portao de LOS e a
+    ---- sondagem de passos -- que sao o unico custo real desta policy.
+    if d >= range then
+        if out then
+            out.skip, out.d, out.range, out.capped = "fora de alcance", d, range, capped
+        end
+        return 0, 0
+    end
 
     ---- BUGFIX (B50): quem nao me ve nao me ameaca. Ver o cabecalho de RATOAI_ThreatEnemyLOS.
-    ---- BUGFIX (B54): so a partir de LOSNearTiles. Mais perto que isso, "ele nao me ve" e uma
-    ---- medicao contra uma posicao que ele muda de graca, entao vira confianca em vez de portao.
-    local los_pct
+    ---- BUGFIX (B55): "nao me ve" e um fato sobre a posicao ATUAL dele, e vale o que custa
+    ---- desfaze-lo -- ver RATOAI_ThreatLOSSteps.
+    local los_pct, los_votes, los_tested
     if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos) == false then
-        los_pct = self:LOSConfidence(d)
+        los_votes, los_tested = RATOAI_ThreatLOSSteps(context, enemy, dest, mem_ppos,
+                                                      self.LOSProbeSteps or 0)
+        los_pct = (los_votes and (los_tested or 0) > 0) and
+                      MulDivRound(100, los_votes, los_tested) or 0
         if los_pct <= 0 then
             if out then
                 out.skip, out.los = "sem LOS", false
@@ -1257,10 +1387,9 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
             return 0, 0
         end
         if out then
-            out.los = false
+            out.los, out.los_votes, out.los_tested = false, los_votes, los_tested
         end
     end
-    local range, is_firearm, capped = self:GetEnemyRange(enemy)
 
     ---- ANTES da rampa: a prontidao dobra a queda, entao e entrada da rampa e nao so
     ---- multiplicador da saida dela. Ver a property SetupCurveSpread.
@@ -1300,7 +1429,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     if mem_pct then
         mods = MulDivRound(mods, mem_pct, 100)
     end
-    ---- BUGFIX (B54): mesmo slot, e pela mesma razao -- "posso estar errado sobre o que ele
+    ---- BUGFIX (B54/B55): mesmo slot, e pela mesma razao -- "posso estar errado sobre o que ele
     ---- alcanca" e incerteza sobre a CAPACIDADE dele, nao algo que a cobertura deste tile tirou.
     if los_pct then
         mods = MulDivRound(mods, los_pct, 100)
@@ -1355,11 +1484,11 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- BUGFIX (B52): `not self:HasMemoryStandin(context)` -- ver o cabecalho daquele metodo.
     ---- A ordem importa: `HasMemoryStandin` custa uma passada pelos inimigos UMA vez por turno,
     ---- e o teste de tabela a esquerda continua descartando a maioria dos destinos de graca.
-    ---- BUGFIX (B54): com LOSNearTiles o atalho tem o mesmo defeito -- ele afirma "ninguem ve
-    ---- este tile" e a policy passou a discordar disso de perto. Medido no cabecalho do
-    ---- RATOAI_ThreatEnemyLOS: o cache so responde `false` em 10 de 2360 destinos, entao abrir
-    ---- mao do atalho custa o laco completo em ~10 tiles por turno.
-    if self.RequireLOS and (self.LOSNearTiles or 0) <= 0 and g_AIDestEnemyLOSCache and
+    ---- BUGFIX (B54/B55): com a sondagem ligada o atalho tem o mesmo defeito -- ele afirma
+    ---- "ninguem ve este tile" e a policy passou a discordar disso quando o bloqueio e fragil.
+    ---- Medido no cabecalho do RATOAI_ThreatEnemyLOS: o cache so responde `false` em 10 de 2360
+    ---- destinos, entao abrir mao do atalho custa o laco completo em ~10 tiles por turno.
+    if self.RequireLOS and (self.LOSProbeSteps or 0) <= 0 and g_AIDestEnemyLOSCache and
         g_AIDestEnemyLOSCache[dest] == false and not self:HasMemoryStandin(context) then
         return 0
     end
@@ -1407,8 +1536,9 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                     nota = nota .. string.format(" | COLADO: confianca %d%%", out.trust)
                 end
                 if out.los_pct then
-                    nota = nota .. string.format(" | SEM LOS, mas a %st: ameaca x%d%%",
-                                                 tostring(tiles(out.d)), out.los_pct)
+                    nota = nota .. string.format(
+                               " | SEM LOS, mas %d de %d passos quebram -> ameaca x%d%%",
+                               out.los_votes or 0, out.los_tested or 0, out.los_pct)
                 end
                 if out.fator ~= 100 then
                     nota = nota .. string.format(" | status: ameaca x%d%%", out.fator)
@@ -1489,9 +1619,9 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                            (p.spread > 0 and
                                string.format(" | preparo curva +%d%%", p.spread) or "") ..
                            (self.RequireLOS and
-                               (((self.LOSNearTiles or 0) > 0) and
-                                   string.format(" | LOS por inimigo (desconfia dentro de %dt)",
-                                                 self.LOSNearTiles) or " | LOS por inimigo") or "")
+                               (((self.LOSProbeSteps or 0) > 0) and
+                                   string.format(" | LOS por inimigo (+%d passos sondados)",
+                                                 self.LOSProbeSteps) or " | LOS por inimigo") or "")
 
         local head = escala .. "\n" ..
                          string.format("inimigos em context.enemies: %d\n" ..
