@@ -233,7 +233,7 @@ end
 ---- O jogador escolhe o modo nas opcoes do GBO3 ("aCTH" / "aCTH Lite" / "Old CTH") e pode voltar
 ---- ao antigo a qualquer momento; o unico escritor de `const.Combat.Aperture.Enabled` e o
 ---- `GBO_ApplyApertureCTHMode` (GBO3/Code/__ApertureParams.lua:36). Toda decisao da IA que dependa
----- do modelo passa por aqui, e nao por uma leitura solta do const: `Rat_AngularActive` tambem
+---- do modelo passa por aqui, e nao por uma leitura solta do const: `IsACHTActive` tambem
 ---- descarta arma que nao e Firearm e ataque corpo a corpo -- os casos em que nao ha cone nenhum
 ---- e o caminho antigo continua sendo o correto, com o modo angular ligado ou nao.
 ----
@@ -242,7 +242,7 @@ end
 ---- contra rolar a chance), e isso e da resolucao, nao da estimativa.
 ---------------------------------------------------------------------------------------------------
 function RATOAI_AngularOn(weapon, action, attacker)
-    return Rat_AngularActive(weapon, action, attacker) and true or false
+    return IsACHTActive(weapon, action, attacker) and true or false
 end
 
 ---------------------------------------------------------------------------------------------------

@@ -275,7 +275,7 @@ return {
 		'OnApply', function (self, value)
 			return
 		end,
-		'DefaultValue', "Normal",
+		'DefaultValue', "Hard",
 		'ChoiceList', {
 			"Disabled",
 			"Normal",
