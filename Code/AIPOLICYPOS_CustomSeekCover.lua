@@ -659,7 +659,7 @@ end
                 local new_pos = point(ux, uy, uz)
 
                 local dist = new_pos:Dist(enemy:GetPos())
-                local range = max_range * const.Scale.AP
+                local range = max_range * guim
                 local ratio = 100 - ((Min(range, dist) * 1.00) / (range * 1.00)) *
                                   (100 * distance_impact)
 

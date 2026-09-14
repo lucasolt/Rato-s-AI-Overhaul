@@ -863,7 +863,7 @@ function RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
         end
         ---- MESMA conta do ShootingConeAngle: meios-cones INTEIROS fora do eixo
         local widths = abs(enemy:AngleToPoint(target_pos)) / p.half
-        cost = Min(widths * const.Scale.AP, p.cap)
+        cost = Min(R_VanillaAP(widths), p.cap)
     else
         ---- fora de stance: o tiro de qualidade custa preparar do zero. O hipfire nao entra
         ---- porque ele nao custa AP nenhum -- o preco dele e CTH, e isso ja aparece noutro lugar.

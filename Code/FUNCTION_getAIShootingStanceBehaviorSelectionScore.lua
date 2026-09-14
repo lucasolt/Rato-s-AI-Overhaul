@@ -44,8 +44,8 @@ function getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
     local att_pos = context.unit_pos or unit:GetPos()
 
     ----- Stance AP score
-    local wep_stance_ap = GetWeapon_StanceAP(unit, weapon) or 1000
-    score = score + MulDivRound(wep_stance_ap, weight_per_AP_stance, const.Scale.AP)
+    local wep_stance_ap = GetWeapon_StanceAP(unit, weapon) or R_VanillaAP(1)
+    score = score + MulDivRound(wep_stance_ap, weight_per_AP_stance, R_VanillaAP(1))
     -----
     if weapon and rat_canBolt(weapon) then
         score = score + weight_unbolted
@@ -100,7 +100,7 @@ function RATOAI_GetEnemyCoverScore(unit, enemy, context, score, att_pos, target_
             local angle_ap = angle_override or
                                  unit:GetShootingStanceAP(enemy, weapon, 1, false, "rotate")
 
-            if angle_ap <= angle_ap_threshold * const.Scale.AP then
+            if angle_ap <= R_VanillaAP(angle_ap_threshold) then
                 local use, value = prone_cover_CTH:CalcValue(unit, enemy, false,
                                                              context.default_attack, weapon, nil,
                                                              nil, 0, false, att_pos, target_pos)

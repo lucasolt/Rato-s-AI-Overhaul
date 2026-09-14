@@ -4,7 +4,7 @@ function getAISoldierFlankingBehaviorSelectionScore(unit, proto_context)
     local context = unit.ai_context or AICreateContext(unit, proto_context)
     local weapon = context.weapon or unit:GetActiveWeapons()
     local score = 100
-    local wep_stance_ap = GetWeapon_StanceAP(unit, weapon) or 1000
+    local wep_stance_ap = GetWeapon_StanceAP(unit, weapon) or R_VanillaAP(1)
 
     ----- Weights
     local pb_mul = 120 ---- BUGFIX (B7): era 1.2 (float). Agora percentual inteiro.
@@ -20,7 +20,7 @@ function getAISoldierFlankingBehaviorSelectionScore(unit, proto_context)
         score = score + weight_unbolted
     end
 
-    score = score + MulDivRound(wep_stance_ap, weight_per_AP_stance, const.Scale.AP)
+    score = score + MulDivRound(wep_stance_ap, weight_per_AP_stance, R_VanillaAP(1))
 
     local available_attacks = weapon.AvailableAttacks or {}
     if IsKindOfClasses(weapon, "SubmachineGun", "Pistol", "Revolver") then

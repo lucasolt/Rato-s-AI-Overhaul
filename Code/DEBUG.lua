@@ -17,10 +17,9 @@ local function PlaceTextFx(text, pos, color)
     return dbg_text
 end
 
-local ap_scale = const.Scale.AP
 
 local function format_ap(ap)
-    return ap and string.format("%d.%d", ap / ap_scale, (10 * ap / ap_scale) / 10) or "N/A"
+    return ap and string.format("%d.%d", ap / const.Scale.AP, (10 * ap / const.Scale.AP) / 10) or "N/A"
 end
 
 function IModeAIDebug:GetVoxelRolloverText()

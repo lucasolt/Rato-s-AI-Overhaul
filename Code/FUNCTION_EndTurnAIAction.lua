@@ -132,7 +132,7 @@ function RATOAI_TryChangeStance(unit)
         local cover_high, cover_low = GetCoverTypes(unit)
         local ap = unit.ActionPoints
         if not cover_high and not cover_low then
-            local prone_AP = unit.stance == "Crouch" and 1000 or 2000
+            local prone_AP = unit.stance == "Crouch" and R_VanillaAP(1) or R_VanillaAP(2)
             if HasPerk(unit, "HitTheDeck") then
                 prone_AP = 0
             end
@@ -150,7 +150,7 @@ function RATOAI_TryChangeStance(unit)
         end
 
         if unit.stance ~= "Crouch" then
-            local crouch_ap = 1000
+            local crouch_ap = R_VanillaAP(1)
             if ap >= crouch_ap then
                 unit:SetActionCommand("ChangeStance", "RATOAI_ChangeStance", crouch_ap, "Crouch")
                 unit.ActionPoints = unit.ActionPoints - crouch_ap

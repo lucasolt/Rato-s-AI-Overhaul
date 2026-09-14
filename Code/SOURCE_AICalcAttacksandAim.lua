@@ -280,7 +280,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
 
     if context.weapon and rat_canBolt(context.weapon) then
         can_bolt = true
-        bolting_cost = rat_get_manual_cyclingAP(unit, context.weapon, true) * const.Scale.AP
+        bolting_cost = R_VanillaAP(rat_get_manual_cyclingAP(unit, context.weapon, true))
         is_unbolted = context.weapon.unbolted
     end
 
