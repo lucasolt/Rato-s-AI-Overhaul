@@ -41,7 +41,7 @@ function AIPolicySaveAP:EvalDest(context, dest, grid_voxel)
     local weapon = context.weapon or unit and unit:GetActiveWeapons()
 
     if self.SaveforBoltingAction and weapon and rat_canBolt(weapon) and weapon.unbolted then
-        check_ap = check_ap + R_VanillaAP(rat_get_manual_cyclingAP(unit, weapon, true))
+        check_ap = check_ap + rat_get_manual_cyclingAP(unit, weapon, true)
     end
 
     if self.SaveforShootingStance and weapon then
