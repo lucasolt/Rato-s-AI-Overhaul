@@ -861,9 +861,9 @@ function RATOAI_SetupFactor(enemy, context, target_pos, ready_pct, costly_pct)
         if p.half <= 0 then
             return 100 ---- arma sem cone declarado: nao da para medir o angulo
         end
-        ---- MESMA conta do ShootingConeAngle: meios-cones INTEIROS fora do eixo
-        local widths = abs(enemy:AngleToPoint(target_pos)) / p.half
-        cost = Min(R_VanillaAP(widths), p.cap)
+        ---- MESMA conta do ShootingConeAngle: proporcional aos meios-cones fora do eixo
+        local rot = Rat_RotateAPFromAngle(enemy:AngleToPoint(target_pos), p.half)
+        cost = Min(rot, p.cap)
     else
         ---- fora de stance: o tiro de qualidade custa preparar do zero. O hipfire nao entra
         ---- porque ele nao custa AP nenhum -- o preco dele e CTH, e isso ja aparece noutro lugar.
