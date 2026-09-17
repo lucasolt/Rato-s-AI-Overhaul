@@ -135,6 +135,13 @@ local function RATOAI_PayReload(unit, firearm)
     end
     local cost = RATOAI_ReloadAPCost(unit, firearm)
     if cost < 0 or not unit:HasAP(cost, "Reload") then
+        ---- Pierre (H4, 2026-09-16) skipped the turn-start reload two turns running; the cause left no trace
+        if RATOAI_Debug then
+            printf("[RATOAI] %s: reload skipped -- %s cost %d, AP %d, free move %d, ammo %s/%d",
+                   tostring(unit.session_id), tostring(firearm.class), cost, unit.ActionPoints or 0,
+                   unit.free_move_ap or 0, tostring(firearm.ammo and firearm.ammo.Amount),
+                   firearm.MagazineSize or 0)
+        end
         return false
     end
     if cost > 0 then
