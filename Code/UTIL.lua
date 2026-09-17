@@ -123,7 +123,12 @@ function Update_AIPrecalcDamageScore(unit)
 end
 
 function R_IsAI(unit)
-    local side = unit and unit.team and unit.team.side or ''
+    local team = unit and unit.team
+    ---- an AI-controlled player team (Rato Dev arena) must get the same AI-side features as enemies
+    if team and team.control == "AI" then
+        return true
+    end
+    local side = team and team.side or ''
     if (side == "player1" or side == "player2") then
         return false
     end

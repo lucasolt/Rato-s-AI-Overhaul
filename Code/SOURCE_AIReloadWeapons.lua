@@ -233,7 +233,8 @@ function RATOAI_AIUnjamWeapons(unit)
 end
 
 function AIReloadWeapons(unit)
-    if IsMerc(unit) or not R_IsAI(unit) then return end
+    ---- R_IsAI instead of vanilla IsMerc: mercs driven by the AI (arena) must reload too
+    if not R_IsAI(unit) then return end
     ---- BUGFIX (B46): antes da recarga -- arma emperrada nao recarrega (ver o cabecalho acima)
     RATOAI_AIUnjamWeapons(unit)
     local firearms = select(3, unit:GetActiveWeapons("Firearm"))
