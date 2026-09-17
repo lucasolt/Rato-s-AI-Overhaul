@@ -48,6 +48,34 @@ transport, not something you write queries in. Every command below is complete a
 - **Balanced-ish sides.** A 5-vs-9 slaughter scores the same for every genome; you learn nothing.
 - **Short and decisive beats long.** Every turn is real time (~45 s at `--time-factor 3000`).
 
+## 1b. Composition — make every archetype show up
+
+A save whose enemies are all `Soldier` only ever exercises one archetype's weights. Check what a
+side actually is, then fill the gaps:
+
+```bash
+python tools/arena.py compose --side enemy1 --dry
+python tools/arena.py compose --side enemy1
+```
+
+(console equivalents: `RatoArena_Census("enemy1")`, `RatoArena_Compose("enemy1", {dry = true})`,
+`RatoArena_Compose("enemy1")`.)
+
+It spawns one **real unit type** per missing archetype, drawn from the faction already fighting —
+`LegionSniper` for `RATOAI_Sniper`, `LegionRocketeer` for the rocketeer, and so on — so the gear
+and stats match the archetype. Relabelling a shotgunner as a sniper would only produce nonsense.
+Turrets, artillery, beasts and scripted-boss archetypes are skipped.
+
+**Then save the game, and point `--save` at that savegame.** The spawns live in the running
+session only; every match reloads the save, so an unsaved composition is lost.
+
+`--remove N` despawns N units of the most common archetype first, to keep team size (and the
+balance) where it was. `--family Adonis` draws from another faction.
+
+Note `PickCustomArchetype`: several unit types switch to a close-range archetype when enemies get
+near (a sniper becomes `RATOAI_RetreatingMarksman`). The census reports what a unit *is*; what it
+plays as can differ per turn, by design.
+
 ## 2. See the genes
 
 ```bash

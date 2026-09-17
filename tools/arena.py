@@ -249,6 +249,20 @@ def cmd_match(args):
     print("fitness(%s) = %s" % (args.side, fitness(res, args.side)))
 
 
+def cmd_compose(args):
+    """One unit of every missing archetype, spawned into the live combat. Save the game afterwards."""
+    print(lua("RatoArena_Census(%s)" % lua_str(args.side)))
+    opts = {"dry": args.dry}
+    if args.remove:
+        opts["remove"] = args.remove
+    if args.family:
+        opts["family"] = args.family
+    print(lua("RatoArena_Compose(%s, %s)" % (lua_str(args.side), lua_value(opts))))
+    if not args.dry:
+        print(lua("RatoArena_Census(%s)" % lua_str(args.side)))
+        print("save the game now (in-game menu) and use that savegame with --save")
+
+
 def cmd_report(args):
     """Fitness per label from results.jsonl, plus a run's generation ladder."""
     import statistics
@@ -351,6 +365,13 @@ def main():
     p.add_argument("--time-factor", type=int)
     p.add_argument("--label", default="manual")
     p.set_defaults(fn=cmd_match)
+
+    p = sub.add_parser("compose", help="spawn one unit per missing archetype into the live combat")
+    p.add_argument("--side", default="enemy1")
+    p.add_argument("--dry", action="store_true", help="only report what would be spawned")
+    p.add_argument("--remove", type=int, help="despawn this many of the most common archetype first")
+    p.add_argument("--family", help="unit family to draw from (default: the one already fighting)")
+    p.set_defaults(fn=cmd_compose)
 
     p = sub.add_parser("report", help="summarize results.jsonl and a run's generations")
     p.add_argument("--side", default="enemy1")
