@@ -4,8 +4,8 @@ Two AI teams fight without a human. One side may run mutated policy weights; the
 decided by a fitness number, and a Python loop breeds the next generation.
 
 - Game side: `Rato Dev/Code/RATOARENA_AIvsAI.lua` (`RatoArena_*` functions).
-- Driver: `tools/arena.py` (`space`, `match`, `evolve`), talks to the running game over DAP
-  (see `DEBUG SERVER.md`).
+- Driver: `tools/arena.py` (`saves`, `space`, `match`, `report`, `evolve`), talks to the running
+  game over DAP for you (see `DEBUG SERVER.md` only if something breaks).
 - Output: `arena/` (git-ignored) — `results.jsonl`, `space/<archetype>.json`,
   `evolve/<run>/{state.json,generations.jsonl}`.
 
