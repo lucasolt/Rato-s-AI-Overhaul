@@ -209,13 +209,14 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- do corpo que a bala alcancou responde a mesma pergunta que Rat_MeasureExposure, sem raio
     ---- novo. Sem isto o GBO3 cai em A.CoverAIFallback (GetCoverPercentage), que devolve 100%
     ---- de exposicao em terreno entulhado. Ver RATOAI_LoFExposure (UTIL.lua).
-    args.rat_exposed = const.RATOAI.LoFExposure and
-                           RATOAI_LoFExposure(targets_attack_data and targets_attack_data[k],
-                                              target) or nil
+    local lof_exposed = const.RATOAI.LoFExposure and
+                            RATOAI_LoFExposure(targets_attack_data and targets_attack_data[k],
+                                               target) or nil
     ---- publicado para RATOAI_ExpectedFor, que pontua o MESMO par (destino, alvo) mas nao recebe
     ---- o `targets_attack_data`. Sem isto o estimador compararia acoes com a exposicao palpitada
     ---- enquanto o denominador dele usa a medida.
-    RATOAI_SetExposed(context, upos, target, args.rat_exposed)
+    RATOAI_SetExposed(context, upos, target, lof_exposed)
+    RATOAI_SetGeometryArgs(context, args, upos, target, lof_exposed)
 
     ---- PERF (C9): estas tabelas so sao lidas por IModeAIDebug:GetVoxelRolloverText.
     ---- Eram criadas por (destino, alvo) -- na casa dos milhares por turno --
@@ -619,7 +620,8 @@ RATOAI_LastExpected = {}
 local function RATOAI_ExpectedKey(context, action, body_part, ap)
     return tostring(action and action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
                tostring(body_part or "Torso") .. "@" .. tostring(ap) .. "@" ..
-               tostring(context.__ratoai_stance_paid)
+               tostring(context.__ratoai_stance_paid) .. "@" ..
+               tostring(RATOAI_FullGeometry(context)) ---- a planning-geometry entry is stale at the shot
 end
 
 ---- o AP que o RATOAI_ExpectedFor resolve por dentro quando ninguem passa `ap_override`. Extraido
@@ -830,7 +832,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- a exposicao MEDIDA para este par (destino, alvo), gravada por RATOAI_ScoreAttacksDetailed
     ---- -- aqui nao ha `targets_attack_data` para medir de novo. nil = o par nao passou por la, e
     ---- o GBO3 volta ao proprio caminho. Ver RATOAI_LoFExposure (UTIL.lua).
-    args.rat_exposed = RATOAI_GetExposed(context, upos, target)
+    RATOAI_SetGeometryArgs(context, args, upos, target, RATOAI_GetExposed(context, upos, target))
 
     ---- PERF (C1), mesma memoizacao: dentro deste laco so `args.aim` muda.
     local cth_by_aim = {}

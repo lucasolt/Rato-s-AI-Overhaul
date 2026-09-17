@@ -461,3 +461,31 @@ function RATOAI_GetExposed(context, upos, target)
     local row = by_dest and by_dest[upos]
     return row and row[target] or nil
 end
+
+---------------------------------------------------------------------------------------------------
+---- FULL GEOMETRY: the same exposure + muzzle model the shot rolls against (GBO3 `args.rat_full`).
+----
+---- Too expensive for every destination, so only two moments pay it: refining the end-turn
+---- finalists (SOURCE_AIScoreReachableVoxels) and the precalc at the shooting tile inside
+---- AIPlayAttacks. Everywhere else the LoF spot count stays the cheap ranking estimate.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.FullGeometry == nil then
+    const.RATOAI.FullGeometry = true
+end
+
+function RATOAI_FullGeometry(context)
+    return const.RATOAI.FullGeometry and context and
+               (context.__ratoai_refining or context.AIisPlayingAttacks) and true or false
+end
+
+---- Fills the exposure args of a planning CalcChanceToHit for (upos, target).
+function RATOAI_SetGeometryArgs(context, args, upos, target, lof_exposed)
+    if RATOAI_FullGeometry(context) then
+        local _, _, _, stance_idx = stance_pos_unpack(upos)
+        args.rat_exposed = nil
+        args.rat_full = true
+        args.rat_att_stance = StancesList[stance_idx]
+        return
+    end
+    args.rat_exposed = lof_exposed
+end

@@ -1,3 +1,5 @@
+const.RATOAI = const.RATOAI or {}
+
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B9): a roleta de destino de fim de turno do vanilla nao usava os scores.
 ----
@@ -42,6 +44,143 @@
 ---- (definir em CONSTANTS_AI_source.lua se quiser um valor fixo -- aquele arquivo
 ----  carrega antes deste, e o `or` abaixo preserva o valor)
 local RATOAI_StayPutBonus = 0
+
+---------------------------------------------------------------------------------------------------
+---- FINALIST REFINEMENT (aCTH): rank cheap, choose exact.
+----
+---- THE CASE. Measured 2026-09-16, H4: the destination loop ranks with the LoF spot count
+---- (RATOAI_LoFExposure) and no muzzle check, while the shot rolls against the full silhouette
+---- probe plus Rat_MuzzleClearance. Pierre -> Kalyna: plan 100% exposed / CTH 7, full probe 33%,
+---- real CTH 0. Nine of twelve enemy shots in that fight rolled 0%.
+----
+---- WHY NOT EVERYWHERE. The full model is ~10-20 ms per (destination, target); the loop scores
+---- hundreds of destinations. The finalists inside AIDecisionThreshold are a handful, and they are
+---- the only ones whose attack numbers can still change the pick.
+----
+---- HOW. Top `RefineMaxDests` finalists with a target get AIPrecalcDamageScore again under
+---- `__ratoai_refining` (full geometry, destination stance), then AIScoreDest again. Repeats while
+---- the best finalist is still unrefined, up to `RefineRounds`, so a demoted leader can't hand the
+---- pick to an unverified runner-up. The threshold cut is redone on the refined scores.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.RefineFinalists == nil then
+    const.RATOAI.RefineFinalists = true
+end
+if const.RATOAI.RefineMaxDests == nil then
+    const.RATOAI.RefineMaxDests = 5
+end
+if const.RATOAI.RefineRounds == nil then
+    const.RATOAI.RefineRounds = 2
+end
+
+local function RATOAI_RefineFinalists(context, policies, potential_dests, dest_scores, base_scores,
+                                      grid_voxels, unit_voxels)
+    local unit = context.unit
+    if not const.RATOAI.RefineFinalists or not const.RATOAI.FullGeometry or #potential_dests == 0 or
+        not context.dest_target or
+        not RATOAI_AngularOn(context.weapon, context.default_attack, unit) then
+        return
+    end
+
+    local refined, trace = {}, RATOAI_Debug and {}
+    for _ = 1, const.RATOAI.RefineRounds do
+        local order = {}
+        for i = 1, #potential_dests do
+            order[i] = i
+        end
+        table.sort(order, function(a, b)
+            return (dest_scores[a] or 0) > (dest_scores[b] or 0)
+        end)
+        ---- stop once the leader is verified; dests without a target have nothing to refine
+        local leader = potential_dests[order[1]]
+        if refined[leader] or not context.dest_target[leader] then
+            break
+        end
+
+        local batch, seen = {}, {}
+        for _, i in ipairs(order) do
+            local dest = potential_dests[i]
+            if #batch >= const.RATOAI.RefineMaxDests then
+                break
+            end
+            if not refined[dest] and not seen[dest] and context.dest_target[dest] then
+                seen[dest] = true
+                batch[#batch + 1] = dest
+            end
+        end
+        if #batch == 0 then
+            break
+        end
+
+        ---- the precalc replaces dest_cth/dest_hit_score wholesale: carry the other dests over
+        local old_cth, old_hit = context.dest_cth or {}, context.dest_hit_score or {}
+        local old_target = trace and {}
+        if trace then
+            for _, dest in ipairs(batch) do
+                old_target[dest] = context.dest_target[dest]
+            end
+        end
+        context.__ratoai_refining = true
+        local ok, err = pcall(AIPrecalcDamageScore, context, batch)
+        context.__ratoai_refining = false
+        for dest, v in pairs(old_cth) do
+            if context.dest_cth[dest] == nil and not seen[dest] then
+                context.dest_cth[dest] = v
+            end
+        end
+        for dest, v in pairs(old_hit) do
+            if context.dest_hit_score[dest] == nil and not seen[dest] then
+                context.dest_hit_score[dest] = v
+            end
+        end
+        if not ok then
+            print("[RATOAI] finalist refinement failed --", err)
+            return
+        end
+
+        for i, dest in ipairs(potential_dests) do
+            if seen[dest] then
+                local before = dest_scores[i]
+                table.iclear(unit_voxels)
+                dest_scores[i] = AIScoreDest(context, policies, dest, grid_voxels[i], base_scores[i],
+                                             unit_voxels)
+                if trace then
+                    local tgt = context.dest_target[dest]
+                    local prev = old_target[dest]
+                    trace[#trace + 1] = {
+                        before = before,
+                        after = dest_scores[i],
+                        cth = context.dest_cth[dest],
+                        hit = context.dest_hit_score[dest],
+                        target = IsKindOf(tgt, "Unit") and tgt.session_id or nil,
+                        target_before = IsKindOf(prev, "Unit") and prev.session_id or nil
+                    }
+                end
+            end
+        end
+        for dest in pairs(seen) do
+            refined[dest] = true
+        end
+    end
+
+    local best
+    for i = 1, #dest_scores do
+        best = Max(best or dest_scores[i], dest_scores[i])
+    end
+    ---- a percentage cut of a non-positive best would drop the best itself
+    local threshold = (best or 0) > 0 and MulDivRound(best, const.AIDecisionThreshold, 100)
+    for i = #potential_dests, 1, -1 do
+        if threshold and dest_scores[i] < threshold and #potential_dests > 1 then
+            table.remove(potential_dests, i)
+            table.remove(dest_scores, i)
+            table.remove(base_scores, i)
+            table.remove(grid_voxels, i)
+        end
+    end
+    if trace then
+        context.dbg_refine = trace
+    end
+    return best
+end
 
 function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_details,
                                 cur_dest_preference)
@@ -142,6 +281,8 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
     -- cache the best voxel on the way to optimal location to use as fallback if needed
     local best_dist_score, closest_dest
     local potential_dests, dest_scores = {curr_dest}, {best_end_score}
+    ---- parallel to potential_dests, for RATOAI_RefineFinalists to rescore without the loop
+    local base_scores, grid_voxels = {score}, {context.unit_grid_voxel}
 
     for _, dest in ipairs(context.destinations) do
         total_dist = Max(total_dist or 0, dest_dist[dest] or 0)
@@ -161,6 +302,7 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
         end
 
         score = score + dist_score
+        local base_score = score
         if dest_score_details then
             scores = {"Distance to optimal location", dist_score}
             dest_score_details[dest] = scores
@@ -174,11 +316,15 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
             local n = #potential_dests
             potential_dests[n + 1] = dest
             dest_scores[n + 1] = score
+            base_scores[n + 1] = base_score
+            grid_voxels[n + 1] = false
             local threshold = MulDivRound(best_end_score, const.AIDecisionThreshold, 100) -- updated threshold
             for i = n, 1, -1 do
                 if dest_scores[i] < threshold then
                     table.remove(dest_scores, i)
                     table.remove(potential_dests, i)
+                    table.remove(base_scores, i)
+                    table.remove(grid_voxels, i)
                 end
             end
         end
@@ -186,6 +332,9 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
             scores.final_score = score
         end
     end
+
+    best_end_score = RATOAI_RefineFinalists(context, policies, potential_dests, dest_scores,
+                                            base_scores, grid_voxels, unit_voxels) or best_end_score
 
     -- pick best_end_dest/score from potential_dests
     assert(#potential_dests > 0)

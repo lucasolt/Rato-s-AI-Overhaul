@@ -115,6 +115,79 @@ function RATOAI_ClearShotStance(action_id, unit, args)
 end
 
 ---------------------------------------------------------------------------------------------------
+---- EXECUTION VETO: don't pull the trigger on a shot the roll already says can't hit.
+----
+---- THE CASE. LegionGoon:489, H4 2026-09-16: 3 aimed pistol shots per turn at Kalyna, two turns,
+---- all CTH 0 (target fully occluded). The vanilla "revert to basic attacks" loop in AIPlayAttacks
+---- fires at `dest_target` with no CTH gate and spends every AP it has.
+----
+---- The CTH is asked with `rat_full`, the same model the roll uses (GBO3 SOURCE_UnitCalcChanceToHit),
+---- and `prediction` so it doesn't touch the net hash. The exposure cache is shared, so the real
+---- shot that follows pays nothing extra.
+----
+---- Returning false is what AIPlayCombatAction already returns when the action can't start: the
+---- basic-attack loop breaks on it and the unit keeps its AP. Only single-target firearm shots.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.ShotVeto == nil then
+    const.RATOAI.ShotVeto = true
+end
+---- veto when the real CTH is at or below this (0 = only impossible shots)
+if const.RATOAI.ShotVetoMaxCTH == nil then
+    const.RATOAI.ShotVetoMaxCTH = 0
+end
+
+local RATOAI_VetoAimTypes = {cone = true, ["parabola aoe"] = true, melee = true, ["melee-charge"] = true}
+
+---- Real CTH of the shot about to be fired, or nil when it isn't a single-target firearm shot.
+local function RATOAI_RealShotCTH(action_id, unit, args)
+    local target = args and args.target
+    if not (IsKindOf(target, "Unit") and IsValidTarget(target)) then
+        return
+    end
+    local action = CombatActions[action_id or false]
+    if not action or RATOAI_VetoAimTypes[action.AimType] or not RATOAI_ShotWeapon(action, unit) then
+        return
+    end
+    local cth_args = table.copy(args)
+    cth_args.prediction = true
+    cth_args.rat_full = true
+    local ok, cth = pcall(unit.CalcChanceToHit, unit, target, action, cth_args, "chance_only")
+    return ok and type(cth) == "number" and cth or nil
+end
+
+function RATOAI_ShotVeto(action_id, unit, args)
+    local check = const.RATOAI.ShotVeto or RATOAI_Debug
+    local cth = check and RATOAI_RealShotCTH(action_id, unit, args)
+    if not cth then
+        return false
+    end
+    local veto = const.RATOAI.ShotVeto and cth <= const.RATOAI.ShotVetoMaxCTH
+    local context = unit.ai_context
+    if RATOAI_Debug and context then
+        ---- read by Rato Dev telemetry: planned vs rolled CTH, per shot
+        local target = args.target
+        local part = args.target_spot_group
+        context.dbg_shots = context.dbg_shots or {}
+        table.insert(context.dbg_shots, {
+            action = action_id,
+            aim = args.aim,
+            ---- JSON-safe: a preset table here would make LuaToJSON drop the whole telemetry record
+            part = type(part) == "table" and part.id or part,
+            target = target.session_id,
+            cth = cth,
+            ---- from the AIPlayAttacks precalc at this tile; the Think-time plan is in telemetry `cth_plan`
+            plan_exec = context.dest_cth and context.dest_cth[GetPackedPosAndStance(unit)],
+            veto = veto or nil
+        })
+    end
+    if veto and RATOAI_Debug then
+        printf("[RATOAI] %s: %s vetoed, real CTH %d vs %s", tostring(unit.session_id),
+               tostring(action_id), cth, tostring(args.target.session_id))
+    end
+    return veto
+end
+
+---------------------------------------------------------------------------------------------------
 ---- O gancho.
 ----
 ---- Original guardado em `const.RATOAI`, e nao numa global com guarda de `rawget`: medido no
@@ -130,6 +203,12 @@ function AIPlayCombatAction(action_id, unit, ap, args)
     local ok, err = pcall(RATOAI_ClearShotStance, action_id, unit, args)
     if not ok then
         print("[RATOAI] RATOAI_ClearShotStance falhou --", err)
+    end
+    local ok_v, veto = pcall(RATOAI_ShotVeto, action_id, unit, args)
+    if not ok_v then
+        print("[RATOAI] RATOAI_ShotVeto falhou --", veto)
+    elseif veto then
+        return false
     end
     return const.RATOAI.OrigAIPlayCombatAction(action_id, unit, ap, args)
 end
