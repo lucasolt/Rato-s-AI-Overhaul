@@ -229,6 +229,16 @@ def cmd_space(args):
         print("%s: %d numeric genes -> arena/space/%s.json" % (arch, len(space), arch))
 
 
+def cmd_saves(args):
+    expr = ('(function() local err, list = Savegame.ListForTag("savegame"); if err then return err end; '
+            'local o = {} for _, s in ipairs(list) do if not %s or s.savename:lower():find(%s, 1, true) '
+            'then o[#o + 1] = s.savename end end return table.concat(o, "|") end)()')
+    flt = lua_str(args.filter.lower()) if args.filter else "false"
+    out = lua(expr % (flt, flt))
+    for n in [x for x in out.split("|") if x][:args.limit]:
+        print("  " + n)
+
+
 def cmd_match(args):
     genome = {}
     if args.genome:
@@ -237,6 +247,35 @@ def cmd_match(args):
     res = run_match({args.side: genome}, args.label, args.max_turns, args.save, args.time_factor)
     print(json.dumps({k: res[k] for k in ("winner", "reason", "turns", "sides")}, indent=1))
     print("fitness(%s) = %s" % (args.side, fitness(res, args.side)))
+
+
+def cmd_report(args):
+    """Fitness per label from results.jsonl, plus a run's generation ladder."""
+    import statistics
+    path = os.path.join(ROOT, "results.jsonl")
+    by_label = {}
+    if os.path.exists(path):
+        for line in open(path, encoding="utf-8"):
+            r = json.loads(line)
+            by_label.setdefault(r.get("label", ""), []).append(fitness(r, args.side))
+    print("fitness for %s, per label (matches, mean, spread = noise floor)" % args.side)
+    for label, f in sorted(by_label.items()):
+        spread = max(f) - min(f) if len(f) > 1 else 0.0
+        dev = statistics.pstdev(f) if len(f) > 1 else 0.0
+        print("  %-28s n=%-3d mean %7.2f  spread %6.2f  stdev %5.2f" % (label[:28], len(f), sum(f) / len(f), spread, dev))
+    if args.run:
+        gens = os.path.join(ROOT, "evolve", args.run, "generations.jsonl")
+        if not os.path.exists(gens):
+            print("no generations yet for run " + args.run)
+            return
+        print("generation ladder for %s" % args.run)
+        best = None
+        for line in open(gens, encoding="utf-8"):
+            g = json.loads(line)
+            best = g
+            print("  gen %-3d best %7.2f   all %s" % (g["gen"], g["best_score"], ", ".join("%.1f" % x for x in g["scores"])))
+        print("best genome so far (re-run it with `match` before believing it):")
+        print(json.dumps(best["best"], indent=1))
 
 
 def cmd_evolve(args):
@@ -299,6 +338,11 @@ def main():
     p.add_argument("archetypes", nargs="+")
     p.set_defaults(fn=cmd_space)
 
+    p = sub.add_parser("saves", help="list savegame names usable with --save")
+    p.add_argument("filter", nargs="?", help="substring, case-insensitive")
+    p.add_argument("--limit", type=int, default=30)
+    p.set_defaults(fn=cmd_saves)
+
     p = sub.add_parser("match", help="run one match")
     p.add_argument("--side", default="enemy1")
     p.add_argument("--genome", help="JSON file {archetype: {path: value}}; omit for vanilla weights")
@@ -307,6 +351,11 @@ def main():
     p.add_argument("--time-factor", type=int)
     p.add_argument("--label", default="manual")
     p.set_defaults(fn=cmd_match)
+
+    p = sub.add_parser("report", help="summarize results.jsonl and a run's generations")
+    p.add_argument("--side", default="enemy1")
+    p.add_argument("--run", help="also show this evolve run's ladder")
+    p.set_defaults(fn=cmd_report)
 
     p = sub.add_parser("evolve", help="(mu+lambda) evolution of one side's archetype weights")
     p.add_argument("--run", required=True)

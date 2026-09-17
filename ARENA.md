@@ -9,16 +9,34 @@ decided by a fitness number, and a Python loop breeds the next generation.
 - Output: `arena/` (git-ignored) — `results.jsonl`, `space/<archetype>.json`,
   `evolve/<run>/{state.json,generations.jsonl}`.
 
+## 0. Two ways to drive it — you never type DAP by hand
+
+**In the game's console** (press **Enter**, or Alt-Shift-C, in the dev build). Good for watching
+one match and for checking things quickly. Nothing else is needed:
+
+```lua
+RatoArena_Start({max_turns = 12})   -- hands every human team to the AI, right now
+RatoArena_Print()                   -- progress while running; full result when it ends
+RatoArena_Stop()                    -- end it early and give control back
+RatoArena_Saves("arena")            -- savegame names, filtered
+```
+
+The result is also written to the game log as one `[RATOARENA_RESULT]` line.
+
+**The Python driver** (`tools/arena.py`), for anything repeated: reloading the save between
+matches, applying genomes, scoring, evolution. It talks DAP for you — `dap_probe.py` is the
+transport, not something you write queries in. Every command below is complete as written.
+
 ## 1. Setup, once
 
-1. Run `JA3Debug.exe` (the DAP port only exists there) and confirm it:
+1. Run `JA3Debug.exe` (the debug port only exists there) and confirm it:
    `netstat -ano | findstr 8165` must say `LISTENING`.
 2. Get into a combat you want as the arena, then **save**. Every match reloads that save, so it
    is the whole experiment: map, squads, gear, positions.
-3. Note the save's file name — the driver wants `<name>.savegame.sav`:
+3. Get the save's file name — the driver wants the full `<name>.savegame.sav`:
 
    ```bash
-   python tools/dap_probe.py '(function() local err, list = Savegame.ListForTag("savegame"); local o = {} for i = 1, Min(#list, 10) do o[#o+1] = list[i].savename end return table.concat(o, " | ") end)()'
+   python tools/arena.py saves arena
    ```
 
 ### Choosing the save — this decides what you measure
@@ -92,15 +110,11 @@ Combat is random. **Run the baseline three or four times before evolving:**
 
 ```bash
 for i in 1 2 3; do python tools/arena.py match --side enemy1 --save "arena.savegame.sav" --max-turns 12 --time-factor 3000 --label baseline; done
-python - <<'EOF'
-import json
-s = [json.loads(l) for l in open("arena/results.jsonl")]
-import statistics, sys
-sys.path.insert(0, "tools"); import arena
-f = [arena.fitness(r, "enemy1") for r in s if r["label"] == "baseline"]
-print(f, "spread", max(f) - min(f), "stdev", statistics.pstdev(f))
-EOF
+python tools/arena.py report --side enemy1
 ```
+
+`report` prints, per label: number of matches, mean fitness, and the spread between best and
+worst.
 
 The spread is your noise floor. A genome that beats the baseline by less than that spread has
 proven nothing — raise `--repeats`, or pick a save whose outcome is less swingy. This is the whole
@@ -139,14 +153,10 @@ same command resumes from `arena/evolve/<run>/state.json`.
 ## 6. Read the outcome, then promote it by hand
 
 ```bash
-python - <<'EOF'
-import json
-for l in open("arena/evolve/soldier1/generations.jsonl"):
-    g = json.loads(l)
-    print(g["gen"], round(g["best_score"], 1), [round(s, 1) for s in g["scores"]])
-print(json.dumps(json.loads(l)["best"], indent=1))
-EOF
+python tools/arena.py report --side enemy1 --run soldier1
 ```
+
+It prints the generation ladder (best and all scores per generation) and the best genome so far.
 
 Look for the best score climbing **and** staying above the noise floor. Then re-run the winning
 genome a few times with `match` on its own; the winner of a noisy tournament is biased upward by
