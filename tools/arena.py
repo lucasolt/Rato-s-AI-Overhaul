@@ -68,6 +68,8 @@ def lua_value(v):
         return lua_str(v)
     if isinstance(v, dict):
         return "{" + ", ".join("[%s] = %s" % (lua_str(k), lua_value(x)) for k, x in v.items()) + "}"
+    if isinstance(v, (list, tuple)):
+        return "{" + ", ".join(lua_value(x) for x in v) + "}"
     raise TypeError(type(v))
 
 
@@ -263,6 +265,23 @@ def cmd_compose(args):
         print("save the game now (in-game menu) and use that savegame with --save")
 
 
+def cmd_mix(args):
+    """Reconcile a side to a target ratio: percentages per archetype, remainder over --utility."""
+    pct = {}
+    for part in (args.pct or "").split(","):
+        if part.strip():
+            k, v = part.split("=")
+            pct[k.strip()] = int(v)
+    spec = {"size": args.size, "pct": pct, "dry": args.dry}
+    if args.utility:
+        spec["utility"] = [u.strip() for u in args.utility.split(",") if u.strip()]
+    if args.family:
+        spec["family"] = args.family
+    print(lua("RatoArena_Mix(%s, %s)" % (lua_str(args.side), lua_value(spec))))
+    if not args.dry:
+        print("save the game now (in-game menu) and use that savegame with --save")
+
+
 def cmd_report(args):
     """Fitness per label from results.jsonl, plus a run's generation ladder."""
     import statistics
@@ -372,6 +391,16 @@ def main():
     p.add_argument("--remove", type=int, help="despawn this many of the most common archetype first")
     p.add_argument("--family", help="unit family to draw from (default: the one already fighting)")
     p.set_defaults(fn=cmd_compose)
+
+    p = sub.add_parser("mix", help="reconcile a side to a target archetype ratio")
+    p.add_argument("--side", default="enemy1")
+    p.add_argument("--size", type=int, default=0, help="target team size (0 = keep current)")
+    p.add_argument("--pct", default="Soldier=50,Skirmisher=30", help="Archetype=percent,...")
+    p.add_argument("--utility", default="HeavyGunner,RATOAI_Sniper,RATOAI_Demolition",
+                   help="archetypes sharing the leftover budget, in priority order")
+    p.add_argument("--family", help="unit family to draw from (default: the one already fighting)")
+    p.add_argument("--dry", action="store_true")
+    p.set_defaults(fn=cmd_mix)
 
     p = sub.add_parser("report", help="summarize results.jsonl and a run's generations")
     p.add_argument("--side", default="enemy1")

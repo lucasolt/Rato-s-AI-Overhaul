@@ -72,6 +72,21 @@ session only; every match reloads the save, so an unsaved composition is lost.
 `--remove N` despawns N units of the most common archetype first, to keep team size (and the
 balance) where it was. `--family Adonis` draws from another faction.
 
+### A target ratio instead
+
+`compose` fills gaps; `mix` reconciles a side to a ratio, spawning and despawning as needed:
+
+```bash
+python tools/arena.py mix --side enemy1 --size 14 --pct Soldier=50,Skirmisher=30   --utility HeavyGunner,RATOAI_Sniper,RATOAI_Demolition --dry
+```
+
+Percentages are taken first; what's left of `--size` is split round-robin over `--utility`, in
+priority order. Any archetype named in neither list is despawned, so the side ends up exactly as
+described. The console form is `RatoArena_Mix("enemy1", {size = 14, pct = {...}, utility = {...}})`.
+
+A ratio and "one of every archetype" fight each other on a small team: six utility archetypes at
+20% needs 30 units. Either accept a shortlist (the default three) or raise `--size`.
+
 Note `PickCustomArchetype`: several unit types switch to a close-range archetype when enemies get
 near (a sniper becomes `RATOAI_RetreatingMarksman`). The census reports what a unit *is*; what it
 plays as can differ per turn, by design.
