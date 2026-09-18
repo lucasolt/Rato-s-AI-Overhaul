@@ -27,6 +27,26 @@ const.RATOAI = const.RATOAI or {}
 ---- possivel -- e o outro lado da moeda e nao atirar, que e pior.
 ---------------------------------------------------------------------------------------------------
 
+---- AvailableAttacks nao basta: o GBO3 lista SingleShot em toda escopeta (modo slug) e so o
+---- esconde no GetUIState quando ha chumbo carregado. "hidden" e o veredito; "disabled" e alvo/AP.
+function RATOAI_IsSingleShotAvailable(unit, weapon)
+    if not (unit and IsKindOf(weapon, "Firearm")) then
+        return false
+    end
+    if not (weapon.AvailableAttacks and table.find(weapon.AvailableAttacks, "SingleShot")) then
+        return false
+    end
+    if IsKindOf(weapon, "Shotgun") and not IsSlugLoaded(weapon) then
+        return false
+    end
+    local single = CombatActions.SingleShot
+    if not single then
+        return false
+    end
+    local ok, state = pcall(single.GetUIState, single, {unit}, {weapon = weapon, skip_ap_check = true})
+    return ok and state ~= "hidden"
+end
+
 function RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
     ---- so na execucao, e uma vez por turno
     if target_dist or not context.AIisPlayingAttacks or context.__ratoai_degraded then
@@ -38,7 +58,7 @@ function RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
     if not (weapon and unit and atual) or atual.id == "SingleShot" then
         return
     end
-    if not (weapon.AvailableAttacks and table.find(weapon.AvailableAttacks, "SingleShot")) then
+    if not RATOAI_IsSingleShotAvailable(unit, weapon) then
         return
     end
 
