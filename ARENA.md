@@ -46,9 +46,22 @@ RatoArena_Evolve({save = "ratoarena save.savegame.sav", side = "enemy1",
 RatoArena_PrintGenome()                    -- best genome so far, as pasteable Lua
 ```
 
-Progress prints to the console *and* to the game log, so a long run leaves a record. A genome
-lives in memory only: `RatoArena_PrintGenome()` is how a winner survives the session — copy it
-out of the console or the log.
+### Getting the results out
+
+Results live in memory: they survive save loads (every match reloads one) but not `ReloadLua`,
+a game restart, or a crash. Nothing reaches the game log file. Export before you close the game:
+
+```lua
+RatoArena_Results()                        -- one line per match: label, winner, turns, fitness, hp, deaths, damage
+AsyncStringToFile("AppData/arena_results.csv", RatoArena_CSV())
+```
+
+The second line writes `%AppData%\Jagged Alliance 3rena_results.csv` (open it in Excel). Mod
+code is not allowed to write files; the console is, which is why that line is typed by you. One
+row per match: label, winner, turns, seconds, weather, fitness, per-side
+`units/hp0/hp/dead/down/alive/dealt/friendly/kills/attacks`, and `genome` — the exact weights
+that match was played with (empty = shipped weights). Evolution labels its matches
+`g<generation>/i<individual>/r<repeat>`, so the CSV is also the full evolution history.
 
 The Python driver (`tools/arena.py`) does the same things from a terminal and additionally writes
 `arena/*.jsonl` for later analysis. It is optional; the console covers the whole workflow.
