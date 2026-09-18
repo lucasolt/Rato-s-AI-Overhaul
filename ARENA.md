@@ -99,6 +99,11 @@ Percentages are taken first; what's left of `--size` is split round-robin over `
 priority order. Any archetype named in neither list is despawned, so the side ends up exactly as
 described. The console form is `RatoArena_Mix("enemy1", {size = 14, pct = {...}, utility = {...}})`.
 
+One archetype can cover very different kits: `LegionGoon` (handgun) and `LegionScout` (MP40) are
+both `Skirmisher`. Skirmisher slots are filled with SMG-armed classes, swapping out other
+Skirmisher classes. To mix instead, list the classes in round-robin order:
+`classes = {Skirmisher = {"LegionScout", "LegionScout", "LegionGoon"}}` (2 scouts per goon).
+
 A ratio and "one of every archetype" fight each other on a small team: six utility archetypes at
 20% needs 30 units. Either accept a shortlist (the default three) or raise `--size`.
 
