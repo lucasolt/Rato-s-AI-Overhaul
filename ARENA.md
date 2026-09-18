@@ -9,35 +9,50 @@ decided by a fitness number, and a Python loop breeds the next generation.
 - Output: `arena/` (git-ignored) — `results.jsonl`, `space/<archetype>.json`,
   `evolve/<run>/{state.json,generations.jsonl}`.
 
-## 0. Two ways to drive it — you never type DAP by hand
+## 0. Everything from the game console
 
-**In the game's console** (press **Enter**, or Alt-Shift-C, in the dev build). Good for watching
-one match and for checking things quickly. Nothing else is needed:
+Press **Enter** (or Alt-Shift-C) in the dev build and type Lua. No Python, no DAP:
 
 ```lua
-RatoArena_Start({max_turns = 12})   -- hands every human team to the AI, right now
-RatoArena_Print()                   -- progress while running; full result when it ends
-RatoArena_Stop()                    -- end it early and give control back
-RatoArena_Saves("arena")            -- savegame names, filtered
+RatoArena_Census("enemy1")                 -- what archetypes a side is made of
+RatoArena_Saves("arena")                   -- savegame names, filtered
+RatoArena_Start({max_turns = 12})          -- fight right now, on the map you are on
+RatoArena_Print()                          -- progress, then the full result
+RatoArena_Stop()                           -- end early, give control back
 ```
 
-The result is also written to the game log as one `[RATOARENA_RESULT]` line.
+`RatoArena_Run` is the loop: it reloads the save before every match, so each one starts from the
+same state. This is what makes scores comparable.
 
-**The Python driver** (`tools/arena.py`), for anything repeated: reloading the save between
-matches, applying genomes, scoring, evolution. It talks DAP for you — `dap_probe.py` is the
-transport, not something you write queries in. Every command below is complete as written.
+```lua
+RatoArena_Run({save = "ratoarena save.savegame.sav", matches = 3, max_turns = 12,
+               time_factor = 3000, label = "baseline"})
+RatoArena_Report()                         -- mean and spread per label
+RatoArena_Abort()                          -- stop after the current match
+```
+
+And evolution, also in the console:
+
+```lua
+RatoArena_Evolve({save = "ratoarena save.savegame.sav", side = "enemy1",
+                  archetypes = {"Soldier"}, pop = 6, gens = 10, repeats = 2,
+                  max_turns = 12, time_factor = 3000})
+RatoArena_PrintGenome()                    -- best genome so far, as pasteable Lua
+```
+
+Progress prints to the console *and* to the game log, so a long run leaves a record. A genome
+lives in memory only: `RatoArena_PrintGenome()` is how a winner survives the session — copy it
+out of the console or the log.
+
+The Python driver (`tools/arena.py`) does the same things from a terminal and additionally writes
+`arena/*.jsonl` for later analysis. It is optional; the console covers the whole workflow.
 
 ## 1. Setup, once
 
-1. Run `JA3Debug.exe` (the debug port only exists there) and confirm it:
-   `netstat -ano | findstr 8165` must say `LISTENING`.
-2. Get into a combat you want as the arena, then **save**. Every match reloads that save, so it
+1. Run `JA3Debug.exe` — the console and the debug port only exist there.
+2. Get into the combat you want as the arena, then **save**. Every match reloads that save, so it
    is the whole experiment: map, squads, gear, positions.
-3. Get the save's file name — the driver wants the full `<name>.savegame.sav`:
-
-   ```bash
-   python tools/arena.py saves arena
-   ```
+3. `RatoArena_Saves("arena")` prints the exact name to pass as `save = "..."`.
 
 ### Choosing the save — this decides what you measure
 
@@ -126,6 +141,8 @@ python tools/arena.py match --side enemy1 --save "arena.savegame.sav" --max-turn
 python tools/arena.py match --side enemy1 --genome arena/my_genome.json --save "arena.savegame.sav"
 ```
 
+Console: `RatoArena_Run({save = "...", matches = 1, max_turns = 12, time_factor = 3000})`.
+
 It loads the save, applies the genome, hands every human team to the AI, prints the turn-by-turn
 status, and appends a record to `arena/results.jsonl`. Each record has, per side: `hp0`/`hp`,
 `dead`, `down`, `alive`, `dealt`, `friendly`, `attacks`, `kills`, plus one row per unit.
@@ -156,8 +173,9 @@ for i in 1 2 3; do python tools/arena.py match --side enemy1 --save "arena.saveg
 python tools/arena.py report --side enemy1
 ```
 
-`report` prints, per label: number of matches, mean fitness, and the spread between best and
-worst.
+Console: `RatoArena_Run({..., matches = 3, label = "baseline"})`, then `RatoArena_Report()`.
+
+Both print, per label: number of matches, mean fitness, and the spread between best and worst.
 
 The spread is your noise floor. A genome that beats the baseline by less than that spread has
 proven nothing — raise `--repeats`, or pick a save whose outcome is less swingy. This is the whole
@@ -169,6 +187,9 @@ experiment: without it, evolution just selects for lucky rolls.
 python tools/arena.py evolve --run soldier1 --side enemy1 --archetypes Soldier \
   --save "arena.savegame.sav" --pop 6 --gens 10 --repeats 2 --max-turns 12 --time-factor 3000
 ```
+
+Console: `RatoArena_Evolve({save = "...", archetypes = {"Soldier"}, pop = 6, gens = 10})` — the
+option names match the flags below, and `genes` is a Lua pattern (default `"Weight$"`).
 
 Each generation: keep the `--elite` best, fill back to `--pop` by mutating an elite, evaluate
 every new genome `--repeats` times, sort by mean fitness, write
@@ -200,6 +221,8 @@ python tools/arena.py report --side enemy1 --run soldier1
 ```
 
 It prints the generation ladder (best and all scores per generation) and the best genome so far.
+In the console each generation prints its scores as it finishes, and `RatoArena_PrintGenome()`
+dumps the best one as pasteable Lua — the only way a genome outlives the session.
 
 Look for the best score climbing **and** staying above the noise floor. Then re-run the winning
 genome a few times with `match` on its own; the winner of a noisy tournament is biased upward by
