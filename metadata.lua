@@ -21,7 +21,7 @@ return PlaceObj('ModDef', {
 	'id', "RATOAI",
 	'author', "rato",
 	'version_major', 2,
-	'version', 4686,
+	'version', 4691,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -95,7 +95,7 @@ return PlaceObj('ModDef', {
 	},
 	'default_options', {
 		AddHWStoGunners = true,
-		BoostStatsDifficulty = "Hard",
+		BoostStatsDifficulty = "Normal",
 		CUAELoreProgression = true,
 		DontBoostMilitia = false,
 		DontChangeEquip = false,
@@ -103,8 +103,8 @@ return PlaceObj('ModDef', {
 		UseSimpleAttacksScoring = false,
 	},
 	'has_data', true,
-	'saved', 1788762285,
-	'code_hash', 5637049946595662767,
+	'saved', 1789696858,
+	'code_hash', -6618891131343330612,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",

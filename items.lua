@@ -275,7 +275,7 @@ return {
 		'OnApply', function (self, value)
 			return
 		end,
-		'DefaultValue', "Hard",
+		'DefaultValue', "Normal",
 		'ChoiceList', {
 			"Disabled",
 			"Normal",
@@ -398,7 +398,7 @@ return {
 					return self.Weight, false, self.Priority
 				end,
 				'action_id', "AutoFire",
-				'Aiming', "Remaining AP",
+				'Aiming', "Maximum",
 				'AttackTargeting', set( "Torso" ),
 			}),
 			PlaceObj('AIAttackSingleTarget', {
@@ -791,7 +791,13 @@ return {
 			}),
 			PlaceObj('AIActionPinDown', {
 				'BiasId', "PinDownAttack",
-				'Weight', 50,
+				'Weight', 20,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "PinDownAttack",
+						'Value', -50,
+					}),
+				},
 				'CustomScoring', function (self, context)
 					return Pindown_CustomScoring(self, context)
 				end,
@@ -2039,13 +2045,20 @@ return {
 				'BiasId', "Standard",
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 300,
+						'MaxHits', 100,
+						'SoftK', 150,
+					}),
+					PlaceObj('AIPolicyDealDamage', {
+						'Weight', 50,
+						'Normalization', "tokill",
+					}),
+					PlaceObj('AIPolicyThreatExposure', {
 						'Weight', 200,
 					}),
-					PlaceObj('AIPolicyWeaponRange', {
-						'Weight', 150,
-						'RangeBase', "Absolute",
-						'RangeMin', 6,
-						'RangeMax', 10,
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 80,
+						'visibility_mode', "team",
 					}),
 				},
 				'TakeCoverChance', 50,
