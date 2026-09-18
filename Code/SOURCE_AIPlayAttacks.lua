@@ -107,3 +107,16 @@ function AIActionSingleTargetShot:Execute(context, action_state)
     RATOAI_SustainFiringMode(self, context)
     return status
 end
+
+---- O IsAvailable vanilla so olha AP/municao/CTH do GetActionResults, que "funciona" em predicao
+---- para SingleShot com chumbo. Sem precalc o action_state fica sem has_ap e o IsAvailable reprova.
+AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction = AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction or
+                                                         AIActionSingleTargetShot.PrecalcAction
+
+function AIActionSingleTargetShot:PrecalcAction(context, action_state)
+    if IsKindOf(context.weapon, "Firearm") and
+        not RATOAI_IsAttackModeAvailable(context.unit, context.weapon, self.action_id) then
+        return
+    end
+    return AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction(self, context, action_state)
+end

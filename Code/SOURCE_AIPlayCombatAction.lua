@@ -197,7 +197,25 @@ end
 ---------------------------------------------------------------------------------------------------
 const.RATOAI.OrigAIPlayCombatAction = const.RATOAI.OrigAIPlayCombatAction or AIPlayCombatAction
 
+---- Familias que o GBO3 troca pela municao; Overwatch/PinDown/MGSetup ficam de fora (nao listados).
+local RATOAI_FireModeFamilies = {Attack = true, AttackShotgun = true}
+
+---- Ultima barreira: modo que a arma nao pode usar agora (SingleShot com chumbo) quebra o GBO3.
+local function RATOAI_UnusableFireMode(action_id, unit)
+    local action = CombatActions[action_id or false]
+    if not (action and RATOAI_FireModeFamilies[action.FiringModeMember]) then
+        return false
+    end
+    local weapon = RATOAI_ShotWeapon(action, unit)
+    return weapon and not RATOAI_IsAttackModeAvailable(unit, weapon, action_id)
+end
+
 function AIPlayCombatAction(action_id, unit, ap, args)
+    local ok_m, unusable = pcall(RATOAI_UnusableFireMode, action_id, unit)
+    if ok_m and unusable then
+        print("[RATOAI]", unit.session_id, "blocked fire mode unusable with current weapon/ammo:", action_id)
+        return false
+    end
     ---- pcall: a checagem e opcional e roda no meio da execucao do turno. Um erro dentro dela nao
     ---- pode impedir o ataque de acontecer.
     local ok, err = pcall(RATOAI_ClearShotStance, action_id, unit, args)

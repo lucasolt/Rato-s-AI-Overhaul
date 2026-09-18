@@ -27,23 +27,28 @@ const.RATOAI = const.RATOAI or {}
 ---- possivel -- e o outro lado da moeda e nao atirar, que e pior.
 ---------------------------------------------------------------------------------------------------
 
----- AvailableAttacks nao basta: o GBO3 lista SingleShot em toda escopeta (modo slug) e so o
----- esconde no GetUIState quando ha chumbo carregado. "hidden" e o veredito; "disabled" e alvo/AP.
-function RATOAI_IsSingleShotAvailable(unit, weapon)
-    if not (unit and IsKindOf(weapon, "Firearm")) then
+---- Modos cujo uso depende da municao carregada (GBO3 troca chumbo <-> slug pelo GetUIState).
+local RATOAI_AmmoSwappedModes = {SingleShot = true, BurstFire = true, CancelShot = true}
+local RATOAI_BuckshotModes = {Buckshot = true, BuckshotBurst = true, DoubleBarrel = true, CancelShotCone = true}
+
+---- Mesma regra do Unit:GetDefaultAttackAction: listado em AvailableAttacks E nao "hidden" no
+---- GetUIState. So a lista nao basta -- o GBO3 lista SingleShot em toda escopeta (modo slug).
+function RATOAI_IsAttackModeAvailable(unit, weapon, action_id)
+    local action = CombatActions[action_id or false]
+    if not (unit and action and IsKindOf(weapon, "Firearm")) then
         return false
     end
-    if not (weapon.AvailableAttacks and table.find(weapon.AvailableAttacks, "SingleShot")) then
+    local listed = weapon.AvailableAttacks and table.find(weapon.AvailableAttacks, action_id)
+    if not listed and not (action_id == "AutoFire" and weapon:CanAutofire()) then
         return false
     end
-    if IsKindOf(weapon, "Shotgun") and not IsSlugLoaded(weapon) then
-        return false
+    if IsKindOf(weapon, "Shotgun") then
+        local slug = IsSlugLoaded(weapon)
+        if (slug and RATOAI_BuckshotModes[action_id]) or (not slug and RATOAI_AmmoSwappedModes[action_id]) then
+            return false
+        end
     end
-    local single = CombatActions.SingleShot
-    if not single then
-        return false
-    end
-    local ok, state = pcall(single.GetUIState, single, {unit}, {weapon = weapon, skip_ap_check = true})
+    local ok, state = pcall(action.GetUIState, action, {unit}, {weapon = weapon, skip_ap_check = true})
     return ok and state ~= "hidden"
 end
 
@@ -58,7 +63,7 @@ function RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
     if not (weapon and unit and atual) or atual.id == "SingleShot" then
         return
     end
-    if not RATOAI_IsSingleShotAvailable(unit, weapon) then
+    if not RATOAI_IsAttackModeAvailable(unit, weapon, "SingleShot") then
         return
     end
 
