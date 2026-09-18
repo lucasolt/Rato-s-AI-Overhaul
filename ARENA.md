@@ -21,6 +21,12 @@ RatoArena_Print()                          -- progress, then the full result
 RatoArena_Stop()                           -- end early, give control back
 ```
 
+Every match starts in clear daylight (`weather = "ClearSky"`, `tod = "Day"`), whatever the save
+had: weather changes visibility and hit chances, so matches must share it to be comparable. Pass
+e.g. `weather = "Fog", tod = "Night"` to test another condition, or `weather = "keep"` for the
+save's own. Weathers: ClearSky, RainLight, RainHeavy, Fog, DustStorm, FireStorm, Heat. Times:
+Sunrise, Day, Sunset, Night.
+
 `RatoArena_Run` is the loop: it reloads the save before every match, so each one starts from the
 same state. This is what makes scores comparable.
 
