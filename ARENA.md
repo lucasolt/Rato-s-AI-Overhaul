@@ -56,7 +56,7 @@ RatoArena_Results()                        -- one line per match: label, winner,
 AsyncStringToFile("AppData/arena_results.csv", RatoArena_CSV())
 ```
 
-The second line writes `%AppData%\Jagged Alliance 3rena_results.csv` (open it in Excel). Mod
+The second line writes `%AppData%\Jagged Alliance 3\arena_results.csv` (open it in Excel). Mod
 code is not allowed to write files; the console is, which is why that line is typed by you. One
 row per match: label, winner, turns, seconds, weather, fitness, per-side
 `units/hp0/hp/dead/down/alive/dealt/friendly/kills/attacks`, and `genome` — the exact weights
