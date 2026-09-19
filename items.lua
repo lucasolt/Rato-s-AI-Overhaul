@@ -795,7 +795,7 @@ return {
 			}),
 			PlaceObj('AIActionPinDown', {
 				'BiasId', "PinDownAttack",
-				'Weight', 20,
+				'Weight', 1,
 				'OnActivationBiases', {
 					PlaceObj('AIBiasModification', {
 						'BiasId', "PinDownAttack",
