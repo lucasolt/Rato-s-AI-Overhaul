@@ -92,6 +92,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIPrecalcConeTargetZones.lua",
 		"Code/FUNCTION_GunnerBehaviors.lua",
 		"Code/SOURCE_ReliabilityCheck.lua",
+		"Code/TELEMETRY_Lite.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
