@@ -120,6 +120,10 @@ return {
 		'CodeFileName', "Code/FUNCTION_ChangeEquipment.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "FUNCTION_SetMechanicalStat",
+		'CodeFileName', "Code/FUNCTION_SetMechanicalStat.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "FUNCTION_EndTurnAIAction",
 		'CodeFileName', "Code/FUNCTION_EndTurnAIAction.lua",
 	}),
@@ -275,7 +279,7 @@ return {
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
-		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Restart after applying.',
+		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Restart after applying. Default is "Normal". I use "Hard".',
 		'OnApply', function (self, value)
 			return
 		end,
@@ -294,6 +298,12 @@ return {
 		'DefaultValue', true,
 	}),
 	PlaceObj('ModItemOptionToggle', {
+		'name', "ImproveMechanicalStat",
+		'DisplayName', "Set Mechanical Stat",
+		'Help', "In vanilla, most AI have no mechanical skill, because it was never used. As this mod makes the enemy weapon be able to jam, this option will assign a mechanical skill level to units randomly, based on their level and affiliation.",
+		'DefaultValue', true,
+	}),
+	PlaceObj('ModItemOptionToggle', {
 		'name', "AddHWStoGunners",
 		'DisplayName', "Add HWS to Gunners",
 		'Help', "Add Heavy Weapons Specialist perk to enemy Machine Gunners. Requires restart.",
@@ -308,7 +318,7 @@ return {
 	PlaceObj('ModItemOptionToggle', {
 		'name', "DontChangeEquip",
 		'DisplayName', "Disable grenade loot re-distribution",
-		'Help', "Disable grenade loot re-distribution, which can cause desync in coop playthroughs.",
+		'Help', "Disable grenade loot re-distribution, which may cause desync in coop playthroughs.",
 	}),
 	PlaceObj('ModItemOptionToggle', {
 		'name', "UseSimpleAttacksScoring",
@@ -363,7 +373,6 @@ return {
 				'Reference', "enemies",
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
-				'Weight', 150,
 				'FlankMarginTiles', 6,
 				'DepthTiles', 4,
 				'LateralShare', 60,
@@ -541,7 +550,7 @@ return {
 				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyDealDamage', {
-						'Weight', 300,
+						'Weight', 350,
 						'MaxHits', 100,
 						'SoftK', 150,
 					}),
@@ -621,7 +630,6 @@ return {
 		ExposedProneMinTiles = 12,
 		OptLocPolicies = {
 			PlaceObj('AIPolicyCustomWeaponRange', {
-				'Weight', 80,
 				'RangeMax', 40,
 				'Falloff', 12,
 			}),
@@ -912,7 +920,6 @@ return {
 				'RangeMax', 14,
 			}),
 			PlaceObj('AIPolicyEncircleEnemy', {
-				'Weight', 150,
 				'FlankMarginTiles', 8,
 				'ForwardLookaheadTiles', 0,
 				'WingFraction', 80,

@@ -250,11 +250,13 @@ function RATOAI_ChangeUnitDataDef(class, props)
             if CurrentModOptions.ImproveExplosiveStat then
                 class[k] = v
             end
-        elseif k == "boost_stats" then
-            BoostStats(class)
-        else
+        elseif k ~= "boost_stats" then
             class[k] = v
         end
+    end
+    -- boost last: pairs() order is arbitrary, and the boost must scale the explicit values above
+    if props.boost_stats then
+        BoostStats(class)
     end
 end
 
