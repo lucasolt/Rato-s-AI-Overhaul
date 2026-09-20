@@ -120,10 +120,6 @@ return {
 		'CodeFileName', "Code/FUNCTION_ChangeEquipment.lua",
 	}),
 	PlaceObj('ModItemCode', {
-		'name', "FUNCTION_SetMechanicalStat",
-		'CodeFileName', "Code/FUNCTION_SetMechanicalStat.lua",
-	}),
-	PlaceObj('ModItemCode', {
 		'name', "FUNCTION_EndTurnAIAction",
 		'CodeFileName', "Code/FUNCTION_EndTurnAIAction.lua",
 	}),

@@ -250,6 +250,11 @@ function RATOAI_ChangeUnitDataDef(class, props)
             if CurrentModOptions.ImproveExplosiveStat then
                 class[k] = v
             end
+        elseif k == "Mechanical" then
+            -- vanilla leaves this at 0, which also makes RandomizeStats skip it
+            if CurrentModOptions.ImproveMechanicalStat then
+                class[k] = v
+            end
         elseif k ~= "boost_stats" then
             class[k] = v
         end

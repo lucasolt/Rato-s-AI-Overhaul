@@ -55,7 +55,6 @@ return PlaceObj('ModDef', {
 		"Code/CUAE_options.lua",
 		"Code/REACTIONS_StopMGPackingUp.lua",
 		"Code/FUNCTION_ChangeEquipment.lua",
-		"Code/FUNCTION_SetMechanicalStat.lua",
 		"Code/FUNCTION_EndTurnAIAction.lua",
 		"Code/FUNCTION_ShouldMaxAim.lua",
 		"Code/FUNCTION_getAIShootingStanceBehaviorSelectionScore.lua",

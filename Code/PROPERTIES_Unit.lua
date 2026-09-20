@@ -23,12 +23,6 @@ function RATOAI_unitprops()
         default = false,
         no_edit = true
     }
-	UnitProperties.properties[#UnitProperties.properties + 1] = {
-        id = "RATOAI_MechanicalSkillSet",
-        editor = "bool",
-        default = false,
-        no_edit = true
-    }
 
 end
 
