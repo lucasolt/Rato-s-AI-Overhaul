@@ -268,10 +268,6 @@ return {
 		'name', "SOURCE_ReliabilityCheck",
 		'CodeFileName', "Code/SOURCE_ReliabilityCheck.lua",
 	}),
-	PlaceObj('ModItemCode', {
-		'name', "TELEMETRY_Lite",
-		'CodeFileName', "Code/TELEMETRY_Lite.lua",
-	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
