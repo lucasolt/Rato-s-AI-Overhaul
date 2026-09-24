@@ -111,6 +111,12 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
 
     local max_check_range, is_melee = AIGetWeaponCheckRange(unit, weapon, action)
     local is_heavy = IsKindOf(weapon, "HeavyWeapon")
+    ---- archetype value, -1 = const.RATOAI.MinShotCTH; melee and heavy weapons are not gated
+    local min_shot_cth = 0
+    if not is_melee and not is_heavy and IsKindOf(weapon, "Firearm") then
+        local v = context.archetype and context.archetype.MinShotCTH or -1
+        min_shot_cth = v >= 0 and v or (const.RATOAI.MinShotCTH or 0)
+    end
 
     ---- BUGFIX (B21): balas por ataque, para RATOAI_BurstHits expandir a rajada.
     ---- Depende so de (arma, acao) -- nem do destino nem do alvo -- entao e resolvido
@@ -431,10 +437,13 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                         if not (mod > const.AIShootAboveCTH) then
                             row.reject = string.format("soma de CTH %d <= %d", mod,
                                                        const.AIShootAboveCTH)
+                        elseif shot_cth < min_shot_cth then
+                            row.reject = string.format("first-shot CTH %d < %d", shot_cth,
+                                                       min_shot_cth)
                         end
                     end
 
-                    if mod > const.AIShootAboveCTH then
+                    if mod > const.AIShootAboveCTH and shot_cth >= min_shot_cth then
                         ---- BUGFIX (B10): neste ponto `mod` ainda e a soma pura de CTH
                         ---- devolvida por RATOAI_ScoreAttacks*. Tudo abaixo mistura
                         ---- unidades diferentes no mesmo numero.

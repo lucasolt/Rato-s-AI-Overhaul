@@ -220,6 +220,17 @@ function OnMsg.ClassesGenerate(classdefs)
                 no_edit = function(self)
                     return not self.ExposedProne
                 end
+            }, {
+                category = "Strategy",
+                id = "MinShotCTH",
+                name = "Min First-Shot CTH",
+                help = "Firearm attacks whose FIRST shot is below this CTH are not taken; the " ..
+                    "unit repositions instead. Assault roles (Skirmisher) want this high so " ..
+                    "they close in before shooting.\n-1 = const.RATOAI.MinShotCTH (global default).",
+                editor = "number",
+                default = -1,
+                min = -1,
+                max = 90
             }
         }
     }

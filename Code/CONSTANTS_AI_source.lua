@@ -40,7 +40,10 @@ const.RATOAI = const.RATOAI or {}
 -- const.AIFriendlyFire_ScoreMod = 50 -- % of damage score evaluation remanining when an ally is in danger
 -- const.AIShootAboveCTH = 0
 
-const.AIShootAboveCTH = 2 -- due to aCTH 
+const.AIShootAboveCTH = 2 -- due to aCTH
+---- first-shot CTH floor for firearm attacks; the sum gate above lets 3 shots at 1% through
+---- (telemetry: 37% of AI attacks were under 10%, 0.10 hits each). Per-archetype: AIArchetype.MinShotCTH
+const.RATOAI.MinShotCTH = 10
 ---------------------------------------------------------------------------------------------------
 ---- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
 ----

@@ -51,6 +51,14 @@
 ---- implicita de "use o grupo mais proximo". Quem esta perto domina o peso, e como quem
 ---- esta perto demais pontua 0 pelo RangeMin, o tile no meio da pinca cai sozinho.
 ---------------------------------------------------------------------------------------------------
+const.RATOAI = const.RATOAI or {}
+---- "Weapon" instances use the Accuracy band until the presets are switched in the editor
+const.RATOAI.AccuracyRange = true
+---- aim levels assumed when estimating the band (capped by the action's max aim)
+const.RATOAI.AccRangeAim = 2
+---- target silhouette the band is measured against (mercs fight crouched)
+const.RATOAI.AccRangeStance = "Crouch"
+
 DefineClass.AIPolicyCustomWeaponRange = {
     __parents = {"AIPositioningPolicy"},
     __generated_by_class = "ClassDef",
@@ -84,11 +92,36 @@ DefineClass.AIPolicyCustomWeaponRange = {
             id = "RangeBase",
             name = "Base da faixa",
             help = "Weapon = RangeMin/RangeMax sao % do alcance da SUA arma " ..
-                "(context.ExtremeRange). Absolute = sao tiles.",
+                "(context.ExtremeRange). Absolute = sao tiles.\n" ..
+                "Accuracy = the band is where THIS unit's first-shot CTH sits between " ..
+                "Accuracy CTH (far) and Accuracy CTH (near), from its aCTH cone; capped by " ..
+                "weapon range. Without aCTH (or melee) it falls back to Weapon.",
             editor = "choice",
             default = "Weapon",
             items = function(self)
-                return {"Weapon", "Absolute"}
+                return {"Weapon", "Absolute", "Accuracy"}
+            end
+        }, {
+            id = "AccCTHNear",
+            name = "Accuracy CTH (near edge)",
+            help = "CTH at the NEAR edge of the band. Closer than this the unit is over-committing.",
+            editor = "number",
+            default = 60,
+            min = 1,
+            max = 99,
+            no_edit = function(self)
+                return self.RangeBase == "Absolute"
+            end
+        }, {
+            id = "AccCTHFar",
+            name = "Accuracy CTH (far edge)",
+            help = "CTH at the FAR edge of the band. Farther than this the shot is not worth taking.",
+            editor = "number",
+            default = 30,
+            min = 1,
+            max = 99,
+            no_edit = function(self)
+                return self.RangeBase == "Absolute"
             end
         }, {
             id = "RangeMin",
@@ -140,14 +173,56 @@ DefineClass.AIPolicyCustomWeaponRange = {
     }
 }
 
+function AIPolicyCustomWeaponRange:UsesAccuracy()
+    return self.RangeBase == "Accuracy" or
+               (self.RangeBase == "Weapon" and const.RATOAI.AccuracyRange)
+end
+
 function AIPolicyCustomWeaponRange:GetEditorView()
     local faixa
     if self.RangeBase == "Absolute" then
         faixa = string.format("%d-%d tiles", self.RangeMin, self.RangeMax)
+    elseif self:UsesAccuracy() then
+        faixa = string.format("CTH %d-%d%%", self.AccCTHFar, self.AccCTHNear)
     else
         faixa = string.format("%d-%d%% do alcance", self.RangeMin, self.RangeMax)
     end
     return string.format("Custom Weapon Range (%s, %s)", self.Mode, faixa)
+end
+
+---- Distance where the unit's CTH vs a reference silhouette equals `cth`, from the aCTH cone alone.
+---- Circle model: exact or pessimistic vs the separable one (measured live), so bands err closer.
+local function AccuracyDist(context, cth)
+    local unit, weapon, action = context.unit, context.weapon, context.default_attack
+    if not (weapon and action and IsACHTActive(weapon, action, unit)) then
+        return false
+    end
+    local _, max_aim = unit:GetBaseAimLevelRange(action)
+    local aim = Min(const.RATOAI.AccRangeAim or 2, max_aim or 0)
+    local sigma = Rat_GetAperture(weapon, unit, action, aim)
+    local k1000 = Rat_KForCTH(cth)
+    if not (sigma and k1000) then
+        return false
+    end
+    local a = const.Combat.Aperture
+    local half_cm = a.Silhouette[const.RATOAI.AccRangeStance] or a.Silhouette.Standing
+    ---- Rat_ThetaTarget inverted at theta = sigma * k
+    return MulDivRound(half_cm * 34380, 1000, sigma * k1000)
+end
+
+---- memoized per context: the cone depends only on the unit, and EvalDest runs per tile
+function RATOAI_DistForCTH(context, cth)
+    local cache = context.__ratoai_acc_dist
+    if not cache then
+        cache = {}
+        context.__ratoai_acc_dist = cache
+    end
+    local d = cache[cth]
+    if d == nil then
+        d = AccuracyDist(context, cth)
+        cache[cth] = d
+    end
+    return d or nil
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -155,6 +230,20 @@ end
 ---- e resolvida uma vez por avaliacao e nao por inimigo.
 ---------------------------------------------------------------------------------------------------
 function AIPolicyCustomWeaponRange:GetBand(context)
+    if self:UsesAccuracy() then
+        local d1 = RATOAI_DistForCTH(context, self.AccCTHNear)
+        local d2 = RATOAI_DistForCTH(context, self.AccCTHFar)
+        if d1 and d2 then
+            local near, far = Min(d1, d2), Max(d1, d2)
+            ---- ExtremeRange is in tiles; 1 means "not a firearm"
+            local cap = (context.ExtremeRange or 1) * const.SlabSizeX
+            if cap > const.SlabSizeX then
+                far = Min(far, cap)
+                near = Min(near, far)
+            end
+            return near, far, self.Falloff * const.SlabSizeX
+        end
+    end
     local rmin, rmax
     if self.RangeBase == "Absolute" then
         rmin, rmax = self.RangeMin, self.RangeMax
