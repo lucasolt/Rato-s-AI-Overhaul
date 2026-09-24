@@ -21,7 +21,7 @@ function RATOAI_CUAEoptions()
                 extraWeapons = {{type = {{"Handgun", 70}, {"SMG", 100}}, size = 1}},
                 replacements = {MeleeWeapon = {discard = true}},
 
-                extraUtility = {{type = {{"Explosive", 10}, {"Flash", 30}}, amount = 1}}
+                extraUtility = {{type = {{"Explosive", 10}, {"Flash", 40}}, amount = 1}}
             },
             Soldier = {
                 weaponComponentsPriorities = {
@@ -29,7 +29,7 @@ function RATOAI_CUAEoptions()
                 },
 
                 extraUtility = {
-                    night_pack, {type = {{"Explosive", 30}, {"Flash", 50}}, amount = 1}, rare_gas
+                    night_pack, {type = {{"Explosive", 35}, {"Flash", 60}}, amount = 1}, rare_gas
                 }
             },
             Commander = {
@@ -54,7 +54,7 @@ function RATOAI_CUAEoptions()
                     },
                     Handgun = {tag = "CloseQuarters", prioritySlots = {"Scope", "Barrel", "Side"}}
                 },
-                extraUtility = {night_pack, {type = {{"Flash", 30}, {"Explosive", 40}}, amount = 1}}
+                extraUtility = {night_pack, {type = {{"Flash", 40}, {"Explosive", 60}}, amount = 1}}
             },
 
             Stormer = {
