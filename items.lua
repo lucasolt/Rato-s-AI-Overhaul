@@ -326,6 +326,24 @@ return {
 		'DisplayName', "Disable Stats Boost for Militia",
 		'Help', "If checked, Militia units will not receive Stats Boost. Restart after applying.",
 	}),
+	PlaceObj('ModItemOptionToggle', {
+		'name', "WeaponShipmentRebalance",
+		'DisplayName', "Weapon Shipment Rebalance",
+		'Help', "Weapon Shipments are rarer (they wait until you have $20,000, spawn half as often, and shipments respect a 3 day cooldown), and their guns are less likely to be above the current Bobby Ray tier.",
+		'DefaultValue', true,
+	}),
+	PlaceObj('ModItemOptionChoice', {
+		'name', "WeaponShipmentEscort",
+		'DisplayName', "Weapon Shipment Escort",
+		'Help', "How strong the squad escorting a Weapon Shipment is. Reinforced: +2 units, elite carrier. Heavy: +4 units, 2 elites. Brutal: +6 units, 3 elites. Vanilla: unchanged.",
+		'DefaultValue', "Reinforced",
+		'ChoiceList', {
+			"Vanilla",
+			"Reinforced",
+			"Heavy",
+			"Brutal",
+		},
+	}),
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {
 			PlaceObj('StandardAI', {

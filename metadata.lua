@@ -103,6 +103,8 @@ return PlaceObj('ModDef', {
 		ImproveExplosiveStat = true,
 		ImproveMechanicalStat = true,
 		UseSimpleAttacksScoring = false,
+		WeaponShipmentEscort = "Reinforced",
+		WeaponShipmentRebalance = true,
 	},
 	'has_data', true,
 	'saved', 1789873221,

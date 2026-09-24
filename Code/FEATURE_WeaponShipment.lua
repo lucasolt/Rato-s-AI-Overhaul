@@ -24,6 +24,16 @@ RAT_WS_ESCORT_EXTRA = {
 
 local rat_ws_pending = false
 
+---- Own wrapper registry: mod code does not load in dependency order, GBO3's Rat_AttOriginal may not exist yet.
+RATOAI_WS_WRAPS = setmetatable({}, weak_keys_meta)
+
+function RATOAI_WSOriginal(fn)
+    while RATOAI_WS_WRAPS[fn] do
+        fn = RATOAI_WS_WRAPS[fn]
+    end
+    return fn
+end
+
 function Rat_WSEnabled()
     return CurrentModOptions.WeaponShipmentRebalance ~= false
 end
@@ -48,7 +58,7 @@ function Rat_WSGunWeight(entry, tier)
 end
 
 ---- Same roll as LootDef "random", with each gun reweighted by its tier gap.
-local orig = Rat_AttOriginal(LootDef.GenerateLoot)
+local orig = RATOAI_WSOriginal(LootDef.GenerateLoot)
 function LootDef:GenerateLoot(looter, looted, seed, items, modifiers, amount_modifier)
     if self.id ~= "WeaponShipment_Gun" or self.loot ~= "random" or not Rat_WSEnabled() then
         return orig(self, looter, looted, seed, items, modifiers, amount_modifier)
@@ -76,10 +86,10 @@ function LootDef:GenerateLoot(looter, looted, seed, items, modifiers, amount_mod
         end
     end
 end
-RAT_ATT_WRAPS[LootDef.GenerateLoot] = orig
+RATOAI_WS_WRAPS[LootDef.GenerateLoot] = orig
 
 ---- Vanilla reads preset.Conditions, but the presets author EnableConditions: the $20k gate never ran.
-local orig = Rat_AttOriginal(PickShipmentPreset)
+local orig = RATOAI_WSOriginal(PickShipmentPreset)
 function PickShipmentPreset()
     if not Rat_WSEnabled() then
         rat_ws_pending = orig()
@@ -101,10 +111,10 @@ function PickShipmentPreset()
     rat_ws_pending = id
     return id
 end
-RAT_ATT_WRAPS[PickShipmentPreset] = orig
+RATOAI_WS_WRAPS[PickShipmentPreset] = orig
 
 ---- SpawnDynamicDBSquad picks the preset, then generates the squad: the pick is handed over here.
-local orig = Rat_AttOriginal(GenerateRandEnemySquadUnits)
+local orig = RATOAI_WSOriginal(GenerateRandEnemySquadUnits)
 function GenerateRandEnemySquadUnits(enemy_squad_id)
     local ids, names, sources, visuals = orig(enemy_squad_id)
     local pending = rat_ws_pending
@@ -141,7 +151,7 @@ function GenerateRandEnemySquadUnits(enemy_squad_id)
     end
     return ids, names, sources, visuals
 end
-RAT_ATT_WRAPS[GenerateRandEnemySquadUnits] = orig
+RATOAI_WS_WRAPS[GenerateRandEnemySquadUnits] = orig
 
 ---- Vanilla's NewDay cooldown is `last - now > 3 days`, never true. Days without a spawn after one.
 RAT_WS_COOLDOWN_DAYS = 3
@@ -153,7 +163,7 @@ local function rat_ws_in_cooldown(last)
     return last > 0 and Game.CampaignTime - last < RAT_WS_COOLDOWN_DAYS * const.Scale.day
 end
 
-local orig = Rat_AttOriginal(SpawnDynamicDBSquad)
+local orig = RATOAI_WSOriginal(SpawnDynamicDBSquad)
 function SpawnDynamicDBSquad(...)
     if rat_ws_midnight and rat_ws_in_cooldown(rat_ws_midnight[2]) then
         return
@@ -162,7 +172,7 @@ function SpawnDynamicDBSquad(...)
     orig(...)
     rat_ws_pending = false
 end
-RAT_ATT_WRAPS[SpawnDynamicDBSquad] = orig
+RATOAI_WS_WRAPS[SpawnDynamicDBSquad] = orig
 
 ---- NewHour fires right before NewDay in the same tick, after Guardpost's aggro spawn already ran.
 function OnMsg.NewHour()
