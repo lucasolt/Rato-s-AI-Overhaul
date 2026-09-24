@@ -268,6 +268,10 @@ return {
 		'name', "SOURCE_ReliabilityCheck",
 		'CodeFileName', "Code/SOURCE_ReliabilityCheck.lua",
 	}),
+	PlaceObj('ModItemCode', {
+		'name', "FEATURE_WeaponShipment",
+		'CodeFileName', "Code/FEATURE_WeaponShipment.lua",
+	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
