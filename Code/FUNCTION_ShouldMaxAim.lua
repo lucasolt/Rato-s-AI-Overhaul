@@ -1,6 +1,7 @@
 ---- PERF (C11.1): tabela constante, era realocada a cada GetIdealAimLevels
 ---- (ou seja, uma vez por par destino/alvo no laco de AIPrecalcDamageScore)
-local burst_attacks = {"BurstFire", "MGBurstFire", "BuckshotBurst"}
+---- AutoFire: GBO3's short autofire replaces BurstFire as the default attack on weapons without a limiter
+local burst_attacks = {"BurstFire", "MGBurstFire", "BuckshotBurst", "AutoFire"}
 
 function ShouldMaxAim(context, target_dist) ----- used in AICalcAttacksAndAim
 

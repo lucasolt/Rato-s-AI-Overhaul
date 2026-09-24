@@ -211,6 +211,11 @@ local function RATOAI_UnusableFireMode(action_id, unit)
 end
 
 function AIPlayCombatAction(action_id, unit, ap, args)
+    ---- a sustained long AutoFire (GBO3 view) is replayed by id; its length rides on the action
+    local default_attack = unit.ai_context and unit.ai_context.default_attack
+    if args and args.num_shots == nil and default_attack and default_attack.id == action_id then
+        args.num_shots = default_attack.rat_num_shots
+    end
     local ok_m, unusable = pcall(RATOAI_UnusableFireMode, action_id, unit)
     if ok_m and unusable then
         print("[RATOAI]", unit.session_id, "blocked fire mode unusable with current weapon/ammo:", action_id)

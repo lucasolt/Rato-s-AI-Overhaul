@@ -618,7 +618,9 @@ RATOAI_LastExpected = {}
 ---- escritas a mao, qualquer componente novo reabre exatamente este bug -- e reabre em silencio.
 ---------------------------------------------------------------------------------------------------
 local function RATOAI_ExpectedKey(context, action, body_part, ap)
-    return tostring(action and action.id) .. "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
+    ---- rat_num_shots: GBO3's long AutoFire view shares the id with the short default autofire
+    return tostring(action and action.id) .. "#" .. tostring(action and action.rat_num_shots) ..
+               "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
                tostring(body_part or "Torso") .. "@" .. tostring(ap) .. "@" ..
                tostring(context.__ratoai_stance_paid) .. "@" ..
                tostring(RATOAI_FullGeometry(context)) ---- a planning-geometry entry is stale at the shot

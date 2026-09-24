@@ -60,7 +60,7 @@ function RATOAI_SustainFiringMode(action, context)
         return
     end
 
-    local caction = CombatActions[action.action_id or false]
+    local caction = RATOAI_SignatureAttack(action, context.weapon)
     local unit = context.unit
     if not (caction and unit) or caction == context.default_attack then
         return
@@ -89,34 +89,57 @@ function RATOAI_SustainFiringMode(action, context)
     end
 end
 
----- O gancho. Sobrescrever o Execute e o que evita copiar a AIPlayAttacks inteira so para
----- enfiar uma linha depois da chamada -- e o Execute do source e o ponto exato onde "a acao
----- acabou de disparar" e verdade.
-----
----- Original guardado NA CLASSE, e nao numa global com guarda de `rawget`: medido no processo
----- vivo, `rawget(_G, ...)` nao enxerga global nenhuma neste engine (ver CLAUDE.md), entao aquele
----- idioma recapturaria o Execute JA PATCHEADO a cada reload e empilharia um wrapper por carga.
----- A tabela da classe e tabela comum, entao aqui o `or` significa o que diz.
-----
----- Cobre toda a familia de tiro por heranca, inclusive AIActionMGBurstFire.
-AIActionSingleTargetShot.RATOAI_Orig_Execute = AIActionSingleTargetShot.RATOAI_Orig_Execute or
-                                                   AIActionSingleTargetShot.Execute
-
+---- AIActions.lua: fires the resolved attack, then sustains it. Inherited by AIActionMGBurstFire.
 function AIActionSingleTargetShot:Execute(context, action_state)
-    local status = AIActionSingleTargetShot.RATOAI_Orig_Execute(self, context, action_state)
+    assert(action_state.has_ap)
+    AIPlayCombatAction(action_state.ratoai_action_id or self.action_id, context.unit, nil,
+                       action_state.args)
     RATOAI_SustainFiringMode(self, context)
-    return status
 end
 
----- O IsAvailable vanilla so olha AP/municao/CTH do GetActionResults, que "funciona" em predicao
----- para SingleShot com chumbo. Sem precalc o action_state fica sem has_ap e o IsAvailable reprova.
-AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction = AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction or
-                                                         AIActionSingleTargetShot.PrecalcAction
+---- The attack a shot signature fires. GBO3: BurstFire without a burst limiter is a short autofire,
+---- and AutoFire is the long burst -- a view of the preset that carries its length (AILongShots).
+function RATOAI_SignatureAttack(action, weapon)
+    local id = action.action_id
+    if id == "BurstFire" then
+        return CombatActions[Rat_ShortBurstAttackId(weapon)]
+    elseif id == "AutoFire" then
+        return Rat_AutoFireView(const.Combat.Autofire.AILongShots)
+    end
+    return CombatActions[id or false]
+end
 
+---- AIActions.lua, with the resolved attack and its length in the args. The vanilla IsAvailable only
+---- reads AP/ammo/CTH, so a mode the weapon cannot use now must stop here.
 function AIActionSingleTargetShot:PrecalcAction(context, action_state)
-    if IsKindOf(context.weapon, "Firearm") and
-        not RATOAI_IsAttackModeAvailable(context.unit, context.weapon, self.action_id) then
+    local weapon = context.weapon
+    if not IsKindOf(weapon, "Firearm") or IsKindOf(weapon, "HeavyWeapon") then
         return
     end
-    return AIActionSingleTargetShot.RATOAI_Orig_PrecalcAction(self, context, action_state)
+    local action = RATOAI_SignatureAttack(self, weapon)
+    if not action or not RATOAI_IsAttackModeAvailable(context.unit, weapon, action.id) then
+        return
+    end
+
+    local unit = context.unit
+    local upos = GetPackedPosAndStance(unit)
+    local target = context.dest_target[upos]
+
+    local body_parts = AIGetAttackTargetingOptions(unit, context, target, action, self.AttackTargeting)
+    local targeting
+    if body_parts and #body_parts > 0 then
+        local pick = table.weighted_rand(body_parts, "chance", InteractionRand(1000000, "Combat"))
+        targeting = pick and pick.id or nil
+    end
+
+    local args, has_ap = AIGetAttackArgs(context, action, targeting or "Torso", self.Aiming)
+    args.num_shots = action.rat_num_shots
+    action_state.args = args
+    action_state.has_ap = has_ap
+    action_state.ratoai_action_id = action.id
+    if has_ap and IsValidTarget(args.target) then
+        local results = action:GetActionResults(context.unit, args)
+        action_state.has_ammo = not not results.fired
+        action_state.can_hit = results.chance_to_hit > 0
+    end
 end
