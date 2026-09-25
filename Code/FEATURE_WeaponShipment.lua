@@ -2,6 +2,8 @@
 
 ---- Gun weight % by how many tiers the gun sits above the campaign tier (index = gap).
 RAT_WS_BEYOND_TIER_PCT = {25, 5}
+---- Same, for guns below the campaign tier (index = tiers below), so late shipments lean to top-tier guns.
+RAT_WS_BELOW_TIER_PCT = {50, 25}
 ---- WeaponShipment's share of the dynamic shipment roll, % of its preset weight.
 RAT_WS_SPAWN_WEIGHT_PCT = 50
 ---- WeaponShipmentEscort choice -> units added, and units promoted to their _Elite variant (carrier first).
@@ -51,10 +53,11 @@ end
 function Rat_WSGunWeight(entry, tier)
     local class = entry.item and g_Classes[entry.item]
     local gap = (class and class.Tier or 1) - tier
-    if gap <= 0 then
+    local pcts = gap > 0 and RAT_WS_BEYOND_TIER_PCT or RAT_WS_BELOW_TIER_PCT
+    if gap == 0 or #pcts == 0 then
         return entry.weight
     end
-    return MulDivRound(entry.weight, RAT_WS_BEYOND_TIER_PCT[Min(gap, #RAT_WS_BEYOND_TIER_PCT)], 100)
+    return MulDivRound(entry.weight, pcts[Min(abs(gap), #pcts)], 100)
 end
 
 ---- Same roll as LootDef "random", with each gun reweighted by its tier gap.
