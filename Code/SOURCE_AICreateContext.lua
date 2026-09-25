@@ -24,8 +24,10 @@ function AICreateContext(unit, context)
         local has_stance_ap = ap >= total_stance_cost
         -- print("-- checking if has stance AP from AICreateContext:", has_stance_ap, GameTime())
         -- print(default_attack.id, attack_cost, stance_cost)
-        if not has_stance_ap and RATOAI_IsAttackModeAvailable(unit, weapon, "SingleShot") then
-            default_attack = CombatActions["SingleShot"]
+        ---- auto-only weapons degrade to a 1-round autofire (GBO3)
+        local single = Rat_SingleShotAction(weapon)
+        if not has_stance_ap and RATOAI_IsAttackModeAvailable(unit, weapon, single.id) then
+            default_attack = single
         end
     end
 

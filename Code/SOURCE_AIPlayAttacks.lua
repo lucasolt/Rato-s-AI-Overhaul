@@ -105,6 +105,8 @@ function RATOAI_SignatureAttack(action, weapon)
         return CombatActions[Rat_ShortBurstAttackId(weapon)]
     elseif id == "AutoFire" then
         return Rat_AutoFireView(const.Combat.Autofire.AILongShots)
+    elseif id == "SingleShot" then
+        return Rat_SingleShotAction(weapon)
     end
     return CombatActions[id or false]
 end

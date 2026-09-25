@@ -60,14 +60,15 @@ function RATOAI_TryDegradeToSingleShot(context, ap_in, target_dist)
 
     local weapon, unit = context.weapon, context.unit
     local atual = context.default_attack
-    if not (weapon and unit and atual) or atual.id == "SingleShot" then
+    if not (weapon and unit and atual) then
         return
     end
-    if not RATOAI_IsAttackModeAvailable(unit, weapon, "SingleShot") then
+    ---- auto-only weapons degrade to a 1-round autofire (GBO3)
+    local single = Rat_SingleShotAction(weapon)
+    if atual == single or not RATOAI_IsAttackModeAvailable(unit, weapon, single.id) then
         return
     end
 
-    local single = CombatActions.SingleShot
     ---- pcall: o GetAPCost do GBO3 passa por componentes de arma e por Unit:*; um mod de terceiro
     ---- que quebre ali nao pode derrubar o turno da IA.
     local ok, cost = pcall(single.GetAPCost, single, unit)
