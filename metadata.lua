@@ -93,6 +93,7 @@ return PlaceObj('ModDef', {
 		"Code/FUNCTION_GunnerBehaviors.lua",
 		"Code/SOURCE_ReliabilityCheck.lua",
 		"Code/FEATURE_WeaponShipment.lua",
+		"Code/FEATURE_EnemyLoot.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
@@ -100,6 +101,9 @@ return PlaceObj('ModDef', {
 		CUAELoreProgression = true,
 		DontBoostMilitia = false,
 		DontChangeEquip = false,
+		EnemyAttachmentDrop = 100,
+		EnemyDropCondition = "None",
+		EnemyDropEverything = false,
 		ImproveExplosiveStat = true,
 		ImproveMechanicalStat = true,
 		UseSimpleAttacksScoring = false,

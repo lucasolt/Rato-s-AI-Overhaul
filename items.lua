@@ -272,6 +272,10 @@ return {
 		'name', "FEATURE_WeaponShipment",
 		'CodeFileName', "Code/FEATURE_WeaponShipment.lua",
 	}),
+	PlaceObj('ModItemCode', {
+		'name', "FEATURE_EnemyLoot",
+		'CodeFileName', "Code/FEATURE_EnemyLoot.lua",
+	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
@@ -342,6 +346,31 @@ return {
 			"Reinforced",
 			"Heavy",
 			"Brutal",
+		},
+	}),
+	PlaceObj('ModItemOptionToggle', {
+		'name', "EnemyDropEverything",
+		'DisplayName', "Enemies Drop Everything",
+		'Help', "Enemies killed in tactical combat drop every item they carry, instead of rolling each item's drop chance. Pair it with the attachment and condition options below to keep the loot in check.",
+	}),
+	PlaceObj('ModItemOptionNumber', {
+		'name', "EnemyAttachmentDrop",
+		'DisplayName', "Enemy Attachment Drop Chance (%)",
+		'Help', "Chance that each attachment fitted to a dropped enemy weapon (scopes, side devices, bipods, muzzle devices -- the ones that are items in GBO3) stays on it. A lost attachment is removed and the gun keeps its default part. Default is 100%, nothing is removed.",
+		'DefaultValue', 100,
+		'MaxValue', 101,
+		'StepSize', 25,
+	}),
+	PlaceObj('ModItemOptionChoice', {
+		'name', "EnemyDropCondition",
+		'DisplayName', "Enemy Drop Condition Loss",
+		'Help', "Weapons and armor dropped by enemies lose condition. Light: 5-15. Moderate: 10-30. Heavy: 20-45. Never below 10. Default is None.",
+		'DefaultValue', "None",
+		'ChoiceList', {
+			"None",
+			"Light",
+			"Moderate",
+			"Heavy",
 		},
 	}),
 	PlaceObj('ModItemAIArchetype', {
