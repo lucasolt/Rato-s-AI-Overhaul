@@ -1,7 +1,7 @@
 ---- Weapon Shipment: rarer, fewer guns above the campaign tier (WeaponShipmentRebalance), heavier escort (WeaponShipmentEscort).
 
 ---- Gun weight % by how many tiers the gun sits above the campaign tier (index = gap).
-RAT_WS_BEYOND_TIER_PCT = {25, 5}
+RAT_WS_BEYOND_TIER_PCT = {60, 10}
 ---- Same, for guns below the campaign tier (index = tiers below), so late shipments lean to top-tier guns.
 RAT_WS_BELOW_TIER_PCT = {50, 25}
 ---- WeaponShipment's share of the dynamic shipment roll, % of its preset weight.
