@@ -1,5 +1,5 @@
 ---- Enemy loot: drop everything (EnemyDropEverything), strip fitted attachments (EnemyAttachmentDrop),
----- and wear down dropped gear (EnemyDropCondition). Tactical deaths only: auto-resolve loot skips DropLoot.
+---- and wear down dropped gear (EnemyDropCondition). Covers tactical deaths and auto-resolve.
 
 const.RATOAI = const.RATOAI or {}
 ---- EnemyDropCondition choice -> condition points lost, rolled in [min, max].
@@ -11,10 +11,39 @@ const.RATOAI.DropConditionLoss = {
 ---- Wear never takes a dropped item below this condition.
 const.RATOAI.DropConditionFloor = 10
 
-local function rat_loot_is_enemy(unit)
-    local side = unit.team and unit.team.side
+local function rat_loot_enemy_side(side)
     return side == "enemy1" or side == "enemy2" or side == "enemyNeutral"
 end
+
+---- Auto-resolve drops loot from UnitData after Die() has already removed it from its squad.
+local rat_ar_enemies = false
+
+local function rat_loot_is_enemy(unit)
+    if rat_ar_enemies and rat_ar_enemies[unit.session_id] then
+        return true
+    end
+    return rat_loot_enemy_side(unit.team and unit.team.side)
+end
+
+---- Same squad query ApplyAutoResolveOutcome makes, taken while the squads still hold their units.
+local orig_ar = RATOAI_WSOriginal(ApplyAutoResolveOutcome)
+function ApplyAutoResolveOutcome(sector, playerOutcome)
+    local _, enemySquads = GetSquadsInSector(sector.Id, "excludeTravelling", not "includeMilitia",
+                                             "excludeArriving", "excludeRetreating")
+    local ids = {}
+    for _, squad in ipairs(enemySquads or empty_table) do
+        if rat_loot_enemy_side(squad.Side) then
+            for _, id in ipairs(squad.units or empty_table) do
+                ids[id] = true
+            end
+        end
+    end
+    rat_ar_enemies = ids
+    local items = orig_ar(sector, playerOutcome)
+    rat_ar_enemies = false
+    return items
+end
+RATOAI_WS_WRAPS[ApplyAutoResolveOutcome] = orig_ar
 
 ---- Only GBO3's attachment items are stripped: they are what a detach hands back as loot.
 local function rat_loot_strip(unit, weapon, keep_pct)
