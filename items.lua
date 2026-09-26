@@ -338,8 +338,8 @@ return {
 	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "WeaponShipmentEscort",
-		'DisplayName', "Weapon Shipment Escort",
-		'Help', "How strong the squad escorting a Weapon Shipment is. Reinforced: +2 units, elite carrier. Heavy: +4 units, 2 elites. Brutal: +6 units, 3 elites. Vanilla: unchanged.",
+		'DisplayName', "Shipment Escort",
+		'Help', "How strong the squad escorting a Weapon or Diamond Shipment is. Reinforced: +2 units, elite carrier. Heavy: +4 units, 2 elites. Brutal: +6 units, 3 elites. Vanilla: unchanged.",
 		'DefaultValue', "Reinforced",
 		'ChoiceList', {
 			"Vanilla",

@@ -1,4 +1,4 @@
----- Weapon Shipment: rarer, fewer guns above the campaign tier (WeaponShipmentRebalance), heavier escort (WeaponShipmentEscort).
+---- Weapon Shipment: rarer, fewer guns above the campaign tier (WeaponShipmentRebalance), heavier Weapon and Diamond escorts (WeaponShipmentEscort).
 
 ---- Gun weight % by how many tiers the gun sits above the campaign tier (index = gap).
 RAT_WS_BEYOND_TIER_PCT = {60, 10}
@@ -6,6 +6,8 @@ RAT_WS_BEYOND_TIER_PCT = {60, 10}
 RAT_WS_BELOW_TIER_PCT = {50, 25}
 ---- WeaponShipment's share of the dynamic shipment roll, % of its preset weight.
 RAT_WS_SPAWN_WEIGHT_PCT = 50
+---- Shipment presets whose escort follows the WeaponShipmentEscort option.
+RAT_WS_ESCORT_PRESETS = {WeaponShipment = true, DiamondShipment = true}
 ---- WeaponShipmentEscort choice -> units added, and units promoted to their _Elite variant (carrier first).
 RAT_WS_ESCORT_LEVELS = {
     Vanilla = {extra = 0, elites = 0},
@@ -122,7 +124,7 @@ function GenerateRandEnemySquadUnits(enemy_squad_id)
     local ids, names, sources, visuals = orig(enemy_squad_id)
     local pending = rat_ws_pending
     rat_ws_pending = false
-    local preset = pending == "WeaponShipment" and ShipmentPresets[pending]
+    local preset = RAT_WS_ESCORT_PRESETS[pending] and ShipmentPresets[pending]
     if not preset or preset.enemy_squad_def ~= enemy_squad_id then
         return ids, names, sources, visuals
     end
