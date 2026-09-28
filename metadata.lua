@@ -21,7 +21,7 @@ return PlaceObj('ModDef', {
 	'id', "RATOAI",
 	'author', "rato",
 	'version_major', 2,
-	'version', 4706,
+	'version', 4709,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -111,8 +111,8 @@ return PlaceObj('ModDef', {
 		WeaponShipmentRebalance = true,
 	},
 	'has_data', true,
-	'saved', 1789873221,
-	'code_hash', -5718704688730348795,
+	'saved', 1790483415,
+	'code_hash', -6423032456513124462,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",

@@ -279,7 +279,7 @@ return {
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",
-		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Restart after applying. Default is "Normal". I use "Hard".',
+		'Help', 'If enabled, enemy unit stats will be improved based on their roles. The hardest the difficulty, the bigger the stat boost. If set to "Disabled", enemies will have vanilla stats. Restart after applying.',
 		'OnApply', function (self, value)
 			return
 		end,
