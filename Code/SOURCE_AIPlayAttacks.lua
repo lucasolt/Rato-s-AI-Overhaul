@@ -15,10 +15,13 @@ local RATOAI_originalAIPlayAttacks = AIPlayAttacks
 ---- tambem a AISignatureAction descartada em AIACTION_Reload.lua. Antes de reintroduzir qualquer
 ---- coisa nessa linha: sao tres call sites, confira os tres.
 ---------------------------------------------------------------------------------------------------
+---- BUGFIX (B56): the status ("restart" etc.) was dropped, so CombatAI.lua:505 always fell
+---- through to AITakeCover and TargetChangePolicy = "restart" never restarted.
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
-    RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
+    local status = RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = false
+    return status
 end
 
 ---------------------------------------------------------------------------------------------------
