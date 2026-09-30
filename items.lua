@@ -160,6 +160,10 @@ return {
 		'CodeFileName', "Code/FUNCTION_ScoreAttacksDetailed.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "FUNCTION_BurstLength",
+		'CodeFileName', "Code/FUNCTION_BurstLength.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "FUNCTION_SetArchetypePoliciesWeights",
 		'CodeFileName', "Code/FUNCTION_SetArchetypePoliciesWeights.lua",
 	}),

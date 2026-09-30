@@ -623,7 +623,8 @@ local function RATOAI_ExpectedKey(context, action, body_part, ap)
                "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
                tostring(body_part or "Torso") .. "@" .. tostring(ap) .. "@" ..
                tostring(context.__ratoai_stance_paid) .. "@" ..
-               tostring(RATOAI_FullGeometry(context)) ---- a planning-geometry entry is stale at the shot
+               tostring(RATOAI_FullGeometry(context)) .. ---- a planning-geometry entry is stale at the shot
+               (context.__ratoai_burst_ladders and "@prefix" or "") ---- approximate ladder, chooser only
 end
 
 ---- o AP que o RATOAI_ExpectedFor resolve por dentro quando ninguem passa `ap_override`. Extraido
@@ -875,12 +876,18 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         if ratios_by_aim then
             ratios = ratios_by_aim[aim_i]
             if ratios == nil then
+                ratios = RATOAI_BurstLadderPrefix(context, action, upos, target, aim_i, body_part,
+                                                  shots)
+            end
+            if ratios == nil then
                 ---- `body_part` vai junto: a escada e medida contra a silhueta que se esta
                 ---- mirando, e cabeca e torso nao produzem a mesma razao.
                 ratios = RATOAI_ConeRatios(unit, target, action, weapon, aim_i, attacker_pos,
                                            shots, args.rat_sigma, body_part) or false
-                ratios_by_aim[aim_i] = ratios
+                RATOAI_BurstLadderStore(context, action, upos, target, aim_i, body_part, shots,
+                                        ratios)
             end
+            ratios_by_aim[aim_i] = ratios
         end
 
         local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth, RATOAI_AimBonus(

@@ -65,6 +65,7 @@ return PlaceObj('ModDef', {
 		"Code/FUNCTION_CustomArchetypeFunc.lua",
 		"Code/FUNCTION_CanDegradeToSingleShot.lua",
 		"Code/FUNCTION_ScoreAttacksDetailed.lua",
+		"Code/FUNCTION_BurstLength.lua",
 		"Code/FUNCTION_SetArchetypePoliciesWeights.lua",
 		"Code/PROPERTIES_Unit.lua",
 		"Code/SOURCE_AIPrecalcDamageScore.lua",

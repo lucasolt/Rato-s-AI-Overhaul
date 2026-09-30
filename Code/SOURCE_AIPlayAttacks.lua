@@ -20,6 +20,12 @@ local RATOAI_originalAIPlayAttacks = AIPlayAttacks
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
     local status = RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
+    if not status and not IsSetpiecePlaying() then
+        local ok, err = pcall(RATOAI_FireTailBurst, unit, context, force_or_skip_action)
+        if not ok then
+            print("[RATOAI] RATOAI_FireTailBurst failed --", err)
+        end
+    end
     context.AIisPlayingAttacks = false
     return status
 end
@@ -63,7 +69,7 @@ function RATOAI_SustainFiringMode(action, context)
         return
     end
 
-    local caction = RATOAI_SignatureAttack(action, context.weapon)
+    local caction = RATOAI_SignatureAttack(action, context.weapon, context)
     local unit = context.unit
     if not (caction and unit) or caction == context.default_attack then
         return
@@ -102,8 +108,15 @@ end
 
 ---- The attack a shot signature fires. GBO3: BurstFire without a burst limiter is a short autofire,
 ---- and AutoFire is the long burst -- a view of the preset that carries its length (AILongShots).
-function RATOAI_SignatureAttack(action, weapon)
+---- With a context, AutoFire/MGBurstFire take the length RATOAI_BurstLengthFor picks.
+function RATOAI_SignatureAttack(action, weapon, context)
     local id = action.action_id
+    if (id == "AutoFire" or id == "MGBurstFire") and context then
+        local n = RATOAI_BurstLengthFor(action, context, weapon, id)
+        if n then
+            return Rat_AutoFireView(n, id)
+        end
+    end
     if id == "BurstFire" then
         return CombatActions[Rat_ShortBurstAttackId(weapon)]
     elseif id == "AutoFire" then
@@ -121,7 +134,7 @@ function AIActionSingleTargetShot:PrecalcAction(context, action_state)
     if not IsKindOf(weapon, "Firearm") or IsKindOf(weapon, "HeavyWeapon") then
         return
     end
-    local action = RATOAI_SignatureAttack(self, weapon)
+    local action = RATOAI_SignatureAttack(self, weapon, context)
     if not action or not RATOAI_IsAttackModeAvailable(context.unit, weapon, action.id) then
         return
     end

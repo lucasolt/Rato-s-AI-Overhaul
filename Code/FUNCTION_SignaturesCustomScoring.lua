@@ -147,7 +147,8 @@ local function GetDestArgs(self, context)
     context = Update_AIPrecalcDamageScore(unit) or context
 
     local action = IsKindOf(self, "AIActionPinDown") and CombatActions["PinDown"] or
-                       RATOAI_SignatureAttack(self, context.weapon or unit:GetActiveWeapons())
+                       RATOAI_SignatureAttack(self, context.weapon or unit:GetActiveWeapons(),
+                                              context)
     local dist, target, dest_cth, dest_recoil, attacker_pos
     local upos = context.ai_destination
 
