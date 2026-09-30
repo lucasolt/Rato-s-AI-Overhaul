@@ -281,6 +281,48 @@ function RATOAI_ConeRatios(unit, target, action, weapon, aim, attacker_pos, shot
 end
 
 ---------------------------------------------------------------------------------------------------
+---- SHOTGUN PELLETS: a landed shell's worth, x100, in shells of the DEFAULT attack.
+----
+---- The estimator counted a landed shell as one full hit at any range, and DoubleBarrel (2x
+---- pellets) the same as Buckshot. This is the share of the default shell's pellets that reach
+---- the target: <= 100 for the default, falling fast with distance, up to 200 for DoubleBarrel.
+---- Shells, not pellets, so cap/soft/relative keep their scale; `tokill` pays a full shell per hit
+---- (RATOAI_DamagePerHit). From GBO3 Rat_ExpectedPelletsOnTarget; nil = not a pellet shot.
+---------------------------------------------------------------------------------------------------
+function RATOAI_ShellPellets(context, weapon)
+    local default = context.default_attack
+    local ok, n = pcall(weapon.GetNumPellets, weapon, context.unit, default and default.id)
+    return (ok and type(n) == "number" and n > 0) and n or 1
+end
+
+function RATOAI_PelletMul(context, action, weapon, target, attacker_pos)
+    if not (IsKindOf(weapon, "Shotgun") and action and IsKindOf(target, "Unit")) then
+        return nil
+    end
+    local cones = context.__ratoai_pellet_cone
+    if not cones then
+        cones = {}
+        context.__ratoai_pellet_cone = cones
+    end
+    local cone = cones[action.id]
+    if cone == nil then
+        local ok, p = pcall(weapon.GetAreaAttackParams, weapon, action.id, context.unit)
+        cone = ok and p and p.cone_angle
+        if not cone then
+            ok, p = pcall(weapon.GetAreaAttackParams, weapon, "Buckshot", context.unit)
+            cone = ok and p and p.cone_angle
+        end
+        cones[action.id] = cone or false
+    end
+    local ok, pellets = pcall(Rat_ExpectedPelletsOnTarget, context.unit, weapon, action, target,
+                              attacker_pos, "Torso", cone or nil)
+    if not ok or type(pellets) ~= "number" or pellets <= 0 then
+        return nil
+    end
+    return MulDivRound(pellets, 1, RATOAI_ShellPellets(context, weapon))
+end
+
+---------------------------------------------------------------------------------------------------
 ---- MEMORIA DE POSICAO DE INIMIGO  (BUGFIX B52)
 ----
 ---- O PROBLEMA. Toda policy que soma ameaca itera `context.enemies` e descarta quem nao esta

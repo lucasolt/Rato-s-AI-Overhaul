@@ -117,7 +117,8 @@ local function RATOAI_DamagePerHit(context)
         ---- terceiro que quebre ali nao pode derrubar o turno da IA
         local ok, v = pcall(unit.GetBaseDamage, unit, weapon)
         if ok and type(v) == "number" and v > 0 then
-            dmg = v
+            ---- shotgun: GetBaseDamage is per pellet, a hit is a whole shell (RATOAI_PelletMul)
+            dmg = IsKindOf(weapon, "Shotgun") and v * RATOAI_ShellPellets(context, weapon) or v
         end
     end
 

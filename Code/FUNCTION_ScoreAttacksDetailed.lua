@@ -309,6 +309,9 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- motivo do portao `i > 1`: o primeiro ataque nao ganha penalidade manual porque
     ---- ele ainda nao gerou pilha nenhuma.
     local stacks = 0
+    ---- shotgun: pellets on target per landed shell (RATOAI_PelletMul, UTIL.lua)
+    local pellet_mul = RATOAI_PelletMul(context, action, weapon, target,
+                                        attacker_pos or context.attacker_pos)
 
     local cth_by_aim = {}
     for i = 1, attacks do
@@ -389,6 +392,9 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth, RATOAI_AimBonus(
                                               aim_cth_by_level, aim_i, unit, target, action, weapon),
                                           ratios or nil)
+        if pellet_mul then
+            expanded = MulDivRound(expanded, pellet_mul, 100)
+        end
         if trace then
             table.insert(context.burst_hits_at[upos][target], expanded)
         end
@@ -852,6 +858,7 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- do RATOAI_ExpectedRatio credita a signature -- ela dispara uma vez so. Sai de graca:
     ---- e a primeira iteracao do laco que ja existe, nao uma segunda avaliacao.
     local hits_first = 0
+    local pellet_mul = RATOAI_PelletMul(context, action, weapon, target, attacker_pos)
 
     for i = 1, attacks do
         local aim_i = aims[i] or 0
@@ -895,6 +902,9 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
         local expandido = RATOAI_BurstHits(eff_cth, shots, recoil_cth, RATOAI_AimBonus(
                                                aim_cth_by_level, aim_i, unit, target, action, weapon),
                                            ratios or nil)
+        if pellet_mul then
+            expandido = MulDivRound(expandido, pellet_mul, 100)
+        end
         if i == 1 then
             hits_first = expandido
         end
