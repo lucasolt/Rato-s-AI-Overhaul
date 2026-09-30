@@ -776,7 +776,9 @@ function RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_pa
     ---- Sair AQUI, e nao depois: o AICalcAttacksAndAim e a parte barata (aritmetica de AP, sem
     ---- CTH nenhuma). O caro vem abaixo -- get_recoil mais um CalcChanceToHit por nivel de mira.
     -----------------------------------------------------------------------------------------------
-    if body_part ~= "Torso" and (aims[1] or 0) < 1 then
+    ---- aCTH head aims are exempt: no flat penalty there, and the head share already prices hipfire
+    if body_part ~= "Torso" and (aims[1] or 0) < 1 and
+        not (body_part == "Head" and RATOAI_AngularOn(weapon, action, unit)) then
         memo[key] = {
             hits = 0,
             attacks = 0,

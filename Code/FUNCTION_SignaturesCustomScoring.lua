@@ -63,6 +63,21 @@ function RATOAI_BodyPartMul(body_part)
 end
 
 ---------------------------------------------------------------------------------------------------
+---- In aCTH a head-aimed CTH is P(hit ANY part), cone centered on the head; only `head_share`%
+---- of those hits land on the head (GBO3 args.rat_head_share). The rest are off-part hits, paid at
+---- OffPartDamagePct on a torso-valued part. Without the share (old CTH) the aimed part is hit.
+---------------------------------------------------------------------------------------------------
+function RATOAI_AimedPartMul(body_part, head_share)
+    if body_part ~= "Head" or not head_share then
+        return RATOAI_BodyPartMul(body_part)
+    end
+    local a = const.Combat.Aperture
+    local off = (a and a.OffPartStray and a.OffPartDamagePct) or 100
+    return MulDivRound(head_share, RATOAI_BodyPartMul("Head"), 100) +
+               MulDivRound(100 - head_share, off, 100)
+end
+
+---------------------------------------------------------------------------------------------------
 ---- EFEITOS DE "NAO CONSEGUE ESCAPAR" QUE EXISTEM NESTA INSTALACAO
 ----
 ---- Nem todo efeito da lista e do jogo base. `PinnedDown` vem do mod *Pinned Down*, que o design
@@ -257,6 +272,7 @@ function SingleShotTargeted_CustomScoring(self, context)
     ---- aproximacao DETERMINISTICA da distribuicao certa, em vez de um valor arbitrario.
     ---------------------------------------------------------------------------------------------
     local body_part = "Head"
+    local head_share
 
     if IsKindOf(self, "AIActionPinDown") then
         body_part = self.AttackTargeting
@@ -267,7 +283,7 @@ function SingleShotTargeted_CustomScoring(self, context)
         for _, o in ipairs(opcoes or empty_table) do
             local peso = o.chance or 0
             if peso > melhor then
-                melhor, body_part = peso, o.id
+                melhor, body_part, head_share = peso, o.id, o.share
             end
         end
         if melhor <= 0 then
@@ -304,7 +320,7 @@ function SingleShotTargeted_CustomScoring(self, context)
         disable = disable or d
 
         ---- credita o que o tiro localizado ganha, agora que a razao ja cobrou o que ele custa
-        weight = MulDivRound(weight, RATOAI_BodyPartMul(body_part), 100)
+        weight = MulDivRound(weight, RATOAI_AimedPartMul(body_part, head_share), 100)
     end
 
     ---- TERMO DE EFEITO, nao de acerto: continua multiplicando DEPOIS da razao. Tiro na perna
