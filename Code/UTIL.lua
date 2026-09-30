@@ -350,8 +350,11 @@ end
 ----
 ---- ARMAZENAMENTO, nao configuracao -- mesma excecao documentada do `RATOAI_LastExpected`, e
 ---- pelo mesmo motivo: precisa ser global de escopo de arquivo, e nao cabe em const.RATOAI.
+----
+---- BUGFIX (B57): era global comum, fora do save -- medido vazio apos carregar um save no turno 4.
+---- MapVar persiste no save e zera sozinho em mapa novo. Chave por `team.side`, nao pelo objeto.
 ---------------------------------------------------------------------------------------------------
-RATOAI_LastSeen = {}
+MapVar("RATOAI_LastSeen", {})
 
 ---- Combate novo, memoria nova. Mesmo criterio do motor com `last_attack_pos`, que ele zera no
 ---- CombatEnd (UnitActions.lua:2801): o que se viu na luta passada nao informa esta.
@@ -359,9 +362,13 @@ function RATOAI_ForgetSeenPositions()
     RATOAI_LastSeen = {}
 end
 
-OnMsg.CombatStart = RATOAI_ForgetSeenPositions
+---- `dynamic_data` so vem preenchido quando o CombatStart e o de um save carregado (Combat.lua:313).
+function OnMsg.CombatStart(dynamic_data)
+    if not dynamic_data then
+        RATOAI_ForgetSeenPositions()
+    end
+end
 OnMsg.CombatEnd = RATOAI_ForgetSeenPositions
-OnMsg.NewMap = RATOAI_ForgetSeenPositions
 
 ---------------------------------------------------------------------------------------------------
 ---- Gravacao. `VisibilityUpdate` (Visibility.lua:1193) e o momento exato em que "ele sumiu" passa
@@ -383,10 +390,10 @@ function OnMsg.VisibilityUpdate()
         if not team.player_team and team.side ~= "neutral" then
             local vis = g_Visibility and g_Visibility[team]
             if vis then
-                local mem = RATOAI_LastSeen[team]
+                local mem = RATOAI_LastSeen[team.side]
                 if not mem then
                     mem = {}
-                    RATOAI_LastSeen[team] = mem
+                    RATOAI_LastSeen[team.side] = mem
                 end
                 for seen, value in pairs(vis) do
                     if IsKindOf(seen, "Unit") and (value or 0) >= const.uvVisible and
@@ -411,7 +418,7 @@ end
 ---------------------------------------------------------------------------------------------------
 function RATOAI_LastSeenPos(unit, enemy)
     local team = unit and unit.team
-    local mem = team and RATOAI_LastSeen[team]
+    local mem = team and RATOAI_LastSeen[team.side]
     local rec = mem and mem[enemy]
     if not rec or not rec.pos then
         return nil
