@@ -110,6 +110,7 @@ function AICreateContext(unit, context)
     context.unit_pos = pos
     context.start_ap = unit.ActionPoints
     context.archetype = unit:GetArchetype()
+    RATOAI_RefreshScoutTarget(unit, context)
     context.unit_grid_voxel = point_pack(gx, gy, gz)
     context.unit_world_voxel = point_pack(pos)
     context.unit_stance_pos = stance_pos_pack(wx, wy, wz, StancesList[unit.stance])

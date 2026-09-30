@@ -237,6 +237,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIPolicyHighGround.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_ScoutSearch",
+		'CodeFileName', "Code/SOURCE_ScoutSearch.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIScoreReachableVoxels",
 		'CodeFileName', "Code/SOURCE_AIScoreReachableVoxels.lua",
 	}),

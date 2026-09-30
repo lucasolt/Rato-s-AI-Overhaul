@@ -958,7 +958,8 @@ end
 ---- BUGFIX (B52): `ppos_override` e a posicao LEMBRADA de um inimigo invisivel. O cache por
 ---- inimigo continua valendo sem chave nova porque a escolha entre "posicao atual" e "posicao
 ---- lembrada" e ESTAVEL dentro do turno: ou o inimigo esta visivel a chamada inteira, ou nao esta.
-function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override)
+---- `key` separates the suspected-spot stand-in from the real enemy lending it sight/range.
+function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
     if not context or not dest then
         return nil
     end
@@ -967,10 +968,11 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override)
         cache = {}
         context.__ratoai_enemy_los = cache
     end
+    key = key or enemy
 
     local ppos = ppos_override or
                      (context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy])
-    local per = cache[enemy]
+    local per = cache[key]
     if per == nil then
         per = false
         local dests = context.destinations
@@ -988,7 +990,7 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override)
                 end
             end
         end
-        cache[enemy] = per
+        cache[key] = per
     end
 
     if not per then
@@ -1047,7 +1049,7 @@ end
 
 ---- Devolve (votos, sondadas). `nil` quando nao ha o que perguntar -- desligado, sem
 ---- posicao, ou o inimigo encurralado sem nenhuma vizinha transponivel.
-function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs)
+function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
     dirs = Min(dirs or 0, #RATOAI_LOSProbeDirs)
     if dirs <= 0 or not context or not dest then
         return nil
@@ -1065,10 +1067,10 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs)
         cache[dirs] = by_dirs
     end
 
-    local rec = by_dirs[enemy]
+    local rec = by_dirs[key or enemy]
     if not rec then
         rec = {votes = {}, tested = 0}
-        by_dirs[enemy] = rec
+        by_dirs[key or enemy] = rec
 
         local ppos = ppos_override or
                          (context.enemy_pack_pos_stance and context.enemy_pack_pos_stance[enemy])
@@ -1083,7 +1085,7 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs)
             ---- RATOAI_ThreatEnemyLOS, as demais sao consulta de tabela
             local blind, pts = {}, {}
             for _, d in ipairs(context.destinations or empty_table) do
-                if RATOAI_ThreatEnemyLOS(context, enemy, d, ppos_override) == false then
+                if RATOAI_ThreatEnemyLOS(context, enemy, d, ppos_override, key) == false then
                     blind[#blind + 1] = d
                     pts[#pts + 1] = RATOAI_ValidatePosZ(RATOAI_UnpackPos(d))
                     rec.votes[d] = 0
@@ -1231,6 +1233,61 @@ function AIPolicyThreatExposure:HasMemoryStandin(context)
 end
 
 ---------------------------------------------------------------------------------------------------
+---- SUSPECTED SPOT AS A THREAT SOURCE (Scout search)
+---- With nobody visible and no live memory every term above is 0, and the scout walked into the
+---- open. The unit's last_known_enemy_pos then counts as one remembered enemy, at reduced trust.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.ThreatSuspectPct == nil then
+    const.RATOAI.ThreatSuspectPct = 70
+end
+---- Threat kept on a tile that still has AP for an attack: arriving there it shoots first.
+if const.RATOAI.ThreatSuspectArmedPct == nil then
+    const.RATOAI.ThreatSuspectArmedPct = 50
+end
+
+---- Returns {enemy, ppos, pct} or false; `enemy` only lends range and sight to the stand-in.
+function AIPolicyThreatExposure:SuspectStandin(context)
+    if not self.MemoryStandin or (const.RATOAI.ThreatSuspectPct or 0) <= 0 then
+        return false
+    end
+    local cache = context.__ratoai_suspect_standin
+    if not cache then
+        cache = {}
+        context.__ratoai_suspect_standin = cache
+    end
+    local hit = cache[self]
+    if hit ~= nil then
+        return hit
+    end
+
+    hit = false
+    local ppos = RATOAI_SuspectPos(context)
+    if ppos and not self:HasMemoryStandin(context) then
+        local pos = RATOAI_UnpackPos(ppos)
+        local rep, rep_dist, any_seen
+        for _, enemy in ipairs(context.enemies or empty_table) do
+            if IsValid(enemy) and not (enemy:IsDead() or enemy:IsDowned()) then
+                if self:SeesEnemy(context, enemy) then
+                    any_seen = true
+                    break
+                end
+                ---- closest remembered enemy lends its weapon; never seen ones rank last
+                local mem = RATOAI_LastSeenPos(context.unit, enemy)
+                local d = mem and pos:Dist(RATOAI_UnpackPos(mem)) or max_int
+                if not rep or d < rep_dist then
+                    rep, rep_dist = enemy, d
+                end
+            end
+        end
+        if rep and not any_seen then
+            hit = {enemy = rep, ppos = ppos, pct = const.RATOAI.ThreatSuspectPct}
+        end
+    end
+    cache[self] = hit
+    return hit
+end
+
+---------------------------------------------------------------------------------------------------
 ---- NUCLEO COMPARTILHADO -- constantes do destino + contribuicao de um inimigo
 ----
 ---- O `EvalDest` daqui e o `Decompose` do painel (Rato Dev/RATODBG_AIDebugUI.lua) precisam
@@ -1308,14 +1365,17 @@ end
 ---- `out` (opcional, REUTILIZAVEL entre iteracoes) recebe os detalhes para o trace e para o
 ---- painel. Passar a mesma tabela no laco inteiro mantem o custo em zero alocacoes.
 ---------------------------------------------------------------------------------------------------
-function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_pos, p, out)
+---- `suspect` (from SuspectStandin) evaluates the suspected spot in place of `enemy`'s position.
+function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_pos, p, out, suspect)
     if out then
         out.skip, out.los, out.fonte, out.trust = nil, nil, nil, nil
         out.ready_t, out.capped, out.d, out.range = nil, nil, nil, nil
         out.ramp, out.uncovered, out.face, out.fator, out.curve_e = nil, nil, nil, nil, nil
         out.mem_pct, out.mem_age = nil, nil
         out.los_pct, out.los_votes, out.los_tested = nil, nil, nil
+        out.armed = nil
     end
+    local key = suspect and "suspect" or nil
 
     ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora.
     ---- SUBIU (B52): antes vinha depois do teste de visibilidade, mas morto nao ameaca nem de
@@ -1335,7 +1395,9 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     -----------------------------------------------------------------------------------------------
     local mem_pct, mem_age
     local mem_ppos
-    if not self:SeesEnemy(context, enemy) then
+    if suspect then
+        mem_ppos, mem_pct = suspect.ppos, suspect.pct
+    elseif not self:SeesEnemy(context, enemy) then
         if not self.MemoryStandin then
             if out then
                 out.skip = "nao visivel, modo " .. tostring(self.visibility_mode)
@@ -1396,9 +1458,9 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     ---- BUGFIX (B55): "nao me ve" e um fato sobre a posicao ATUAL dele, e vale o que custa
     ---- desfaze-lo -- ver RATOAI_ThreatLOSSteps.
     local los_pct, los_votes, los_tested
-    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos) == false then
+    if self.RequireLOS and RATOAI_ThreatEnemyLOS(context, enemy, dest, mem_ppos, key) == false then
         los_votes, los_tested = RATOAI_ThreatLOSSteps(context, enemy, dest, mem_ppos,
-                                                      self.LOSProbeSteps or 0)
+                                                      self.LOSProbeSteps or 0, key)
         los_pct = (los_votes and (los_tested or 0) > 0) and
                       MulDivRound(100, los_votes, los_tested) or 0
         if los_pct <= 0 then
@@ -1439,8 +1501,16 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     ---- status effect e custo de preparo escalam a capacidade DESTE inimigo, e por isso
     ---- entram na BRUTA -- os dois lados. Aplicar so na liquida jogaria o efeito deles
     ---- dentro de "cancelada", que quer dizer "o que a COBERTURA tirou" e passaria a mentir.
-    local fator = RATOAI_ThreatEnemyFactor(enemy, context)
+    ---- the stand-in's status effects are unknown: nobody is looking at it
+    local fator = suspect and 100 or RATOAI_ThreatEnemyFactor(enemy, context)
     local mods = fator
+    if suspect and (context.dest_ap and context.dest_ap[dest] or 0) >=
+        (context.default_attack_cost or max_int) then
+        mods = MulDivRound(mods, const.RATOAI.ThreatSuspectArmedPct or 100, 100)
+        if out then
+            out.armed = true
+        end
+    end
     if face ~= 100 then
         mods = MulDivRound(mods, face, 100)
     end
@@ -1510,7 +1580,8 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
     ---- Medido no cabecalho do RATOAI_ThreatEnemyLOS: o cache so responde `false` em 10 de 2360
     ---- destinos, entao abrir mao do atalho custa o laco completo em ~10 tiles por turno.
     if self.RequireLOS and (self.LOSProbeSteps or 0) <= 0 and g_AIDestEnemyLOSCache and
-        g_AIDestEnemyLOSCache[dest] == false and not self:HasMemoryStandin(context) then
+        g_AIDestEnemyLOSCache[dest] == false and not self:HasMemoryStandin(context) and
+        not self:SuspectStandin(context) then
         return 0
     end
 
@@ -1593,6 +1664,30 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
                                         out.capped and " (teto)" or "", out.ramp, out.uncovered,
                                         tostring(out.fonte or "nada"), bruta, liquida, nota)
             end
+        end
+    end
+
+    local suspect = self:SuspectStandin(context)
+    if suspect then
+        local bruta, liquida = self:EnemyContribution(context, suspect.enemy, dest, target_pos, p,
+                                                      out, suspect)
+        threat = threat + liquida
+        if trace then
+            trace[#trace + 1] = out.skip and
+                                    string.format("  SUSPECT (last_known_enemy_pos): SKIPPED (%s)",
+                                                  out.skip) or
+                                    string.format("  SUSPECT (last_known_enemy_pos, weapon of %s):" ..
+                                                      " %st / range %st, trust %d%%%s%s ->" ..
+                                                      " raw %d, net %d",
+                                                  tostring(suspect.enemy.session_id),
+                                                  tostring(tiles(out.d)),
+                                                  tostring(tiles(out.range)), suspect.pct,
+                                                  out.los_pct and
+                                                      string.format(", no LOS x%d%%", out.los_pct) or
+                                                      "", out.armed and
+                                                      string.format(", AP to shoot x%d%%",
+                                                                    const.RATOAI.ThreatSuspectArmedPct) or
+                                                      "", bruta, liquida)
         end
     end
 

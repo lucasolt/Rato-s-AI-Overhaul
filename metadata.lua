@@ -84,6 +84,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AIScoreDest.lua",
 		"Code/SOURCE_AIPolicyProximity.lua",
 		"Code/SOURCE_AIPolicyHighGround.lua",
+		"Code/SOURCE_ScoutSearch.lua",
 		"Code/SOURCE_AIScoreReachableVoxels.lua",
 		"Code/SOURCE_AIGetAttackTargetingOptions.lua",
 		"Code/SOURCE_AIPlayAttacks.lua",
