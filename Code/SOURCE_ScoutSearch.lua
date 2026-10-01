@@ -11,6 +11,38 @@ end
 if const.RATOAI.ScoutContactTiles == nil then
     const.RATOAI.ScoutContactTiles = 20
 end
+---- Walking flood from the spot, in tiles; tiles beyond it count as this far.
+if const.RATOAI.ScoutWalkFloodTiles == nil then
+    const.RATOAI.ScoutWalkFloodTiles = 24
+end
+
+---- Distance from the suspected spot as walked, never less than straight-line: straight-line through
+---- a floor read 4 tiles for a tile 18 AP of stairs away (measured, Raider:454).
+function RATOAI_SpotDist(context, pos, x, y, z)
+    local d = pos:Dist(x, y, z)
+    local key = point_pack(pos)
+    local flood = context.__ratoai_spot_flood
+    if not flood or flood.key ~= key then
+        local walk = Presets.ConstDef["Action Point Costs"].Walk.value
+        local tiles = const.RATOAI.ScoutWalkFloodTiles
+        local start = SnapToPassSlab(pos)
+        local cp
+        if start and walk > 0 then
+            cp = CombatPath:new()
+            cp:RebuildPaths(context.unit, tiles * walk, start, "Standing", true, true)
+        end
+        flood = {key = key, walk = walk, cap = tiles * const.SlabSizeX, ap = cp and cp.paths_ap}
+        context.__ratoai_spot_flood = flood
+    end
+    if not flood.ap then
+        return d
+    end
+    local ap = flood.ap[point_pack(x, y, z)]
+    if not ap then
+        return Max(d, flood.cap)
+    end
+    return Max(d, MulDivRound(ap, const.SlabSizeX, flood.walk))
+end
 
 ---- Packed suspected enemy position (unit's last_known_enemy_pos), or nil when unknown or already in view.
 function RATOAI_SuspectPos(context)
@@ -63,7 +95,7 @@ local function ScoutBand(context, lk)
             local x, y, z = stance_pos_unpack(dest)
             local v = point_pack(x, y, z)
             reach[v] = Max(reach[v] or ap, ap)
-            if pos:Dist(x, y, z) <= band.contact then
+            if RATOAI_SpotDist(context, pos, x, y, z) <= band.contact then
                 band.in_contact = true
             end
         end
@@ -74,7 +106,7 @@ local function ScoutBand(context, lk)
     local los, srcs, tgts = {}, {}, {}
     for _, dest in ipairs(context.all_destinations or context.destinations or empty_table) do
         local x, y, z = stance_pos_unpack(dest)
-        local d = pos:Dist(x, y, z)
+        local d = RATOAI_SpotDist(context, pos, x, y, z)
         if d <= band.maxr or (d <= band.contact and reach[point_pack(x, y, z)]) then
             srcs[#srcs + 1] = dest
             tgts[#tgts + 1] = band.ppos
@@ -114,7 +146,7 @@ function AIPolicyLastEnemyPos:EvalDest(context, dest, grid_voxel)
     local band = ScoutBand(context, lk)
     local w = self.Weight
     local x, y, z = stance_pos_unpack(dest)
-    local d = band.pos:Dist(x, y, z)
+    local d = RATOAI_SpotDist(context, band.pos, x, y, z)
     local close = d >= band.minr and w or MulDivRound(w, d, band.minr)
 
     ---- FAR: nothing reachable is near the spot yet -- rush toward an observation tile on the ring
@@ -263,17 +295,60 @@ function AIPickScoutLocation(unit)
     return RATOAI_PickRememberedScoutPos(unit) or EnginePickScoutLocation(unit)
 end
 
----- The engine drops a seen spot only after moving (CombatAI.lua:2488); drop it before planning too.
+---- lk is only this unit's own last sighting (UnitAwareness.lua:689); the team's memory is shared
+---- and at least as fresh. Holders kept watching a spot 12 tiles off the team's (measured).
+local function ScoutTarget(unit)
+    return RATOAI_PickRememberedScoutPos(unit) or unit.last_known_enemy_pos
+end
+
+---- Threat from unseen enemies decays per consecutive search turn, so a blocked seeker edges forward.
+if const.RATOAI.ScoutBoldStepPct == nil then
+    const.RATOAI.ScoutBoldStepPct = 25
+end
+if const.RATOAI.ScoutBoldMinPct == nil then
+    const.RATOAI.ScoutBoldMinPct = 25
+end
+MapVar("RATOAI_ScoutSearchTurns", {})
+
+function OnMsg.CombatStart(dynamic_data)
+    if not dynamic_data then
+        RATOAI_ScoutSearchTurns = {}
+    end
+end
+
+local function CountSearchTurn(unit)
+    local turn = g_Combat and g_Combat.current_turn or 0
+    local rec = RATOAI_ScoutSearchTurns[unit.session_id]
+    if not rec then
+        rec = {turn = turn, n = 1}
+        RATOAI_ScoutSearchTurns[unit.session_id] = rec
+    elseif rec.turn ~= turn then
+        rec.n = rec.turn == turn - 1 and rec.n + 1 or 1
+        rec.turn = turn
+    end
+    return rec.n
+end
+
 function RATOAI_RefreshScoutTarget(unit, context)
-    local lk = unit.last_known_enemy_pos
     local id = context.archetype.id
-    if not lk or (id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold") then
+    if id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold" then
         return
     end
+    local n = CountSearchTurn(unit)
+    if id == "Scout_LastLocation" and n > 1 then
+        context.__ratoai_search_pct = Max(const.RATOAI.ScoutBoldMinPct,
+                                          100 - const.RATOAI.ScoutBoldStepPct * (n - 1))
+    end
+    local lk = ScoutTarget(unit)
+    if not lk then
+        return
+    end
+    ---- the engine drops a seen spot only after moving (CombatAI.lua:2488); drop it before planning
     local pos = RATOAI_ValidatePosZ(lk)
     if IsValidPos(pos) and CheckLOS(pos, unit, unit:GetSightRadius()) then
-        unit.last_known_enemy_pos = AIPickScoutLocation(unit) or lk
+        lk = EnginePickScoutLocation(unit) or lk
     end
+    unit.last_known_enemy_pos = lk
 end
 
 function RATOAI_TeamSeesEnemy(context)
@@ -338,7 +413,7 @@ local ScoutNaturalHolders = {
 local ScoutRoles = {}
 
 local function ScoutRank(unit)
-    local lk = unit.last_known_enemy_pos
+    local lk = ScoutTarget(unit)
     if not lk then
         return max_int
     end
@@ -352,7 +427,7 @@ local function ScoutRank(unit)
 end
 
 function RATOAI_IsScoutSeeker(unit)
-    local lk = unit.last_known_enemy_pos
+    local lk = ScoutTarget(unit)
     if not lk or unit:GetDist(lk) > const.RATOAI.ScoutContactTiles * const.SlabSizeX then
         return true
     end

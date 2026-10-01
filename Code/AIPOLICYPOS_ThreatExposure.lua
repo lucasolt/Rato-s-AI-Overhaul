@@ -1526,6 +1526,10 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
     ---- mesmo tipo que "ele esta suprimido", e nao algo que a cobertura deste tile cancelou.
     if mem_pct then
         mods = MulDivRound(mods, mem_pct, 100)
+        ---- seeker's consecutive search turns (RATOAI_RefreshScoutTarget)
+        if context.__ratoai_search_pct then
+            mods = MulDivRound(mods, context.__ratoai_search_pct, 100)
+        end
     end
     ---- BUGFIX (B54/B55): mesmo slot, e pela mesma razao -- "posso estar errado sobre o que ele
     ---- alcanca" e incerteza sobre a CAPACIDADE dele, nao algo que a cobertura deste tile tirou.

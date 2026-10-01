@@ -64,7 +64,7 @@ function AIPolicyScoutHold:EvalDest(context, dest, grid_voxel)
     end
     local band = HoldBand(self, context, ppos)
     local x, y, z = stance_pos_unpack(dest)
-    local d = band.pos:Dist(x, y, z)
+    local d = RATOAI_SpotDist(context, band.pos, x, y, z)
 
     local score
     if d < band.minr then
