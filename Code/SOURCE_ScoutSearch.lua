@@ -7,9 +7,9 @@ end
 if const.RATOAI.ScoutStandoffMaxTiles == nil then
     const.RATOAI.ScoutStandoffMaxTiles = 14
 end
----- Share of the ring score kept by ring tiles that cannot see the suspected spot.
-if const.RATOAI.ScoutNoLOSPct == nil then
-    const.RATOAI.ScoutNoLOSPct = 40
+---- Within this distance of the spot, a reachable tile in its view with no AP to shoot is a trap.
+if const.RATOAI.ScoutContactTiles == nil then
+    const.RATOAI.ScoutContactTiles = 20
 end
 
 ---- Packed suspected enemy position (unit's last_known_enemy_pos), or nil when unknown or already in view.
@@ -50,14 +50,32 @@ local function ScoutBand(context, lk)
         maxr = maxr,
         ---- normalizer of the approach gradient: dests as far as the unit score ~0
         ref = Max(unit:GetDist(pos) - maxr, maxr),
-        radius = unit:GetSightRadius()
+        radius = unit:GetSightRadius(),
+        contact = const.RATOAI.ScoutContactTiles * slab,
+        need = context.default_attack_cost or 0
     }
 
-    ---- one batched LOS over ring dests only; all_destinations whole would cost ~0.4 s
+    ---- reachable this turn: world voxel -> AP left on arrival (voxel_to_dest can't tell, OptLoc fills it)
+    local reach = {}
+    for _, dest in ipairs(context.destinations or empty_table) do
+        local ap = context.dest_ap and context.dest_ap[dest]
+        if ap then
+            local x, y, z = stance_pos_unpack(dest)
+            local v = point_pack(x, y, z)
+            reach[v] = Max(reach[v] or ap, ap)
+            if pos:Dist(x, y, z) <= band.contact then
+                band.in_contact = true
+            end
+        end
+    end
+    band.reach = reach
+
+    ---- one batched LOS over ring + reachable contact tiles; all_destinations whole would cost ~0.4 s
     local los, srcs, tgts = {}, {}, {}
     for _, dest in ipairs(context.all_destinations or context.destinations or empty_table) do
         local x, y, z = stance_pos_unpack(dest)
-        if pos:Dist(x, y, z) <= maxr then
+        local d = pos:Dist(x, y, z)
+        if d <= band.maxr or (d <= band.contact and reach[point_pack(x, y, z)]) then
             srcs[#srcs + 1] = dest
             tgts[#tgts + 1] = band.ppos
         end
@@ -73,6 +91,20 @@ local function ScoutBand(context, lk)
     return band
 end
 
+local function DestLOS(band, dest)
+    local los = band.los[dest]
+    if los == nil then
+        local _, data = CheckLOS({band.ppos}, {dest}, band.radius)
+        los = not not (data and data[1])
+        band.los[dest] = los
+    end
+    return los
+end
+
+local function DestCover(band, dest)
+    return AIPolicyTakeCover.CoverScores[GetCoverFrom(dest, band.ppos)] or 0
+end
+
 ---- Replaces CombatAI's "stand on the last known position" (ClassDef-AI.generated.lua:396).
 function AIPolicyLastEnemyPos:EvalDest(context, dest, grid_voxel)
     local lk = context.unit.last_known_enemy_pos
@@ -83,26 +115,40 @@ function AIPolicyLastEnemyPos:EvalDest(context, dest, grid_voxel)
     local w = self.Weight
     local x, y, z = stance_pos_unpack(dest)
     local d = band.pos:Dist(x, y, z)
+    local close = d >= band.minr and w or MulDivRound(w, d, band.minr)
 
-    ---- capped below a covered observation tile, so outside tiles never tie with one at the 80% cut
-    if d > band.maxr then
-        local far = MulDivRound(w, 70, 100)
-        return far - MulDivRound(d - band.maxr, far, band.ref)
+    ---- FAR: nothing reachable is near the spot yet -- rush toward an observation tile on the ring
+    if not band.in_contact then
+        ---- capped below a covered observation tile, so outside tiles never tie with one at the 80% cut
+        if d > band.maxr then
+            local far = MulDivRound(w, 70, 100)
+            return far - MulDivRound(d - band.maxr, far, band.ref)
+        end
+        if not DestLOS(band, dest) then
+            return MulDivRound(close, 40, 100)
+        end
+        return MulDivRound(close, 60 + MulDivRound(40, DestCover(band, dest), 100), 100)
     end
 
-    local score = d >= band.minr and w or MulDivRound(w, d, band.minr)
-    local los = band.los[dest]
-    if los == nil then
-        local _, data = CheckLOS({band.ppos}, {dest}, band.radius)
-        los = not not (data and data[1])
-        band.los[dest] = los
+    ---- CONTACT: only tiles reachable this turn, so the end-turn pull stops where this says
+    local ap = band.reach[point_pack(x, y, z)]
+    if not ap then
+        return 0
     end
-    if not los then
-        return MulDivRound(score, const.RATOAI.ScoutNoLOSPct, 100)
+    if d <= band.contact and DestLOS(band, dest) then
+        if ap < band.need then
+            return 0 ---- in its view with no AP to answer: the trap that killed scouts one by one
+        end
+        if d <= band.maxr then
+            return MulDivRound(close, 70 + MulDivRound(30, DestCover(band, dest), 100), 100)
+        end
     end
-    ---- cover counts only on the ring: off it, cover would stall the approach of far units
-    local cover = AIPolicyTakeCover.CoverScores[GetCoverFrom(dest, band.ppos)] or 0
-    return MulDivRound(score, 60 + MulDivRound(40, cover, 100), 100)
+    ---- concealed staging: closer is better, so next turn's step into view is short and armed
+    local stage = MulDivRound(close, 60, 100)
+    if d > band.minr then
+        stage = stage - MulDivRound(d - band.minr, stage, band.contact)
+    end
+    return stage
 end
 
 ---- Vanilla scores 0 everywhere when nothing is visible; at end of turn, fall back to cover from
