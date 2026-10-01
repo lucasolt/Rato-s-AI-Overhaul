@@ -380,8 +380,9 @@ function RATOAI_IsScoutSeeker(unit)
     return roles.seekers[unit] or false
 end
 
-local RATOAI_SelectArchetype_orig = Unit.SelectArchetype
-function Unit:SelectArchetype(proto_context)
+---- on UnitProperties: mod code loads before ClassesBuilt, so Unit hasn't inherited it yet
+local RATOAI_SelectArchetype_orig = UnitProperties.SelectArchetype
+function UnitProperties:SelectArchetype(proto_context)
     RATOAI_SelectArchetype_orig(self, proto_context)
     if self.current_archetype == "Scout_LastLocation" and Archetypes.RATOAI_Scout_Hold and
         not RATOAI_IsScoutSeeker(self) then
