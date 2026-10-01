@@ -1234,8 +1234,9 @@ end
 
 ---------------------------------------------------------------------------------------------------
 ---- SUSPECTED SPOT AS A THREAT SOURCE (Scout search)
----- With nobody visible and no live memory every term above is 0, and the scout walked into the
----- open. The unit's last_known_enemy_pos then counts as one remembered enemy, at reduced trust.
+---- With nobody visible, an enemy whose memory expired (2 turns) dropped out of the sum, and five
+---- hidden mercs added up to half an enemy. Each one the team has seen and lost track of is now
+---- placed at the unit's last_known_enemy_pos, at reduced trust. Never-seen enemies don't count.
 ---------------------------------------------------------------------------------------------------
 if const.RATOAI.ThreatSuspectPct == nil then
     const.RATOAI.ThreatSuspectPct = 70
@@ -1245,7 +1246,7 @@ if const.RATOAI.ThreatSuspectArmedPct == nil then
     const.RATOAI.ThreatSuspectArmedPct = 50
 end
 
----- Returns {enemy, ppos, pct} or false; `enemy` only lends range and sight to the stand-in.
+---- Returns false or a list of {enemy, ppos, pct, key}: each enemy evaluated at the suspected spot.
 function AIPolicyThreatExposure:SuspectStandin(context)
     if not self.MemoryStandin or (const.RATOAI.ThreatSuspectPct or 0) <= 0 then
         return false
@@ -1262,25 +1263,31 @@ function AIPolicyThreatExposure:SuspectStandin(context)
 
     hit = false
     local ppos = RATOAI_SuspectPos(context)
-    if ppos and not self:HasMemoryStandin(context) then
-        local pos = RATOAI_UnpackPos(ppos)
-        local rep, rep_dist, any_seen
+    if ppos then
+        local pct = const.RATOAI.ThreatSuspectPct
+        local list, first, any_seen = {}, nil, false
         for _, enemy in ipairs(context.enemies or empty_table) do
             if IsValid(enemy) and not (enemy:IsDead() or enemy:IsDowned()) then
                 if self:SeesEnemy(context, enemy) then
                     any_seen = true
                     break
                 end
-                ---- closest remembered enemy lends its weapon; never seen ones rank last
-                local mem = RATOAI_LastSeenPos(context.unit, enemy)
-                local d = mem and pos:Dist(RATOAI_UnpackPos(mem)) or max_int
-                if not rep or d < rep_dist then
-                    rep, rep_dist = enemy, d
+                first = first or enemy
+                local mem, age = RATOAI_LastSeenPos(context.unit, enemy)
+                ---- live memory places him already; never seen means the team can't count him
+                if mem and (self:MemoryConfidence(age) <= 0 or
+                    RATOAI_ThreatMemoryStale(context, enemy, mem)) then
+                    list[#list + 1] = {enemy = enemy, ppos = ppos, pct = pct,
+                                       key = "suspect" .. tostring(enemy.handle)}
                 end
             end
         end
-        if rep and not any_seen then
-            hit = {enemy = rep, ppos = ppos, pct = const.RATOAI.ThreatSuspectPct}
+        ---- spot known only by noise: still one source, the first enemy lends range and sight
+        if #list == 0 and first and not self:HasMemoryStandin(context) then
+            list[1] = {enemy = first, ppos = ppos, pct = pct, key = "suspect"}
+        end
+        if not any_seen and #list > 0 then
+            hit = list
         end
     end
     cache[self] = hit
@@ -1375,7 +1382,7 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
         out.los_pct, out.los_votes, out.los_tested = nil, nil, nil
         out.armed = nil
     end
-    local key = suspect and "suspect" or nil
+    local key = suspect and suspect.key or nil
 
     ---- mesmo criterio de "nao ameaca" da Seek Cover: abatido e morto ficam fora.
     ---- SUBIU (B52): antes vinha depois do teste de visibilidade, mas morto nao ameaca nem de
@@ -1667,8 +1674,7 @@ function AIPolicyThreatExposure:EvalDest(context, dest, grid_voxel)
         end
     end
 
-    local suspect = self:SuspectStandin(context)
-    if suspect then
+    for _, suspect in ipairs(self:SuspectStandin(context) or empty_table) do
         local bruta, liquida = self:EnemyContribution(context, suspect.enemy, dest, target_pos, p,
                                                       out, suspect)
         threat = threat + liquida
