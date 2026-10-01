@@ -80,6 +80,10 @@ return {
 		'CodeFileName', "Code/AIPOLICYPOS_AvoidThreatenedAreas.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "AIPOLICYPOS_ScoutHold",
+		'CodeFileName', "Code/AIPOLICYPOS_ScoutHold.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "AIPOLICYTARG_EnemyInCover",
 		'CodeFileName', "Code/AIPOLICYTARG_EnemyInCover.lua",
 	}),
@@ -98,6 +102,10 @@ return {
 	PlaceObj('ModItemCode', {
 		'name', "AIACTION_PrepareWeapon",
 		'CodeFileName', "Code/AIACTION_PrepareWeapon.lua",
+	}),
+	PlaceObj('ModItemCode', {
+		'name', "AIACTION_ScoutSearch",
+		'CodeFileName', "Code/AIACTION_ScoutSearch.lua",
 	}),
 	PlaceObj('ModItemCode', {
 		'name', "UTIL",
@@ -1890,7 +1898,7 @@ return {
 		BaseMovementWeight = 10,
 		Behaviors = {
 			PlaceObj('StandardAI', {
-				'OptLocWeight', 400,
+				'OptLocWeight', 150,
 				'EndTurnPolicies', {
 					PlaceObj('AIPolicyTakeCover', {
 						'Weight', 80,
@@ -1910,8 +1918,86 @@ return {
 			}),
 		},
 		OptLocSearchRadius = 80,
+		SignatureActions = {
+			PlaceObj('AIActionThrowGrenadeBlind', {
+				'BiasId', "BlindGrenade",
+				'Weight', 150,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "BlindGrenade",
+						'Effect', "disable",
+						'Period', 0,
+					}),
+					PlaceObj('AIBiasModification', {
+						'BiasId', "BlindGrenade",
+						'Value', -50,
+						'ApplyTo', "Team",
+					}),
+				},
+				'self_score_mod', -1000,
+				'min_score', 100,
+				'MinDist', 6000,
+				'AllowedAoeTypes', set( "fire", "none" ),
+			}),
+			PlaceObj('AIActionOverwatchSuspect', {
+				'BiasId', "OverwatchSuspect",
+			}),
+		},
 		group = "System",
 		id = "Scout_LastLocation",
+	}),
+	PlaceObj('ModItemAIArchetype', {
+		BaseAttackWeight = 50,
+		BaseMovementWeight = 10,
+		Behaviors = {
+			PlaceObj('StandardAI', {
+				'OptLocWeight', 200,
+				'EndTurnPolicies', {
+					PlaceObj('AIPolicyScoutHold', nil),
+					PlaceObj('AIPolicyTakeCover', {
+						'Weight', 80,
+						'visibility_mode', "team",
+					}),
+					PlaceObj('AIPolicyThreatExposure', nil),
+				},
+				'TakeCoverChance', 0,
+			}),
+		},
+		Comment = "scout that holds out of view of the suspected enemy spot and overwatches it; assigned in SOURCE_ScoutSearch.lua",
+		FallbackAction = "overwatch",
+		OptLocPolicies = {
+			PlaceObj('AIPolicyScoutHold', nil),
+		},
+		OptLocSearchRadius = 15,
+		PrefStance = "Crouch",
+		SignatureActions = {
+			PlaceObj('AIActionOverwatchSuspect', {
+				'BiasId', "OverwatchSuspect",
+				'Weight', 300,
+			}),
+			PlaceObj('AIActionThrowGrenadeBlind', {
+				'BiasId', "BlindGrenade",
+				'Weight', 80,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "BlindGrenade",
+						'Effect', "disable",
+						'Period', 0,
+					}),
+					PlaceObj('AIBiasModification', {
+						'BiasId', "BlindGrenade",
+						'Value', -50,
+						'ApplyTo', "Team",
+					}),
+				},
+				'self_score_mod', -1000,
+				'min_score', 100,
+				'MinDist', 6000,
+				'AllowedAoeTypes', set( "fire", "none" ),
+			}),
+		},
+		group = "System",
+		id = "RATOAI_Scout_Hold",
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		Behaviors = {

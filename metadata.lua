@@ -21,7 +21,7 @@ return PlaceObj('ModDef', {
 	'id', "RATOAI",
 	'author', "rato",
 	'version_major', 2,
-	'version', 4709,
+	'version', 4712,
 	'lua_revision', 233360,
 	'saved_with_revision', 366685,
 	'code', {
@@ -45,11 +45,13 @@ return PlaceObj('ModDef', {
 		"Code/AIPOLICYPOS_GrenadeRange.lua",
 		"Code/AIPOLICYPOS_AvoidDeathSpots.lua",
 		"Code/AIPOLICYPOS_AvoidThreatenedAreas.lua",
+		"Code/AIPOLICYPOS_ScoutHold.lua",
 		"Code/AIPOLICYTARG_EnemyInCover.lua",
 		"Code/AIPOLICYTARG_PindownTargeting.lua",
 		"Code/AIPOLICYTARG_HasStatusEffect.lua",
 		"Code/AIACTION_ThrowFlare.lua",
 		"Code/AIACTION_PrepareWeapon.lua",
+		"Code/AIACTION_ScoutSearch.lua",
 		"Code/UTIL.lua",
 		"Code/FUNCTION_DangerScan.lua",
 		"Code/CUAE_options.lua",
@@ -113,8 +115,8 @@ return PlaceObj('ModDef', {
 		WeaponShipmentRebalance = true,
 	},
 	'has_data', true,
-	'saved', 1790483415,
-	'code_hash', -6423032456513124462,
+	'saved', 1790813876,
+	'code_hash', 7088279833501639352,
 	'affected_resources', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
@@ -169,6 +171,11 @@ return PlaceObj('ModDef', {
 		PlaceObj('ModResourcePreset', {
 			'Class', "AIArchetype",
 			'Id', "Scout_LastLocation",
+			'ClassDisplayName', "AI Archetype",
+		}),
+		PlaceObj('ModResourcePreset', {
+			'Class', "AIArchetype",
+			'Id', "RATOAI_Scout_Hold",
 			'ClassDisplayName', "AI Archetype",
 		}),
 		PlaceObj('ModResourcePreset', {

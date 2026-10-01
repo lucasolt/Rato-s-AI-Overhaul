@@ -266,11 +266,125 @@ end
 ---- The engine drops a seen spot only after moving (CombatAI.lua:2488); drop it before planning too.
 function RATOAI_RefreshScoutTarget(unit, context)
     local lk = unit.last_known_enemy_pos
-    if not lk or context.archetype.id ~= "Scout_LastLocation" then
+    local id = context.archetype.id
+    if not lk or (id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold") then
         return
     end
     local pos = RATOAI_ValidatePosZ(lk)
     if IsValidPos(pos) and CheckLOS(pos, unit, unit:GetSightRadius()) then
         unit.last_known_enemy_pos = AIPickScoutLocation(unit) or lk
+    end
+end
+
+function RATOAI_TeamSeesEnemy(context)
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if context.enemy_visible_by_team and context.enemy_visible_by_team[enemy] then
+            return true
+        end
+    end
+    return false
+end
+
+---------------------------------------------------------------------------------------------------
+---- Where the team believes each lost enemy is: {enemy, pos, pct}. Same rules as ThreatExposure:
+---- live memory where he was seen, expired or disproven memory at the suspected spot.
+---------------------------------------------------------------------------------------------------
+function RATOAI_BelievedEnemies(context)
+    local cached = context.__ratoai_believed
+    if cached then
+        return cached
+    end
+    local list = {}
+    local suspect = RATOAI_SuspectPos(context)
+    local suspect_pos = suspect and RATOAI_UnpackPos(suspect)
+    local turns = const.RATOAI.ThreatMemoryTurns or 0
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValidTarget(enemy) and not enemy:IsDowned() then
+            local mem, age = RATOAI_LastSeenPos(context.unit, enemy)
+            if mem then
+                local fresh = turns > 0 and age < turns and
+                                  not RATOAI_ThreatMemoryStale(context, enemy, mem)
+                if fresh then
+                    list[#list + 1] = {enemy = enemy, pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(mem)),
+                                       pct = MulDivRound(const.RATOAI.ThreatMemoryPct or 0, turns - age,
+                                                         turns)}
+                elseif suspect_pos then
+                    list[#list + 1] = {enemy = enemy, pos = suspect_pos,
+                                       pct = const.RATOAI.ThreatSuspectPct or 0}
+                end
+            end
+        end
+    end
+    context.__ratoai_believed = list
+    return list
+end
+
+---------------------------------------------------------------------------------------------------
+---- SEEKERS AND HOLDERS. Every unit turning scout in the same turn walked into the same guns one
+---- by one. Per team per turn, the ScoutSeekers units closest to their suspected spot search; the
+---- others already in contact range hold out of view (RATOAI_Scout_Hold). Far units keep closing.
+---------------------------------------------------------------------------------------------------
+if const.RATOAI.ScoutSeekers == nil then
+    const.RATOAI.ScoutSeekers = 2
+end
+
+---- base archetypes that would rather hold than search; Skirmishers search first
+local ScoutNaturalHolders = {
+    RATOAI_Sniper = true,
+    HeavyGunner = true,
+    RATOAI_Rocketeer = true,
+    RATOAI_RetreatingMarksman = true
+}
+local ScoutRoles = {}
+
+local function ScoutRank(unit)
+    local lk = unit.last_known_enemy_pos
+    if not lk then
+        return max_int
+    end
+    local d = unit:GetDist(lk)
+    if ScoutNaturalHolders[unit.archetype] then
+        d = d + 1000 * const.SlabSizeX
+    elseif unit.archetype == "Skirmisher" then
+        d = d - 5 * const.SlabSizeX
+    end
+    return d
+end
+
+function RATOAI_IsScoutSeeker(unit)
+    local lk = unit.last_known_enemy_pos
+    if not lk or unit:GetDist(lk) > const.RATOAI.ScoutContactTiles * const.SlabSizeX then
+        return true
+    end
+    local team, turn = unit.team, g_Combat and g_Combat.current_turn or 0
+    local roles = ScoutRoles[team.side]
+    if not roles or roles.turn ~= turn then
+        local list = {}
+        for _, u in ipairs(team.units) do
+            if IsValid(u) and not u:IsDead() and not u:IsIncapacitated() then
+                list[#list + 1] = {unit = u, rank = ScoutRank(u)}
+            end
+        end
+        table.sort(list, function(a, b)
+            if a.rank ~= b.rank then
+                return a.rank < b.rank
+            end
+            return a.unit.handle < b.unit.handle
+        end)
+        roles = {turn = turn, seekers = {}}
+        for i = 1, Min(#list, const.RATOAI.ScoutSeekers) do
+            roles.seekers[list[i].unit] = true
+        end
+        ScoutRoles[team.side] = roles
+    end
+    return roles.seekers[unit] or false
+end
+
+local RATOAI_SelectArchetype_orig = Unit.SelectArchetype
+function Unit:SelectArchetype(proto_context)
+    RATOAI_SelectArchetype_orig(self, proto_context)
+    if self.current_archetype == "Scout_LastLocation" and Archetypes.RATOAI_Scout_Hold and
+        not RATOAI_IsScoutSeeker(self) then
+        self.current_archetype = "RATOAI_Scout_Hold"
     end
 end
