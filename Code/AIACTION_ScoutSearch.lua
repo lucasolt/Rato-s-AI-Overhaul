@@ -80,8 +80,12 @@ function AIActionThrowGrenadeBlind:PrecalcAction(context, action_state)
         local traj = results.trajectory or empty_table
         local impact = #traj > 0 and traj[#traj].pos or results.target_pos or pt
         local units, trust, n = {}, 0, 0
+        local iz = impact:IsValidZ() and impact:z() or terrain.GetHeight(impact)
         for _, b in ipairs(believed) do
-            if impact:Dist(b.pos) <= blast then
+            ---- same level only: a floor is 3.5 m and the blast ~3.6 m, so 3D distance let a
+            ---- grenade landing upstairs "hit" mercs right below it (measured, Raider:453)
+            local bz = b.pos:IsValidZ() and b.pos:z() or terrain.GetHeight(b.pos)
+            if impact:Dist2D(b.pos) <= blast and abs(iz - bz) <= 2 * const.SlabSizeZ then
                 units[#units + 1] = b.enemy
                 trust, n = trust + b.pct, n + 1
             end
