@@ -112,6 +112,15 @@ function RATOAI_IsPeekAnchorDest(unit, dest)
     return stance_pos_dist(dest, stance_pos_pack(ax, ay, az, StancesList[unit.stance])) == 0
 end
 
+---- archetype value, -1 = const.RATOAI.MinShotCTH; melee and heavy weapons are not gated
+function RATOAI_MinShotCTH(context, weapon)
+    if not IsKindOf(weapon, "Firearm") or IsKindOf(weapon, "HeavyWeapon") then
+        return 0
+    end
+    local v = context.archetype and context.archetype.MinShotCTH or -1
+    return v >= 0 and v or (const.RATOAI.MinShotCTH or 0)
+end
+
 function Update_AIPrecalcDamageScore(unit)
     local context = unit.ai_context or {}
     if not context.damage_score_precalced then

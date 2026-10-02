@@ -233,6 +233,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIActionPinDown_PrecalcAction.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIActionMobileShot_PrecalcAction",
+		'CodeFileName', "Code/SOURCE_AIActionMobileShot_PrecalcAction.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIScoreDest",
 		'CodeFileName', "Code/SOURCE_AIScoreDest.lua",
 	}),

@@ -110,13 +110,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     local cost_ap = context.override_attack_cost or context.default_attack_cost
 
     local max_check_range, is_melee = AIGetWeaponCheckRange(unit, weapon, action)
-    local is_heavy = IsKindOf(weapon, "HeavyWeapon")
-    ---- archetype value, -1 = const.RATOAI.MinShotCTH; melee and heavy weapons are not gated
-    local min_shot_cth = 0
-    if not is_melee and not is_heavy and IsKindOf(weapon, "Firearm") then
-        local v = context.archetype and context.archetype.MinShotCTH or -1
-        min_shot_cth = v >= 0 and v or (const.RATOAI.MinShotCTH or 0)
-    end
+    local min_shot_cth = is_melee and 0 or RATOAI_MinShotCTH(context, weapon)
 
     ---- BUGFIX (B21): balas por ataque, para RATOAI_BurstHits expandir a rajada.
     ---- Depende so de (arma, acao) -- nem do destino nem do alvo -- entao e resolvido

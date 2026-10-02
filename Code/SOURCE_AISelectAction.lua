@@ -98,7 +98,8 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
         for _, action in ipairs(available) do
             local w = available[action]
 
-            if roll <= w then
+            ---- `<`: roll is in [0, weight), so `<=` let a weight-0 action win on roll 0
+            if roll < w then
                 return action
             end
 
