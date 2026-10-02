@@ -219,6 +219,11 @@ function MobileAttack_CustomScoring(self, context)
 
     local use, snap_penal
 
+    ---- false = precalc rejected every target from this dest (nil = never precalculated)
+    if upos and target == false then
+        return 0, true, false
+    end
+
     if dist and dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
         priority = true
     elseif dist then
