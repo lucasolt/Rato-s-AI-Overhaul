@@ -17,6 +17,37 @@ local RATOAI_originalAIPlayAttacks = AIPlayAttacks
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B56): the status ("restart" etc.) was dropped, so CombatAI.lua:505 always fell
 ---- through to AITakeCover and TargetChangePolicy = "restart" never restarted.
+---- Ends its attacks seeing no enemy: the engine's fallback overwatch (CombatAI.lua:381) only covers
+---- a unit that never moved, so these ended with 9-12 AP idle (measured, G8 Raiders 452-454).
+---- Aim at the nearest enemy the team sees, else at the suspected spot.
+local function RATOAI_LeftoverOverwatch(unit, context)
+    if not IsValid(unit) or unit:IsDead() or unit:HasPreparedAttack() or context.reposition then
+        return
+    end
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValidTarget(enemy) and HasVisibilityTo(unit, enemy) then
+            return
+        end
+    end
+    local pos, best
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValidTarget(enemy) and HasVisibilityTo(unit.team, enemy) then
+            local d = unit:GetDist(enemy)
+            if not best or d < best then
+                pos, best = enemy:GetPos(), d
+            end
+        end
+    end
+    local lk = unit.last_known_enemy_pos
+    pos = pos or (lk and RATOAI_ValidatePosZ(lk))
+    local args = RATOAI_OverwatchArgsAt(context, pos)
+    if args and AIPlayCombatAction("Overwatch", unit, nil, args) then
+        while not unit:IsIdleCommand() do
+            WaitMsg("Idle", 50)
+        end
+    end
+end
+
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
     local status = RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
@@ -24,6 +55,12 @@ function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
         local ok, err = pcall(RATOAI_FireTailBurst, unit, context, force_or_skip_action)
         if not ok then
             print("[RATOAI] RATOAI_FireTailBurst failed --", err)
+        end
+        if not force_or_skip_action then
+            ok, err = pcall(RATOAI_LeftoverOverwatch, unit, context)
+            if not ok then
+                print("[RATOAI] RATOAI_LeftoverOverwatch failed --", err)
+            end
         end
     end
     context.AIisPlayingAttacks = false

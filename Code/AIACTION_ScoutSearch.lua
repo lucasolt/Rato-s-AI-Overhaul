@@ -126,17 +126,16 @@ function AIActionOverwatchSuspect:GetEditorView()
     return "Overwatch the suspected enemy spot"
 end
 
-function AIActionOverwatchSuspect:PrecalcAction(context, action_state)
+---- Overwatch args aimed at pos, or nil when weapon, range, AP or UI state rule it out.
+function RATOAI_OverwatchArgsAt(context, pos)
     local unit = context.unit
     local weapon = context.weapon
-    local lk = unit.last_known_enemy_pos
-    if not lk or RATOAI_TeamSeesEnemy(context) or unit:HasPreparedAttack() or
-        not IsKindOf(weapon, "Firearm") or
+    if not pos or unit:HasPreparedAttack() or not IsKindOf(weapon, "Firearm") or
         (weapon.PreparedAttackType ~= "Overwatch" and weapon.PreparedAttackType ~= "Both") then
         return
     end
     ---- beyond the weapon's reach the cone covers nothing the merc must cross
-    if unit:GetDist(lk) > (context.ExtremeRange or 0) * const.SlabSizeX then
+    if unit:GetDist(pos) > (context.ExtremeRange or 0) * const.SlabSizeX then
         return
     end
     local caction = CombatActions.Overwatch
@@ -147,9 +146,16 @@ function AIActionOverwatchSuspect:PrecalcAction(context, action_state)
     if not args or not has_ap then
         return
     end
-    args.target_pos = lk
-    args.target = lk
-    action_state.args = args
+    args.target_pos = pos
+    args.target = pos
+    return args
+end
+
+function AIActionOverwatchSuspect:PrecalcAction(context, action_state)
+    local lk = context.unit.last_known_enemy_pos
+    if lk and not RATOAI_TeamSeesEnemy(context) then
+        action_state.args = RATOAI_OverwatchArgsAt(context, lk)
+    end
 end
 
 function AIActionOverwatchSuspect:IsAvailable(context, action_state)

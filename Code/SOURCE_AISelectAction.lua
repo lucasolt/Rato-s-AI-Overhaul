@@ -6,18 +6,11 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
 
     context.action_states = context.action_states or {}
 
-    ---- attack roll (only caller passing choose_actions): with no enemy in sight the base attack
-    ---- has no target, and its share of the roll wasted the turn (measured, Raider:454 kept 11 AP)
+    ---- attack roll (only caller passing choose_actions; AIPlayAttacks just precalced this dest):
+    ---- without a target the base attack does nothing, and its share wasted the turn (Raider:454, 11 AP)
     if dbg_available_actions and dbg_available_actions == context.choose_actions and weight > 0 then
-        local team = context.unit.team
-        local seen = false
-        for _, enemy in ipairs(context.enemies or empty_table) do
-            if HasVisibilityTo(team, enemy) then
-                seen = true
-                break
-            end
-        end
-        if not seen then
+        local dest = context.ai_destination or GetPackedPosAndStance(context.unit)
+        if not IsValidTarget(context.dest_target and context.dest_target[dest]) then
             weight = 0
             dbg_available_actions[1].weight = 0
         end
