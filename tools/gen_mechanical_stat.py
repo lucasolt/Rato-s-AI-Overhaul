@@ -15,8 +15,8 @@ DEFS = r"C:\Steam\steamapps\common\Jagged Alliance 3\ModTools\Src\Lua\UnitDataCo
 TARGET = os.path.join(ROOT, "Code", "PATCH_UnitData.lua")
 
 AFFILIATION = {
-    "Legion": 5, "Thugs": 5, "Rebel": 10, "Other": 10, "Civilian": 5,
-    "Army": 15, "Adonis": 20, "Secret": 20, "SuperSoldiers": 25, "Militia": 10,
+    "Legion": 20, "Thugs": 20, "Rebel": 25, "Other": 20, "Civilian": 15,
+    "Army": 30, "Adonis": 35, "Secret": 35, "SuperSoldiers": 35, "Militia": 25,
 }
 MARKSMANSHIP_SHARE = 40   # percent of vanilla Marksmanship folded in as the tier term
 JITTER = 4                # +-, name-seeded, so same-tier classes are not identical
@@ -65,8 +65,9 @@ def main():
     for call in calls:
         name = call.group(1)
         open_b, close_b = props_span(text, call.end())
-        body = re.sub(r"Mechanical = \d+, ?", "", text[open_b + 1:close_b])   # idempotent
-        body = re.sub(r"\n[ ]*Mechanical = \d+,", "", body)
+        # own-line form first, or the inline strip leaves a blank line that defeats the layout check
+        body = re.sub(r"\n[ ]*Mechanical = \d+,", "", text[open_b + 1:close_b])
+        body = re.sub(r"Mechanical = \d+, ?", "", body)
         value = roll(name)
         if value is None:
             skipped.append(name)
