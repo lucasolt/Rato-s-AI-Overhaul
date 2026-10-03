@@ -195,8 +195,58 @@ local function OverwatchAim(context, pos)
     end
 end
 
+---------------------------------------------------------------------------------------------------
+---- OVERWATCH QUALITY: every interrupt shot is a snapshot, so GBO3's snapshot multiplier says how
+---- much a weapon loses on it (measured: pistol 0.38, AK 0.98, Mosin 2.27, Gewehr98 3.0), and bolt
+---- cycling cuts the interrupts it gets. Blind overwatch is the fallback for AP with nothing better
+---- to do, so a bad overwatch gun is a chance to skip it, not a weight: alone in the roll, any
+---- weight wins.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.OverwatchSnapRef = 100 ---- snapshot multiplier % at which overwatch costs nothing
+const.RATOAI.OverwatchFullAttacks = 2 ---- interrupts for a full-quality overwatch
+const.RATOAI.OverwatchMinQuality = 10
+
+function RATOAI_OverwatchQuality(unit, weapon, attacks)
+    local ok, mul = pcall(GetWeaponHipfireOrSnapshotMul, weapon, unit, CombatActions.Overwatch, true,
+                          1)
+    local snap = (ok and type(mul) == "number" and mul > 0) and round(mul * 100, 1) or 100
+    local q = Min(100, MulDivRound(100, const.RATOAI.OverwatchSnapRef or 100, Max(1, snap)))
+    local full = const.RATOAI.OverwatchFullAttacks or 1
+    if attacks and full > 1 then
+        q = MulDivRound(q, Clamp(attacks, 1, full), full)
+    end
+    return Clamp(q, const.RATOAI.OverwatchMinQuality or 0, 100)
+end
+
+---- One roll per turn, shared by every overwatch path of this context.
+function RATOAI_OverwatchAllowed(context, weapon, attacks)
+    local unit = context.unit
+    local roll = context.__ratoai_ow_roll
+    if not roll then
+        roll = InteractionRand(100, "RATOAI_OverwatchQuality", unit)
+        context.__ratoai_ow_roll = roll
+    end
+    local q = RATOAI_OverwatchQuality(unit, weapon, attacks)
+    if RATOAI_Debug then
+        printf("[RATOAI] %s overwatch quality %d (%s, %s attacks), roll %d", tostring(unit.session_id),
+               q, tostring(weapon and weapon.class), tostring(attacks), roll)
+    end
+    return roll < q
+end
+
+---- Engine fallback for a unit that neither moved nor acted: a rejected overwatch holds the spot
+---- (true = handled) instead of reverting the unit to Unaware.
+local RATOAI_originalAIPlaceFallbackOverwatch = AIPlaceFallbackOverwatch
+function AIPlaceFallbackOverwatch(unit, context)
+    local weapon = context and context.weapon
+    if IsKindOf(weapon, "Firearm") and not RATOAI_OverwatchAllowed(context, weapon) then
+        return true
+    end
+    return RATOAI_originalAIPlaceFallbackOverwatch(unit, context)
+end
+
 ---- Overwatch args aimed where the enemy coming from pos would appear, or nil when weapon, sight,
----- AP or UI state rule it out.
+---- AP, UI state or the weapon's overwatch quality rule it out.
 function RATOAI_OverwatchArgsAt(context, pos)
     local unit = context.unit
     local weapon = context.weapon
@@ -213,7 +263,7 @@ function RATOAI_OverwatchArgsAt(context, pos)
         return
     end
     local args, has_ap = AIGetAttackArgs(context, caction, nil, "None")
-    if not args or not has_ap then
+    if not args or not has_ap or not RATOAI_OverwatchAllowed(context, weapon, args.num_attacks) then
         return
     end
     args.target_pos = aim
