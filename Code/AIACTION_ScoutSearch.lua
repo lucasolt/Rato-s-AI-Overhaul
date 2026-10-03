@@ -126,7 +126,77 @@ function AIActionOverwatchSuspect:GetEditorView()
     return "Overwatch the suspected enemy spot"
 end
 
----- Overwatch args aimed at pos, or nil when weapon, range, AP or UI state rule it out.
+---- Where the enemy comes into view on its way from pos to the unit: the first tile of its walk (the
+---- spot flood's path, else the straight line) that the unit sees within range. A doorway, stair top
+---- or corner, found per turn. Aiming at pos itself left a sniper's cone 0/54 visible (LegionSniper:458).
+local function OverwatchAim(context, pos)
+    local unit = context.unit
+    local spot = RATOAI_ValidatePosZ(pos)
+    if not IsValidPos(spot) then
+        return
+    end
+    local slab = const.SlabSizeX
+    local range = (context.ExtremeRange or 0) * slab
+    local upos = unit:GetPos()
+    local at = SnapToPassSlab(upos) or upos
+    ---- own flood: the scoring one (24 tiles) missed a sniper 19 tiles off up a stair
+    local key = point_pack(spot)
+    local flood = context.__ratoai_ow_flood
+    if not flood or flood.key ~= key then
+        local walk = Presets.ConstDef["Action Point Costs"].Walk.value
+        local tiles = Clamp(2 * upos:Dist(spot) / slab, 24, 60)
+        local start = SnapToPassSlab(spot)
+        local cp
+        if start and walk > 0 then
+            cp = CombatPath:new()
+            cp:RebuildPaths(unit, tiles * walk, start, "Standing", true, true)
+        end
+        flood = {key = key, cp = cp}
+        context.__ratoai_ow_flood = flood
+    end
+    local path = flood.cp and flood.cp:GetCombatPathFromPos(at)
+
+    ---- spot first, so the first visible tile is where it steps into view
+    local tiles = {}
+    if path then
+        for i = #path, 1, -1 do
+            tiles[#tiles + 1] = point(point_unpack(path[i]))
+        end
+    else
+        local n = Max(1, upos:Dist(spot) / slab)
+        local sx, sy, sz = spot:xyz()
+        local ux, uy, uz = upos:xyz()
+        sz, uz = sz or terrain.GetHeight(spot), uz or terrain.GetHeight(upos)
+        for i = 0, n do
+            local p = SnapToPassSlab(point(sx + MulDivRound(ux - sx, i, n), sy + MulDivRound(uy - sy, i, n),
+                                           sz + MulDivRound(uz - sz, i, n)))
+            if p then
+                tiles[#tiles + 1] = p
+            end
+        end
+    end
+
+    local cands, packed = {}, {}
+    for _, p in ipairs(tiles) do
+        local d = unit:GetDist(p)
+        if d <= range and d >= 2 * slab then
+            cands[#cands + 1] = p
+            packed[#packed + 1] = stance_pos_pack(p, StancesList.Standing)
+        end
+    end
+    if #packed == 0 then
+        return
+    end
+    local _, data = CheckLOS(packed, unit, range)
+    for i = 1, #packed do
+        if data and data[i] then
+            return cands[i]
+        end
+    end
+end
+
+---- Overwatch args aimed where the enemy coming from pos would appear, or nil when weapon, sight,
+---- AP or UI state rule it out.
 function RATOAI_OverwatchArgsAt(context, pos)
     local unit = context.unit
     local weapon = context.weapon
@@ -134,8 +204,8 @@ function RATOAI_OverwatchArgsAt(context, pos)
         (weapon.PreparedAttackType ~= "Overwatch" and weapon.PreparedAttackType ~= "Both") then
         return
     end
-    ---- beyond the weapon's reach the cone covers nothing the merc must cross
-    if unit:GetDist(pos) > (context.ExtremeRange or 0) * const.SlabSizeX then
+    local aim = OverwatchAim(context, pos)
+    if not aim then
         return
     end
     local caction = CombatActions.Overwatch
@@ -146,8 +216,8 @@ function RATOAI_OverwatchArgsAt(context, pos)
     if not args or not has_ap then
         return
     end
-    args.target_pos = pos
-    args.target = pos
+    args.target_pos = aim
+    args.target = aim
     return args
 end
 
