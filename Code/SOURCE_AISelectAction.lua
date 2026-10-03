@@ -1,3 +1,10 @@
+const.RATOAI = const.RATOAI or {}
+---- weight % a non-attacking action keeps when the attack here is an expected kill (linear below it)
+const.RATOAI.LethalOtherPct = 0
+
+local LethalClasses = {"AIActionSingleTargetShot", "AIActionMobileShot", "AIActionCharge",
+                       "AIActionHyenaCharge", "AIActionBasicAttack"}
+
 function AISelectAction(context, actions, base_weight, dbg_available_actions)
     local available = {}
     local weight = base_weight or 0
@@ -8,11 +15,19 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
 
     ---- attack roll (only caller passing choose_actions; AIPlayAttacks just precalced this dest):
     ---- without a target the base attack does nothing, and its share wasted the turn (Raider:454, 11 AP)
-    if dbg_available_actions and dbg_available_actions == context.choose_actions and weight > 0 then
+    local other_pct = 100
+    if dbg_available_actions and dbg_available_actions == context.choose_actions then
         local dest = context.ai_destination or GetPackedPosAndStance(context.unit)
-        if not IsValidTarget(context.dest_target and context.dest_target[dest]) then
+        if weight > 0 and not IsValidTarget(context.dest_target and context.dest_target[dest]) then
             weight = 0
             dbg_available_actions[1].weight = 0
+        end
+        ---- a unit that can drop its target shoots it instead of grenading or overwatching; with no
+        ---- shot drawn, AIPlayAttacks reverts to the default attack on dest_target
+        local kill = Clamp(RATOAI_DestKillPct(context, dest) or 0, 0, 100)
+        if kill > 0 then
+            local floor = Clamp(const.RATOAI.LethalOtherPct or 0, 0, 100)
+            other_pct = 100 - MulDivRound(100 - floor, kill, 100)
         end
     end
 
@@ -45,6 +60,10 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
 
                 -- priority = priority or action.Priority
                 priority = priority or action_priority
+                if other_pct < 100 and not IsKindOfClasses(action, LethalClasses) then
+                    action_weight = MulDivRound(action_weight, other_pct, 100)
+                    priority = false ---- a priority would skip the roll the kill now competes in
+                end
                 --------------------------------------------
 
                 if dbg_available_actions then

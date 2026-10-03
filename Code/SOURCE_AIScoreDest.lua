@@ -1,3 +1,42 @@
+const.RATOAI = const.RATOAI or {}
+
+---------------------------------------------------------------------------------------------------
+---- CLOSE WITHOUT A KILL: a tile inside CloseRangeTiles of a visible enemy costs CloseNoKillPenalty
+---- (full at 1 tile, 0 at the edge), discounted by the expected kill share on THAT enemy from the
+---- attacks planned there. Point blank pulls DealDamage up whether or not the shots finish anyone;
+---- this makes coming close pay only when the unit expects to drop who it walks up to.
+---- End-turn pass only: OptLoc tiles have no AP and no planned attacks.
+---------------------------------------------------------------------------------------------------
+const.RATOAI.CloseNoKillPenalty = -200
+const.RATOAI.CloseRangeTiles = false ---- false = const.Weapons.PointBlankRange
+const.RATOAI.CloseNoKillMaxEnemies = 2
+
+function RATOAI_CloseNoKillPenalty(context, dest, x, y, z)
+    local pen = const.RATOAI.CloseNoKillPenalty or 0
+    if pen == 0 or not context.__ratoai_endturn_pass or not IsKindOf(context.weapon, "Firearm") then
+        return 0
+    end
+    local slab = const.SlabSizeX
+    local reach = (const.RATOAI.CloseRangeTiles or const.Weapons.PointBlankRange) * slab
+    if reach <= slab then
+        return 0
+    end
+    local pos = point(x, y, z or terrain.GetHeight(x, y))
+    local total = 0
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValidTarget(enemy) and not enemy:IsDowned() and
+            RATOAI_EnemyVisible(context, enemy, "team") then
+            local d = enemy:GetDist(pos)
+            if d < reach then
+                local near = MulDivRound(pen, Min(reach - d, reach - slab), reach - slab)
+                local kill = Clamp(RATOAI_DestKillPct(context, dest, enemy) or 0, 0, 100)
+                total = total + MulDivRound(near, 100 - kill, 100)
+            end
+        end
+    end
+    return Max(total, pen * (const.RATOAI.CloseNoKillMaxEnemies or 1))
+end
+
 function AIScoreDest(context, policies, dest, grid_voxel, base_score, visual_voxels, score_details)
     local score = 0
     local x, y, z, stance_idx = stance_pos_unpack(dest)
@@ -71,6 +110,15 @@ function AIScoreDest(context, policies, dest, grid_voxel, base_score, visual_vox
         if score_details then
             score_details[#score_details + 1] = "TIMED EXPLOSIVE"
             score_details[#score_details + 1] = timed_danger
+        end
+    end
+
+    local close = RATOAI_CloseNoKillPenalty(context, dest, x, y, z)
+    if close ~= 0 then
+        score = score + close
+        if score_details then
+            score_details[#score_details + 1] = "CLOSE, NO KILL"
+            score_details[#score_details + 1] = close
         end
     end
 

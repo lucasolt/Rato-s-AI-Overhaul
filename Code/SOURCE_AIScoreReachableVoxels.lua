@@ -113,6 +113,7 @@ local function RATOAI_RefineFinalists(context, policies, potential_dests, dest_s
 
         ---- the precalc replaces dest_cth/dest_hit_score wholesale: carry the other dests over
         local old_cth, old_hit = context.dest_cth or {}, context.dest_hit_score or {}
+        local old_hits = context.dest_target_hits or {}
         local old_target = trace and {}
         if trace then
             for _, dest in ipairs(batch) do
@@ -130,6 +131,11 @@ local function RATOAI_RefineFinalists(context, policies, potential_dests, dest_s
         for dest, v in pairs(old_hit) do
             if context.dest_hit_score[dest] == nil and not seen[dest] then
                 context.dest_hit_score[dest] = v
+            end
+        end
+        for dest, v in pairs(old_hits) do
+            if context.dest_target_hits[dest] == nil and not seen[dest] then
+                context.dest_target_hits[dest] = v
             end
         end
         if not ok then

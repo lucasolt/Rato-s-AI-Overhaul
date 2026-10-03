@@ -101,31 +101,6 @@ function AIPolicyDealDamage:GetEditorView()
                          detalhe, skill)
 end
 
----- Dano por acerto da unidade que esta decidindo. Constante dentro do turno, e a policy
----- roda uma vez por destino -- entao fica no context, calculado no maximo uma vez.
----- `false` guardado = "ja tentei e nao deu", para nao repetir a tentativa por destino.
-local function RATOAI_DamagePerHit(context)
-    local cached = context.__ratoai_dmg_per_hit
-    if cached ~= nil then
-        return cached or nil
-    end
-
-    local unit, weapon = context.unit, context.weapon
-    local dmg
-    if unit and weapon and unit.GetBaseDamage then
-        ---- pcall: GetBaseDamage passa por componentes de arma e efeitos: um mod de
-        ---- terceiro que quebre ali nao pode derrubar o turno da IA
-        local ok, v = pcall(unit.GetBaseDamage, unit, weapon)
-        if ok and type(v) == "number" and v > 0 then
-            ---- shotgun: GetBaseDamage is per pellet, a hit is a whole shell (RATOAI_PelletMul)
-            dmg = IsKindOf(weapon, "Shotgun") and v * RATOAI_ShellPellets(context, weapon) or v
-        end
-    end
-
-    context.__ratoai_dmg_per_hit = dmg or false
-    return dmg
-end
-
 ---- Referencial INTRINSECO da unidade: "todos os disparos que eu consigo, acertando no
 ---- meu nivel". Constante dentro do turno, entao fica no context -- esta policy roda por
 ---- destino.
@@ -270,20 +245,14 @@ function AIPolicyDealDamage:EvalDest(context, dest, grid_voxel)
 
         ---- acertos necessarios para derrubar o alvo escolhido neste destino
     elseif modo == "tokill" then
-        local target = context.dest_target and context.dest_target[dest]
-        local dmg = RATOAI_DamagePerHit(context)
-        if IsValid(target) and dmg then
-            ---- `needed` na MESMA escala de `hits` (acertos x100): HP/dano x 100
-            local needed = Max(1, MulDivRound(Max(1, target.HitPoints or 1), 100, dmg))
+        local kill = RATOAI_DestKillPct(context, dest)
+        if kill then
             if self.Categorical then
                 ---- sem gradiente: ou da pra derrubar daqui, ou o tile nao vale nada
                 ---- pra esta policy
-                score = hits >= needed and 100 or 0
+                score = kill >= 100 and 100 or 0
             else
-                score = MulDivRound(hits, 100, needed)
-                if self.KillIsEnough then
-                    score = Min(100, score)
-                end
+                score = self.KillIsEnough and Min(100, kill) or kill
             end
         end
         ---- sem alvo valido ou sem estimativa de dano: cai no `cap` em vez de zerar a

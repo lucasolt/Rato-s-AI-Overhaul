@@ -164,6 +164,9 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
     ---- nem a randomizacao -- esses pertencem a escolha de ALVO.
     local dest_hit_score = {}
     context.dest_hit_score = dest_hit_score
+    ---- [dest][target] = expected hits x100, every target that passed the gates (RATOAI_KillPct)
+    local dest_target_hits = {}
+    context.dest_target_hits = dest_target_hits
     local lof_params
     local attacker_pos = unit:GetPos()
 
@@ -660,6 +663,11 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
         dest_target[upos] = best_target
         dest_cth[upos] = best_cth
         dest_hit_score[upos] = best_hit or 0 ---- BUGFIX (B10)
+        ---- the preferred-target branch breaks before filling target_hit
+        if best_target and best_hit then
+            target_hit[best_target] = best_hit
+        end
+        dest_target_hits[upos] = target_hit
 
         ---- DEBUG (D1)
         if dbg_dest then

@@ -552,3 +552,42 @@ function RATOAI_SetGeometryArgs(context, args, upos, target, lof_exposed)
     end
     args.rat_exposed = lof_exposed
 end
+
+---- Damage per hit of the deciding unit, cached per turn (`false` = tried and failed).
+function RATOAI_DamagePerHit(context)
+    local cached = context.__ratoai_dmg_per_hit
+    if cached ~= nil then
+        return cached or nil
+    end
+    local unit, weapon = context.unit, context.weapon
+    local dmg
+    if unit and weapon and unit.GetBaseDamage then
+        local ok, v = pcall(unit.GetBaseDamage, unit, weapon)
+        if ok and type(v) == "number" and v > 0 then
+            ---- shotgun: GetBaseDamage is per pellet, a hit is a whole shell (RATOAI_PelletMul)
+            dmg = IsKindOf(weapon, "Shotgun") and v * RATOAI_ShellPellets(context, weapon) or v
+        end
+    end
+    context.__ratoai_dmg_per_hit = dmg or false
+    return dmg
+end
+
+---- Expected share of a kill on `target` (default dest_target[dest]) from the attacks the precalc
+---- planned at dest (100 = expected to drop it). nil = no target, not shootable or no damage estimate.
+function RATOAI_DestKillPct(context, dest, target)
+    local hits
+    if target then
+        local per = context.dest_target_hits and context.dest_target_hits[dest]
+        hits = per and per[target]
+    else
+        target = context.dest_target and context.dest_target[dest]
+        hits = context.dest_hit_score and context.dest_hit_score[dest]
+    end
+    local dmg = RATOAI_DamagePerHit(context)
+    if not (IsValid(target) and IsKindOf(target, "Unit") and hits and dmg) then
+        return
+    end
+    ---- hits are x100, so needed is HP/dmg x100
+    local needed = Max(1, MulDivRound(Max(1, target.HitPoints or 1), 100, dmg))
+    return MulDivRound(Max(0, hits), 100, needed)
+end
