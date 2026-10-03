@@ -142,6 +142,24 @@ local function DestLOS(band, dest)
     return los
 end
 
+---- Ends in view of the spot, or inside the standoff where LOS to one voxel means nothing, without AP
+---- to answer: the trap that killed scouts one by one (Raider:461 ended 1 tile from 3 mercs on 1.4 AP).
+function RATOAI_ScoutTrapDest(context, dest)
+    local id = context.archetype and context.archetype.id
+    local lk = context.unit.last_known_enemy_pos
+    if not lk or (id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold") then
+        return false
+    end
+    local band = ScoutBand(context, lk)
+    local x, y, z = stance_pos_unpack(dest)
+    local ap = band.reach[point_pack(x, y, z)]
+    if not ap or ap >= band.need then
+        return false
+    end
+    local d = RATOAI_SpotDist(context, band.pos, x, y, z)
+    return d < band.minr or d <= band.contact and DestLOS(band, dest)
+end
+
 local function DestCover(band, dest)
     return AIPolicyTakeCover.CoverScores[GetCoverFrom(dest, band.ppos)] or 0
 end
@@ -176,10 +194,10 @@ function AIPolicyLastEnemyPos:EvalDest(context, dest, grid_voxel)
     if not ap then
         return 0
     end
+    if RATOAI_ScoutTrapDest(context, dest) then
+        return 0
+    end
     if d <= band.contact and DestLOS(band, dest) then
-        if ap < band.need then
-            return 0 ---- in its view with no AP to answer: the trap that killed scouts one by one
-        end
         if d <= band.maxr then
             return MulDivRound(close, 70 + MulDivRound(30, DestCover(band, dest), 100), 100)
         end

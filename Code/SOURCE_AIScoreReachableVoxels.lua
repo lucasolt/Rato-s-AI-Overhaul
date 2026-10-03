@@ -326,7 +326,9 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
         table.iclear(unit_voxels)
         score = AIScoreDest(context, policies, dest, nil, score, unit_voxels, scores)
 
-        if MulDivRound(best_end_score or 0, const.AIDecisionThreshold, 100) <= score then
+        ---- end-turn policies don't read AP; OptLoc's scout rule alone let the roulette draw the trap
+        if MulDivRound(best_end_score or 0, const.AIDecisionThreshold, 100) <= score and
+            not RATOAI_ScoutTrapDest(context, dest) then
             best_end_score = Max(score, best_end_score or 0)
             local n = #potential_dests
             potential_dests[n + 1] = dest
