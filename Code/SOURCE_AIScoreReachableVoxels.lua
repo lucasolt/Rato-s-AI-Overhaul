@@ -288,13 +288,28 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
         total_dist = Max(total_dist or 0, dest_dist[dest] or 0)
     end
 
+    ---- far scout: normalized by the trip, one turn's progress (+21 of 150) let "stay" pass the 80% cut
+    local rush_from, rush_span
+    if total_dist and total_dist > 0 and RATOAI_ScoutRushing(context) then
+        local cur = dest_dist[curr_dest] or total_dist
+        local near = cur
+        for _, dest in ipairs(context.destinations) do
+            near = Min(near, dest_dist[dest] or cur)
+        end
+        if cur > near then
+            rush_from, rush_span = cur, cur - near
+        end
+    end
+
     for _, dest in ipairs(context.destinations) do
         local score = 0
         local scores
 
         local dist = dest_dist[dest] or 100 * guim
         local dist_score = 0
-        if total_dist and total_dist > 0 then
+        if rush_span then
+            dist_score = MulDivRound(opt_loc_weight, Clamp(rush_from - dist, 0, rush_span), rush_span)
+        elseif total_dist and total_dist > 0 then
             dist_score = MulDivRound(100 - MulDivRound(100, dist, total_dist), opt_loc_weight, 100)
         end
         if dist_score > (best_dist_score or 0) then

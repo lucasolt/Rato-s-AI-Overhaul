@@ -123,6 +123,15 @@ local function ScoutBand(context, lk)
     return band
 end
 
+---- Seeker with nothing reachable near its spot: it should rush, not weigh cover against a trip-long gradient.
+function RATOAI_ScoutRushing(context)
+    local lk = context.unit.last_known_enemy_pos
+    if not lk or not context.archetype or context.archetype.id ~= "Scout_LastLocation" then
+        return false
+    end
+    return not ScoutBand(context, lk).in_contact
+end
+
 local function DestLOS(band, dest)
     local los = band.los[dest]
     if los == nil then
@@ -410,14 +419,24 @@ local ScoutNaturalHolders = {
     RATOAI_Rocketeer = true,
     RATOAI_RetreatingMarksman = true
 }
-local ScoutRoles = {}
+---- MapVar, not a local: a local outlived a reload into the same turn and matched no unit
+MapVar("RATOAI_ScoutRoles", {})
 
-local function ScoutRank(unit)
+---- walked, not straight: units right above the spot outranked the ones that could reach it (Raider:456/457)
+local function ScoutRank(unit, flood_ctx)
     local lk = ScoutTarget(unit)
-    if not lk then
+    local pos = lk and RATOAI_ValidatePosZ(lk)
+    if not IsValidPos(pos) then
         return max_int
     end
-    local d = unit:GetDist(lk)
+    local at = SnapToPassSlab(unit:GetPos()) or unit:GetPos()
+    flood_ctx.unit = flood_ctx.unit or unit
+    local d = RATOAI_SpotDist(flood_ctx, pos, at:xyz())
+    local cap = const.RATOAI.ScoutWalkFloodTiles * const.SlabSizeX
+    if d >= cap then
+        ---- beyond the flood every unit reads the cap; order them behind it by straight distance
+        d = cap + unit:GetDist(pos)
+    end
     if ScoutNaturalHolders[unit.archetype] then
         d = d + 1000 * const.SlabSizeX
     elseif unit.archetype == "Skirmisher" then
@@ -432,12 +451,12 @@ function RATOAI_IsScoutSeeker(unit)
         return true
     end
     local team, turn = unit.team, g_Combat and g_Combat.current_turn or 0
-    local roles = ScoutRoles[team.side]
+    local roles = RATOAI_ScoutRoles[team.side]
     if not roles or roles.turn ~= turn then
-        local list = {}
+        local list, flood_ctx = {}, {}
         for _, u in ipairs(team.units) do
             if IsValid(u) and not u:IsDead() and not u:IsIncapacitated() then
-                list[#list + 1] = {unit = u, rank = ScoutRank(u)}
+                list[#list + 1] = {unit = u, rank = ScoutRank(u, flood_ctx)}
             end
         end
         table.sort(list, function(a, b)
@@ -450,7 +469,7 @@ function RATOAI_IsScoutSeeker(unit)
         for i = 1, Min(#list, const.RATOAI.ScoutSeekers) do
             roles.seekers[list[i].unit] = true
         end
-        ScoutRoles[team.side] = roles
+        RATOAI_ScoutRoles[team.side] = roles
     end
     return roles.seekers[unit] or false
 end
