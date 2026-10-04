@@ -245,6 +245,23 @@ function AIPlaceFallbackOverwatch(unit, context)
     return RATOAI_originalAIPlaceFallbackOverwatch(unit, context)
 end
 
+const.RATOAI.OverwatchOvershoot = 2 ---- tiles the cone reaches past the aim point
+
+---- Cone length is the distance to target_pos (UnitOverwatch.lua:202), so a cone ending on the
+---- spot misses an enemy one step beyond it.
+local function OvershootAim(unit, aim)
+    local extra = (const.RATOAI.OverwatchOvershoot or 0) * const.SlabSizeX
+    local upos = unit:GetPos()
+    local d = aim:Dist2D(upos)
+    if extra <= 0 or d <= 0 then
+        return aim
+    end
+    local ax, ay, az = aim:xyz()
+    local ux, uy = upos:xy()
+    local x, y = ax + MulDivRound(ax - ux, extra, d), ay + MulDivRound(ay - uy, extra, d)
+    return az and point(x, y, az) or point(x, y)
+end
+
 ---- Overwatch args aimed where the enemy coming from pos would appear, or nil when weapon, sight,
 ---- AP, UI state or the weapon's overwatch quality rule it out.
 function RATOAI_OverwatchArgsAt(context, pos)
@@ -266,6 +283,7 @@ function RATOAI_OverwatchArgsAt(context, pos)
     if not args or not has_ap or not RATOAI_OverwatchAllowed(context, weapon, args.num_attacks) then
         return
     end
+    aim = OvershootAim(unit, aim)
     args.target_pos = aim
     args.target = aim
     return args
