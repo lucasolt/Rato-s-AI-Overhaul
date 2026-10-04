@@ -316,7 +316,8 @@ local function EnginePickScoutLocation(unit)
         end
     end)
     if #dests > 0 then
-        return point(point_unpack(table.interaction_rand(dests, "Combat")))
+        ---- parenthesized: interaction_rand's 2nd return (the index) is point_unpack's scale argument
+        return point(point_unpack((table.interaction_rand(dests, "Combat"))))
     end
 end
 
@@ -367,6 +368,10 @@ function RATOAI_RefreshScoutTarget(unit, context)
     if id == "Scout_LastLocation" and n > 1 then
         context.__ratoai_search_pct = Max(const.RATOAI.ScoutBoldMinPct,
                                           100 - const.RATOAI.ScoutBoldStepPct * (n - 1))
+    end
+    ---- saves from before the point_unpack fix carry an off-map spot that asserts in point_pack
+    if unit.last_known_enemy_pos and not terrain.IsPointInBounds(unit.last_known_enemy_pos) then
+        unit.last_known_enemy_pos = false
     end
     local lk = ScoutTarget(unit)
     if not lk then
