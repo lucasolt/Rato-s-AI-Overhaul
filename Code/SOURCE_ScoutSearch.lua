@@ -123,13 +123,15 @@ local function ScoutBand(context, lk)
     return band
 end
 
----- Seeker with nothing reachable near its spot: it should rush, not weigh cover against a trip-long gradient.
+---- Scout whose optimal location is beyond this turn's reach: rush, not weigh cover against a trip-long
+---- gradient. Keyed on the contact band, holders and seekers one floor above the spot never moved (Raider:452/457).
 function RATOAI_ScoutRushing(context)
-    local lk = context.unit.last_known_enemy_pos
-    if not lk or not context.archetype or context.archetype.id ~= "Scout_LastLocation" then
+    local id = context.archetype and context.archetype.id
+    if id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold" then
         return false
     end
-    return not ScoutBand(context, lk).in_contact
+    local best = context.best_dest
+    return best and not (context.dest_ap and context.dest_ap[best]) or false
 end
 
 local function DestLOS(band, dest)

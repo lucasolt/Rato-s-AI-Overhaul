@@ -13,7 +13,7 @@ spot one at a time and die in turn. The rework splits them into **seekers** and 
 | Believed enemies | Per merc: remembered position if fresh (`ThreatMemoryTurns`), else the suspected spot, with a trust %. Feeds the blind grenade and threat. | `RATOAI_BelievedEnemies` `SOURCE_ScoutSearch.lua:394` |
 | Seekers / holders | Per team per turn, the `ScoutSeekers` (2) units with the shortest **walk** to the spot search; the rest in contact range become `RATOAI_Scout_Hold`. Roles in MapVar `RATOAI_ScoutRoles`. | `ScoutRank` / `RATOAI_IsScoutSeeker` `SOURCE_ScoutSearch.lua:444-497`, archetype swap in `UnitProperties:SelectArchetype` `:497` |
 | Search band | Seekers approach to a standoff ring around the spot from cover, not onto it. Walk distance via own flood (`RATOAI_SpotDist`). | `ScoutBand` `:66`, `AIPolicyLastEnemyPos:EvalDest` `:168` |
-| Rush when far | Far seekers get a distance score normalized over the reachable span, so "stay" can't pass the 80% cut. | `RATOAI_ScoutRushing` `:127`, `SOURCE_AIScoreReachableVoxels.lua:298-317` |
+| Rush when out of reach | Any scout (seeker or holder) whose optimal location is beyond this turn's reach gets the distance score normalized over the reachable span, so "stay" can't pass the 80% cut. | `RATOAI_ScoutRushing` `:127`, `SOURCE_AIScoreReachableVoxels.lua:298-317` |
 | No-AP trap | Never end a turn next to / in view of the spot without AP to shoot. | `RATOAI_ScoutTrapDest` `:147`, end-turn gate `SOURCE_AIScoreReachableVoxels.lua:337` |
 | Hold position | Holders stay out of view of the spot, inside a band. | `AIPolicyScoutHold` `AIPOLICYPOS_ScoutHold.lua:60` |
 | Threat from the spot | Lost mercs threaten from the suspected spot; decays per consecutive search turn. | `AIPOLICYPOS_ThreatExposure.lua:1236`, `RATOAI_RefreshScoutTarget` `SOURCE_ScoutSearch.lua:359` |
@@ -25,6 +25,12 @@ Presets (editor-made, `items.lua`): `Scout_LastLocation` (`items.lua:1901`, blin
 and `RATOAI_Scout_Hold` (`items.lua:1953`, overwatch 300, blind grenade 80, crouch, search radius 15).
 
 ## Open issue (2026-10-04): grenades from the floor above
+
+**Root cause found:** the units upstairs knew their optimal location was downstairs (`best` on z 7700)
+but stayed, because rush mode was seekers-only and keyed on the 20-tile contact band. A trip of 13+
+walking tiles gave one turn's progress a few points of OptLocWeight, so "stay" won. Fixed: rush
+whenever the optimal location is unreachable this turn (`RATOAI_ScoutRushing`). The blind-grenade
+wall gap below is still open.
 
 Report: scouts on the 2nd floor (z 11200) above the mercs (z 7700) keep throwing grenades as if close.
 Telemetry (`logs/JA3.exe-20261004-00.31.03`, turn 4): `LegionRaider:461` (seeker) and
