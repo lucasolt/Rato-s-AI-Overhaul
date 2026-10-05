@@ -13,15 +13,10 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
 
     context.action_states = context.action_states or {}
 
-    ---- attack roll (only caller passing choose_actions; AIPlayAttacks just precalced this dest):
-    ---- without a target the base attack does nothing, and its share wasted the turn (Raider:454, 11 AP)
+    ---- attack roll (only caller passing choose_actions; AIPlayAttacks just precalced this dest)
     local other_pct = 100
     if dbg_available_actions and dbg_available_actions == context.choose_actions then
         local dest = context.ai_destination or GetPackedPosAndStance(context.unit)
-        if weight > 0 and not IsValidTarget(context.dest_target and context.dest_target[dest]) then
-            weight = 0
-            dbg_available_actions[1].weight = 0
-        end
         ---- a unit that can drop its target shoots it instead of grenading or overwatching; with no
         ---- shot drawn, AIPlayAttacks reverts to the default attack on dest_target
         local kill = Clamp(RATOAI_DestKillPct(context, dest) or 0, 0, 100)
