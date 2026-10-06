@@ -429,74 +429,36 @@ function RATOAI_BelievedEnemies(context)
 end
 
 ---------------------------------------------------------------------------------------------------
----- SEEKERS AND HOLDERS. Every unit turning scout in the same turn walked into the same guns one
----- by one. Per team per turn, the ScoutSeekers units closest to their suspected spot search; the
----- others already in contact range hold out of view (RATOAI_Scout_Hold). Far units keep closing.
+---- SEEKERS AND HOLDERS, by role. Long guns hold out of view of the spot (RATOAI_Scout_Hold); every
+---- other archetype searches. A rank cap of 2 seekers left most of the team holding (G8: 5 of 8).
+---- With no Soldier, Skirmisher or Brute alive on the team, the long guns search too.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ScoutSeekers == nil then
-    const.RATOAI.ScoutSeekers = 2
-end
-
----- base archetypes that would rather hold than search; Skirmishers search first
 local ScoutNaturalHolders = {
     RATOAI_Sniper = true,
     HeavyGunner = true,
     RATOAI_Rocketeer = true,
     RATOAI_RetreatingMarksman = true
 }
----- MapVar, not a local: a local outlived a reload into the same turn and matched no unit
+local ScoutSearchers = {
+    Soldier = true,
+    Skirmisher = true,
+    Brute = true
+}
+---- unused since roles went by archetype; kept declared so saves that persisted it still load
 MapVar("RATOAI_ScoutRoles", {})
-
----- walked, not straight: units right above the spot outranked the ones that could reach it (Raider:456/457)
-local function ScoutRank(unit, flood_ctx)
-    local lk = ScoutTarget(unit)
-    local pos = lk and RATOAI_ValidatePosZ(lk)
-    if not IsValidPos(pos) then
-        return max_int
-    end
-    local at = SnapToPassSlab(unit:GetPos()) or unit:GetPos()
-    flood_ctx.unit = flood_ctx.unit or unit
-    local d = RATOAI_SpotDist(flood_ctx, pos, at:xyz())
-    local cap = const.RATOAI.ScoutWalkFloodTiles * const.SlabSizeX
-    if d >= cap then
-        ---- beyond the flood every unit reads the cap; order them behind it by straight distance
-        d = cap + unit:GetDist(pos)
-    end
-    if ScoutNaturalHolders[unit.archetype] then
-        d = d + 1000 * const.SlabSizeX
-    elseif unit.archetype == "Skirmisher" then
-        d = d - 5 * const.SlabSizeX
-    end
-    return d
-end
 
 function RATOAI_IsScoutSeeker(unit)
     local lk = ScoutTarget(unit)
-    if not lk or unit:GetDist(lk) > const.RATOAI.ScoutContactTiles * const.SlabSizeX then
+    if not ScoutNaturalHolders[unit.archetype] or not lk or
+        unit:GetDist(lk) > const.RATOAI.ScoutContactTiles * const.SlabSizeX then
         return true
     end
-    local team, turn = unit.team, g_Combat and g_Combat.current_turn or 0
-    local roles = RATOAI_ScoutRoles[team.side]
-    if not roles or roles.turn ~= turn then
-        local list, flood_ctx = {}, {}
-        for _, u in ipairs(team.units) do
-            if IsValid(u) and not u:IsDead() and not u:IsIncapacitated() then
-                list[#list + 1] = {unit = u, rank = ScoutRank(u, flood_ctx)}
-            end
+    for _, u in ipairs(unit.team.units) do
+        if ScoutSearchers[u.archetype] and IsValid(u) and not u:IsDead() and not u:IsIncapacitated() then
+            return false
         end
-        table.sort(list, function(a, b)
-            if a.rank ~= b.rank then
-                return a.rank < b.rank
-            end
-            return a.unit.handle < b.unit.handle
-        end)
-        roles = {turn = turn, seekers = {}}
-        for i = 1, Min(#list, const.RATOAI.ScoutSeekers) do
-            roles.seekers[list[i].unit] = true
-        end
-        RATOAI_ScoutRoles[team.side] = roles
     end
-    return roles.seekers[unit] or false
+    return true
 end
 
 ---- on UnitProperties: mod code loads before ClassesBuilt, so Unit hasn't inherited it yet
