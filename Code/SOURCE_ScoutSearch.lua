@@ -470,3 +470,39 @@ function UnitProperties:SelectArchetype(proto_context)
         self.current_archetype = "RATOAI_Scout_Hold"
     end
 end
+
+---------------------------------------------------------------------------------------------------
+---- RE-PICK AFTER A REVEAL. Archetypes are picked once, when the team's turn starts
+---- (CombatCamera.lua:869); later phases only re-Think. A merc revealed by an earlier phase left the
+---- rest scouting: Scout:456 walked next to Kalyna on 0.7 AP with a 97% tile in reach (G8, T8).
+---- Before each phase, scouts within contact range of a merc the team now sees run StartAI again,
+---- which picks their base archetype (and its turn phase). Farther scouts keep rushing.
+---------------------------------------------------------------------------------------------------
+local function ScoutNearVisibleEnemy(unit)
+    local id = unit.current_archetype
+    if (id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold") or not unit.ai_context or
+        unit:IsIncapacitated() then
+        return false
+    end
+    local contact = const.RATOAI.ScoutContactTiles * const.SlabSizeX
+    for _, enemy in ipairs(unit:GetVisibleEnemies()) do
+        if unit:GetDist(enemy) <= contact then
+            return true
+        end
+    end
+    return false
+end
+
+const.RATOAI.OrigAIGetNextPhaseUnits = const.RATOAI.OrigAIGetNextPhaseUnits or AIGetNextPhaseUnits
+function AIGetNextPhaseUnits(units, max)
+    for _, unit in ipairs(units) do
+        if ScoutNearVisibleEnemy(unit) then
+            if RATOAI_Debug then
+                printf("[RATOAI] %s: merc revealed mid-turn, re-picking archetype (was %s)",
+                       tostring(unit.session_id), tostring(unit.current_archetype))
+            end
+            unit:StartAI()
+        end
+    end
+    return const.RATOAI.OrigAIGetNextPhaseUnits(units, max)
+end
