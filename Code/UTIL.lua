@@ -389,6 +389,32 @@ OnMsg.CombatEnd = RATOAI_ForgetSeenPositions
 ---- `pairs` sem ordem definida nao e risco de desync aqui: cada chave e escrita de forma
 ---- independente e nada consome random. O conteudo final e o mesmo em qualquer ordem.
 ---------------------------------------------------------------------------------------------------
+local function TeamMemory(team)
+    local mem = RATOAI_LastSeen[team.side]
+    if not mem then
+        mem = {}
+        RATOAI_LastSeen[team.side] = mem
+    end
+    return mem
+end
+
+---- heading = direction he was moving when last seen (minutes of arc), kept while he stands still
+local function Remember(mem, seen, ppos, turn)
+    local rec = mem[seen]
+    if not rec then
+        mem[seen] = {pos = ppos, turn = turn}
+        return
+    end
+    if rec.pos ~= ppos then
+        local ox, oy = stance_pos_unpack(rec.pos)
+        local nx, ny = stance_pos_unpack(ppos)
+        if ox ~= nx or oy ~= ny then
+            rec.heading = CalcOrientation(point(ox, oy), point(nx, ny))
+        end
+    end
+    rec.pos, rec.turn = ppos, turn
+end
+
 function OnMsg.VisibilityUpdate()
     if not g_Combat then
         return
@@ -398,25 +424,83 @@ function OnMsg.VisibilityUpdate()
         if not team.player_team and team.side ~= "neutral" then
             local vis = g_Visibility and g_Visibility[team]
             if vis then
-                local mem = RATOAI_LastSeen[team.side]
-                if not mem then
-                    mem = {}
-                    RATOAI_LastSeen[team.side] = mem
-                end
+                local mem = TeamMemory(team)
                 for seen, value in pairs(vis) do
                     if IsKindOf(seen, "Unit") and (value or 0) >= const.uvVisible and
                         not seen:IsDead() and team:IsEnemySide(seen.team) then
-                        local rec = mem[seen]
-                        if rec then
-                            rec.pos, rec.turn = GetPackedPosAndStance(seen), turn
-                        else
-                            mem[seen] = {pos = GetPackedPosAndStance(seen), turn = turn}
-                        end
+                        Remember(mem, seen, GetPackedPosAndStance(seen), turn)
                     end
                 end
             end
         end
     end
+end
+
+---------------------------------------------------------------------------------------------------
+---- MID-MOVE MEMORY. Visibility is frozen while a unit acts (GBO3 FEATURE_NoRevealMemory), so a merc
+---- walking out of view reached the memory at the tile he started from: 2-4 tiles behind where the
+---- team last saw him (G8, measured). While he moves, sample what each AI team really sees.
+---- Memory only: g_Visibility and the screen are untouched. Same LOS rule as GBO3's SeenMidMove.
+---------------------------------------------------------------------------------------------------
+local function SeenMidMove(unit, team, pos)
+    local observers, targets
+    for _, observer in ipairs(team.units) do
+        if not observer:IsDead() and observer:IsValidPos() and
+            IsCloser(observer, pos, observer:GetSightRadius(unit, nil, pos) + 1) then
+            observers = observers or {}
+            targets = targets or {}
+            observers[#observers + 1] = observer
+            targets[#targets + 1] = pos
+        end
+    end
+    if not observers then
+        return false
+    end
+    local any, result = CheckLOS(targets, observers)
+    if not any then
+        return false
+    end
+    local standing = unit.stance == "Standing"
+    for _, los in ipairs(result or empty_table) do
+        if los == 2 or los == 1 and standing then
+            return true
+        end
+    end
+    return false
+end
+
+function OnMsg.UnitMovementStart(unit)
+    if not g_Combat or not unit.team then
+        return
+    end
+    local watchers = {}
+    for _, team in ipairs(g_Teams or empty_table) do
+        if not team.player_team and team.side ~= "neutral" and team ~= unit.team and
+            team:IsEnemySide(unit.team) then
+            watchers[#watchers + 1] = team
+        end
+    end
+    if #watchers == 0 then
+        return
+    end
+    CreateGameTimeThread(function()
+        while IsValid(unit) and unit.in_combat_movement and g_Combat and not unit:IsDead() do
+            if not unit:HasStatusEffect("Hidden") then
+                local vpos = unit:GetVisualPos()
+                local slab = SnapToPassSlab(vpos)
+                if slab then
+                    local ppos = stance_pos_pack(slab, StancesList[unit.stance])
+                    local turn = g_Combat.current_turn or 0
+                    for _, team in ipairs(watchers) do
+                        if SeenMidMove(unit, team, vpos) then
+                            Remember(TeamMemory(team), unit, ppos, turn)
+                        end
+                    end
+                end
+            end
+            Sleep(const.RATOAI.MemoryMoveSampleMs or 150)
+        end
+    end)
 end
 
 ---------------------------------------------------------------------------------------------------

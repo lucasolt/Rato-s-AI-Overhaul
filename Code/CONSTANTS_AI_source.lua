@@ -306,7 +306,7 @@ const.RATOAI.BurstTailMinShots = 3
 const.RATOAI.OverwatchSnapRef = 100 ---- snapshot multiplier % at which overwatch costs nothing
 const.RATOAI.OverwatchFullAttacks = 2 ---- interrupts for a full-quality overwatch
 const.RATOAI.OverwatchMinQuality = 10 ---- blind overwatch below this quality (0-100) is skipped
-const.RATOAI.OverwatchOvershoot = 2 ---- tiles a spot overwatch cone reaches past the aim point
+const.RATOAI.OverwatchOvershoot = 4 ---- tiles a spot overwatch cone reaches past the aim point
 const.RATOAI.OverwatchMinTiles = 7 ---- shortest AI overwatch cone, flat for every weapon
 
 ---------------------------------------------------------------------------------------------------
@@ -533,6 +533,7 @@ const.RATOAI.ThreatSetupBias = true
 ---------------------------------------------------------------------------------------------------
 const.RATOAI.ThreatMemoryPct = 85
 const.RATOAI.ThreatMemoryTurns = 2
+const.RATOAI.MemoryMoveSampleMs = 150 ---- how often a moving merc is checked against what each AI team sees
 
 ---- lost enemies placed at the suspected spot, at this % of a seen enemy's threat
 const.RATOAI.ThreatSuspectPct = 70
