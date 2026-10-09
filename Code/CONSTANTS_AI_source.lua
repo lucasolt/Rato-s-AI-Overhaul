@@ -534,6 +534,7 @@ const.RATOAI.ThreatSetupBias = true
 const.RATOAI.ThreatMemoryPct = 85
 const.RATOAI.ThreatMemoryTurns = 2
 const.RATOAI.MemoryMoveSampleMs = 150 ---- how often a moving merc is checked against what each AI team sees
+const.RATOAI.MemoryProjectTiles = 3 ---- a lost merc whose last tile is in view is believed this far along his heading, at most
 
 ---- lost enemies placed at the suspected spot, at this % of a seen enemy's threat
 const.RATOAI.ThreatSuspectPct = 70
@@ -577,6 +578,9 @@ const.RATOAI.ScoutWalkFloodTiles = 24 ---- walking flood from the spot; tiles be
 ---- threat from unseen enemies decays per consecutive search turn, so a blocked seeker edges forward
 const.RATOAI.ScoutBoldStepPct = 25
 const.RATOAI.ScoutBoldMinPct = 25
+---- engine fallback spot (reads real positions): only when every merc is this far, as a rough pull
+const.RATOAI.ScoutApproxMinTiles = 30
+const.RATOAI.ScoutApproxRadiusTiles = 5 ---- the spot lands anywhere this close to a random merc, on his floor
 
 
 ---------------------------------------------------------------------------------------------------

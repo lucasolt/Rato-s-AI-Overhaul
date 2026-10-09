@@ -1142,25 +1142,32 @@ end
 ----
 ---- Uma unica raia por inimigo por turno, memoizada no context: `dest` nao entra, porque a
 ---- pergunta e sobre a unidade que decide, nao sobre o tile que ela avalia.
+----
+---- The last tile he was seen on is in view by construction, so "seen empty" alone erased almost
+---- every fresh memory. He walked on from there: believe him a few tiles along his heading, at the
+---- first tile this unit can't see (RATOAI_ProjectMemory). Up to 1 + MemoryProjectTiles rays.
 ---------------------------------------------------------------------------------------------------
-function RATOAI_ThreatMemoryStale(context, enemy, ppos)
+---- Packed believed position of a remembered enemy, or nil when the memory is disproven.
+function RATOAI_MemoryBelief(context, enemy, ppos)
     local unit = context and context.unit
     if not unit or not ppos then
-        return false
+        return
     end
-    local cache = context.__ratoai_mem_stale
+    local cache = context.__ratoai_mem_belief
     if not cache then
         cache = {}
-        context.__ratoai_mem_stale = cache
+        context.__ratoai_mem_belief = cache
     end
     local hit = cache[enemy]
-    if hit ~= nil then
-        return hit
+    if hit == nil then
+        local sight = unit:GetSightRadius()
+        local _, _, heading = RATOAI_LastSeenPos(unit, enemy)
+        hit = RATOAI_ProjectMemory(ppos, heading, function(pos)
+            return CheckLOS(pos, unit, sight)
+        end) or false
+        cache[enemy] = hit
     end
-    local pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(ppos))
-    hit = IsValidPos(pos) and CheckLOS(pos, unit, unit:GetSightRadius()) and true or false
-    cache[enemy] = hit
-    return hit
+    return hit or nil
 end
 
 ---------------------------------------------------------------------------------------------------
@@ -1218,7 +1225,7 @@ function AIPolicyThreatExposure:HasMemoryStandin(context)
             not self:SeesEnemy(context, enemy) then
             local ppos, age = RATOAI_LastSeenPos(context.unit, enemy)
             if ppos and self:MemoryConfidence(age) > 0 and
-                not RATOAI_ThreatMemoryStale(context, enemy, ppos) then
+                RATOAI_MemoryBelief(context, enemy, ppos) then
                 hit = true
                 break
             end
@@ -1265,7 +1272,7 @@ function AIPolicyThreatExposure:SuspectStandin(context)
                 local mem, age = RATOAI_LastSeenPos(context.unit, enemy)
                 ---- live memory places him already; never seen means the team can't count him
                 if mem and (self:MemoryConfidence(age) <= 0 or
-                    RATOAI_ThreatMemoryStale(context, enemy, mem)) then
+                    not RATOAI_MemoryBelief(context, enemy, mem)) then
                     list[#list + 1] = {enemy = enemy, ppos = ppos, pct = pct,
                                        key = "suspect" .. tostring(enemy.handle)}
                 end
@@ -1411,14 +1418,15 @@ function AIPolicyThreatExposure:EnemyContribution(context, enemy, dest, target_p
             return 0, 0
         end
 
-        if RATOAI_ThreatMemoryStale(context, enemy, ppos) then
+        local belief = RATOAI_MemoryBelief(context, enemy, ppos)
+        if not belief then
             if out then
-                out.skip = "memoria desmentida (enxergo o tile e ele nao esta la)"
+                out.skip = "memoria desmentida (enxergo o tile e o caminho dele, e ele nao esta la)"
             end
             return 0, 0
         end
 
-        mem_ppos, mem_age = ppos, age
+        mem_ppos, mem_age = belief, age
     end
     ---- DEBUG (D8): filtro de isolamento do painel. Sempre true em partida normal.
     if not RATOAI_ThreatCounts(enemy) then

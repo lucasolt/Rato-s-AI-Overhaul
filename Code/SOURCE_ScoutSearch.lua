@@ -247,15 +247,18 @@ function RATOAI_PickRememberedScoutPos(unit)
     table.sort(enemies, function(a, b)
         return (a.handle or 0) < (b.handle or 0)
     end)
+    local in_view = function(pos)
+        return SpotInView(team, pos)
+    end
     for _, enemy in ipairs(enemies) do
         local rec = mem[enemy]
-        if IsValidTarget(enemy) and rec.pos then
-            local pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(rec.pos))
+        ---- a spot the team sees empty moves along his heading; nothing out of view there = disproven
+        local ppos = IsValidTarget(enemy) and rec.pos and RATOAI_ProjectMemory(rec.pos, rec.heading, in_view)
+        if ppos then
+            local pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(ppos))
             local age = Max(0, turn - (rec.turn or turn))
             local dist = unit:GetDist(pos)
-            if IsValidPos(pos) and
-                (not best or age < best_age or (age == best_age and dist < best_dist)) and
-                not SpotInView(team, pos) then
+            if not best or age < best_age or (age == best_age and dist < best_dist) then
                 best, best_age, best_dist = pos, age, dist
             end
         end
@@ -263,35 +266,32 @@ function RATOAI_PickRememberedScoutPos(unit)
     return best
 end
 
----- Engine copy with its bug fixed: it built `targets` (nearest first) and then drew from all enemies.
+---------------------------------------------------------------------------------------------------
+---- The engine's pick reads the REAL position of a random enemy. Kept only as a rough pull for a unit
+---- lost far from every merc (ScoutApproxMinTiles), where a few tiles of slop can't act as a wallhack.
+---- It also matched floors in voxel units against a world radius, so any floor passed; now the
+---- spot is on the enemy's own floor.
+---------------------------------------------------------------------------------------------------
 local function EnginePickScoutLocation(unit)
-    local r = 5 * guim
     local enemies = GetAllEnemyUnits(unit)
     if #enemies == 0 then
         return
     end
-    local targets
-    local nearest, nearby = {}, {}
+    local far = const.RATOAI.ScoutApproxMinTiles * const.SlabSizeX
     for _, enemy in ipairs(enemies) do
-        local dist = unit:GetDist(enemy)
-        if dist <= r then
-            nearest[#nearest + 1] = enemy
-            targets = nearest
-        elseif dist <= 2 * r then
-            nearby[#nearby + 1] = enemy
-            targets = targets or nearby
+        if unit:GetDist(enemy) < far then
+            return
         end
     end
-    targets = targets or enemies
-    local enemy = table.interaction_rand(targets, "Combat")
-
-    local ux, uy, uz = enemy:GetGridCoords()
-    local px, py, pz = VoxelToWorld(ux, uy, uz)
-    local bbox = box(px - r, py - r, 0, px + r + 1, py + r + 1, MapSlabsBBox_MaxZ)
+    local enemy = table.interaction_rand(enemies, "Combat")
+    local r = const.RATOAI.ScoutApproxRadiusTiles * const.SlabSizeX
+    local ex, ey, ez = RATOAI_ValidatePosZ(enemy:GetPos()):xyz()
+    local floor_dz = 2 * const.SlabSizeZ
+    local bbox = box(ex - r, ey - r, 0, ex + r + 1, ey + r + 1, MapSlabsBBox_MaxZ)
     local dests, dest_added = {}, {}
     ForEachPassSlab(bbox, function(x, y, z)
-        local gx, gy, gz = WorldToVoxel(x, y, z)
-        if IsCloser(gx, gy, gz, ux, uy, uz, r) then
+        local dx, dy = x - ex, y - ey
+        if dx * dx + dy * dy <= r * r and abs((z or ez) - ez) <= floor_dz then
             local world_voxel = point_pack(x, y, z)
             if not dest_added[world_voxel] then
                 dests[#dests + 1] = world_voxel
@@ -388,10 +388,9 @@ function RATOAI_BelievedEnemies(context)
         if IsValidTarget(enemy) and not enemy:IsDowned() then
             local mem, age = RATOAI_LastSeenPos(context.unit, enemy)
             if mem then
-                local fresh = turns > 0 and age < turns and
-                                  not RATOAI_ThreatMemoryStale(context, enemy, mem)
-                if fresh then
-                    list[#list + 1] = {enemy = enemy, pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(mem)),
+                local belief = turns > 0 and age < turns and RATOAI_MemoryBelief(context, enemy, mem)
+                if belief then
+                    list[#list + 1] = {enemy = enemy, pos = RATOAI_ValidatePosZ(RATOAI_UnpackPos(belief)),
                                        pct = MulDivRound(const.RATOAI.ThreatMemoryPct or 0, turns - age,
                                                          turns)}
                 elseif suspect_pos then

@@ -516,7 +516,34 @@ function RATOAI_LastSeenPos(unit, enemy)
         return nil
     end
     local turn = (g_Combat and g_Combat.current_turn) or rec.turn
-    return rec.pos, Max(0, turn - rec.turn)
+    return rec.pos, Max(0, turn - rec.turn), rec.heading
+end
+
+---------------------------------------------------------------------------------------------------
+---- WHERE A LOST ENEMY IS BELIEVED TO BE. The remembered tile while the observer can't see it. Once it
+---- sees that tile empty, he walked on: the first tile out of view up to MemoryProjectTiles along the
+---- heading he was last seen moving in. nil = no heading, or every tile on the way is in view, i.e.
+---- the memory is disproven. `in_view(pos)` is the observer's sight test (one unit, or the team).
+---------------------------------------------------------------------------------------------------
+function RATOAI_ProjectMemory(ppos, heading, in_view)
+    local x, y, z, stance = stance_pos_unpack(ppos)
+    local pos = RATOAI_ValidatePosZ(point(x, y, z))
+    if not IsValidPos(pos) then
+        return
+    end
+    if not in_view(pos) then
+        return ppos
+    end
+    if not heading then
+        return
+    end
+    local step = Rotate(point(const.SlabSizeX, 0, 0), heading)
+    for i = 1, const.RATOAI.MemoryProjectTiles or 0 do
+        local slab = GetPassSlab(pos + step * i)
+        if slab and not in_view(slab) then
+            return stance_pos_pack(slab, stance)
+        end
+    end
 end
 
 ---------------------------------------------------------------------------------------------------
