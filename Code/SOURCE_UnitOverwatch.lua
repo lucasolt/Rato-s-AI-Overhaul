@@ -1,7 +1,5 @@
 const.RATOAI = const.RATOAI or {}
 
-const.RATOAI.OverwatchMinTiles = 7 ---- shortest AI overwatch cone, flat for every weapon
-
 ---------------------------------------------------------------------------------------------------
 ---- Cone length is the distance to the aim point (UnitOverwatch.lua:202): an AI aiming at a merc
 ---- 4 tiles away planted a 4-tile cone. Push the aim point out to the minimum along the same line.

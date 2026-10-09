@@ -27,17 +27,6 @@ const.RATOAI = const.RATOAI or {}
 ---- resolve, atira do mesmo jeito -- o tiro ruim continua sendo decisao do planejador, nao daqui.
 ---------------------------------------------------------------------------------------------------
 
----- Fracao do anel que precisa sobreviver para o tiro contar como possivel. Abaixo disto a postura
----- e considerada bloqueada. 50 = metade do cone morre no campo proximo.
-if const.RATOAI.ShotStanceMinClear == nil then
-    const.RATOAI.ShotStanceMinClear = 50
-end
-
----- Desliga tudo (o gate e lido a cada ataque, entao vale no console no meio do turno).
-if const.RATOAI.ShotStanceFix == nil then
-    const.RATOAI.ShotStanceFix = true
-end
-
 ---- So subir. Deitado tenta agachado e depois em pe; agachado so em pe.
 local RATOAI_StanceUp = {
     Prone = {"Crouch", "Standing"},
@@ -128,13 +117,6 @@ end
 ---- Returning false is what AIPlayCombatAction already returns when the action can't start: the
 ---- basic-attack loop breaks on it and the unit keeps its AP. Only single-target firearm shots.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ShotVeto == nil then
-    const.RATOAI.ShotVeto = true
-end
----- veto when the real CTH is at or below this (0 = only impossible shots)
-if const.RATOAI.ShotVetoMaxCTH == nil then
-    const.RATOAI.ShotVetoMaxCTH = 0
-end
 
 local RATOAI_VetoAimTypes = {cone = true, ["parabola aoe"] = true, melee = true, ["melee-charge"] = true}
 

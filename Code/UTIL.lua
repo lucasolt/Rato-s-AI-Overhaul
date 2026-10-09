@@ -34,7 +34,6 @@ function RATOAI_RecomputeDebugFlag()
     RATOAI_Debug = Platform.developer and Platform.cheats and true or false
 end
 
-
 RATOAI_RecomputeDebugFlag()
 
 ---- ClassesBuilt e o primeiro marco depois que TODO codigo de mod ja executou (o
@@ -468,12 +467,6 @@ end
 ---------------------------------------------------------------------------------------------------
 const.RATOAI = const.RATOAI or {}
 
----- Desliga o termo inteiro: o laco de destinos volta a pedir so o Torso e a exposicao volta a
----- sair de A.CoverAIFallback. Lido a cada precalc, entao vale no console no meio do turno.
-if const.RATOAI.LoFExposure == nil then
-    const.RATOAI.LoFExposure = true
-end
-
 function RATOAI_LoFExposure(attack_data, target)
     local lof = attack_data and attack_data.lof
     if not lof or #lof == 0 or not IsValid(target) then
@@ -532,9 +525,6 @@ end
 ---- finalists (SOURCE_AIScoreReachableVoxels) and the precalc at the shooting tile inside
 ---- AIPlayAttacks. Everywhere else the LoF spot count stays the cheap ranking estimate.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.FullGeometry == nil then
-    const.RATOAI.FullGeometry = true
-end
 
 function RATOAI_FullGeometry(context)
     return const.RATOAI.FullGeometry and context and

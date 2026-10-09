@@ -21,9 +21,6 @@ local debug = false
 ----
 ---- `const.RATOAI.HipfireMaxDist = 0` desliga e volta ao comportamento antigo (sempre preparar).
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.HipfireMaxDist == nil then
-    const.RATOAI.HipfireMaxDist = const.Weapons.PointBlankRange
-end
 
 ---- numero de disparos que o laco `for i = 1, n` de fato executa
 local function RATOAI_ShotsOf(n)

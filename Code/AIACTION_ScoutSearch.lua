@@ -202,9 +202,6 @@ end
 ---- to do, so a bad overwatch gun is a chance to skip it, not a weight: alone in the roll, any
 ---- weight wins.
 ---------------------------------------------------------------------------------------------------
-const.RATOAI.OverwatchSnapRef = 100 ---- snapshot multiplier % at which overwatch costs nothing
-const.RATOAI.OverwatchFullAttacks = 2 ---- interrupts for a full-quality overwatch
-const.RATOAI.OverwatchMinQuality = 10
 
 function RATOAI_OverwatchQuality(unit, weapon, attacks)
     local ok, mul = pcall(GetWeaponHipfireOrSnapshotMul, weapon, unit, CombatActions.Overwatch, true,
@@ -244,8 +241,6 @@ function AIPlaceFallbackOverwatch(unit, context)
     end
     return RATOAI_originalAIPlaceFallbackOverwatch(unit, context)
 end
-
-const.RATOAI.OverwatchOvershoot = 2 ---- tiles the cone reaches past the aim point
 
 ---- Cone length is the distance to target_pos (UnitOverwatch.lua:202), so a cone ending on the
 ---- spot misses an enemy one step beyond it.

@@ -2,14 +2,6 @@
 ---- and wear down dropped gear (EnemyDropCondition). Covers tactical deaths and auto-resolve.
 
 const.RATOAI = const.RATOAI or {}
----- EnemyDropCondition choice -> condition points lost, rolled in [min, max].
-const.RATOAI.DropConditionLoss = {
-    Light = {min = 5, max = 15},
-    Moderate = {min = 10, max = 30},
-    Heavy = {min = 20, max = 45}
-}
----- Wear never takes a dropped item below this condition.
-const.RATOAI.DropConditionFloor = 10
 
 local function rat_loot_enemy_side(side)
     return side == "enemy1" or side == "enemy2" or side == "enemyNeutral"

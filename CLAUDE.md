@@ -152,9 +152,12 @@ New: `RATOAI_Sniper`, `RATOAI_Demolition`, `RATOAI_Rocketeer`, `RATOAI_Retreatin
   in the console was never seen (BUGFIX B32).
 
   `const` is a regular table — `const.RATOAI.X` can be read and written normally, both from the
-  console and DAP, and the `== nil` test once again means what it says. Definitions belong next
-  to the code they affect (with `const.RATOAI = const.RATOAI or {}` at the top of the file);
-  only general tunables belong in `CONSTANTS_AI_source.lua`.
+  console and DAP. **Every tuning value and debug switch is defined in `CONSTANTS_AI_source.lua`**
+  (it loads first), in the section of the system that reads it, as a plain assignment with a
+  one-line comment — never an `== nil` guard, which stops a value edited in the file from taking
+  effect on reload. The explanation of the mechanism stays next to the logic. Runtime state
+  (`ThreatOnly`) and saved originals (`Orig*`) stay in their own files.
+  A constant derived from a GBO3 value at file scope reads the vanilla value (load order).
 
   Two documented exceptions:
   - `RATOAI_Debug` — state recomputed in `CombatStart` and read in a hot loop as

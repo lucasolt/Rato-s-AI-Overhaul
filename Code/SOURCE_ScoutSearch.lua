@@ -1,21 +1,5 @@
 const.RATOAI = const.RATOAI or {}
 
----- Scout search: observe the suspected spot from a standoff ring instead of walking onto it.
-if const.RATOAI.ScoutStandoffMinTiles == nil then
-    const.RATOAI.ScoutStandoffMinTiles = 4
-end
-if const.RATOAI.ScoutStandoffMaxTiles == nil then
-    const.RATOAI.ScoutStandoffMaxTiles = 14
-end
----- Within this distance of the spot, a reachable tile in its view with no AP to shoot is a trap.
-if const.RATOAI.ScoutContactTiles == nil then
-    const.RATOAI.ScoutContactTiles = 20
-end
----- Walking flood from the spot, in tiles; tiles beyond it count as this far.
-if const.RATOAI.ScoutWalkFloodTiles == nil then
-    const.RATOAI.ScoutWalkFloodTiles = 24
-end
-
 ---- Distance from the suspected spot as walked, never less than straight-line: straight-line through
 ---- a floor read 4 tiles for a tile 18 AP of stairs away (measured, Raider:454).
 function RATOAI_SpotDist(context, pos, x, y, z)
@@ -331,13 +315,6 @@ local function ScoutTarget(unit)
     return RATOAI_PickRememberedScoutPos(unit) or unit.last_known_enemy_pos
 end
 
----- Threat from unseen enemies decays per consecutive search turn, so a blocked seeker edges forward.
-if const.RATOAI.ScoutBoldStepPct == nil then
-    const.RATOAI.ScoutBoldStepPct = 25
-end
-if const.RATOAI.ScoutBoldMinPct == nil then
-    const.RATOAI.ScoutBoldMinPct = 25
-end
 MapVar("RATOAI_ScoutSearchTurns", {})
 
 function OnMsg.CombatStart(dynamic_data)

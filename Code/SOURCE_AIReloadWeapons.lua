@@ -1,5 +1,4 @@
 const.RATOAI = const.RATOAI or {}
-const.RATOAI.ReloadThresholdPct = const.RATOAI.ReloadThresholdPct or 50 -- recarrega abaixo desta fracao do carregador
 
 ---------------------------------------------------------------------------------------------------
 ---- BUGFIX (B43): a IA recarregava de graca.
@@ -82,9 +81,6 @@ const.RATOAI.ReloadThresholdPct = const.RATOAI.ReloadThresholdPct or 50 -- recar
 ---- `-1` continua significando "a acao nao se aplica" (emplacement, arma emperrada) nos tres modos
 ---- e nunca vira recarga.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ReloadAPSource == nil then
-    const.RATOAI.ReloadAPSource = "weapon"
-end
 
 ---- custo de recarga desta arma, ou -1 quando a acao nao se aplica (emplacement, arma emperrada)
 function RATOAI_ReloadAPCost(unit, firearm)
@@ -124,9 +120,6 @@ end
 ---- bugfix: com ele em `false` o mod inteiro volta ao orcamento de AP de antes, e o que sobrar de
 ---- sintoma nao veio daqui.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ReloadCostsAP == nil then
-    const.RATOAI.ReloadCostsAP = true
-end
 
 ---- ha AP para recarregar esta arma? cobra e devolve true; senao devolve false sem cobrar nada
 local function RATOAI_PayReload(unit, firearm)
@@ -197,9 +190,6 @@ end
 ---- concedido mesmo na falha. Subir o `Mechanical` dos arquetipos pelo editor e o dial para tornar
 ---- um inimigo bom nisso -- nao precisa de codigo.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.UnjamCostsAP == nil then
-    const.RATOAI.UnjamCostsAP = true
-end
 
 function RATOAI_AIUnjamWeapons(unit)
     local firearms = select(3, unit:GetActiveWeapons("Firearm"))

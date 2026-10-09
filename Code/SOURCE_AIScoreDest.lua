@@ -7,10 +7,6 @@ const.RATOAI = const.RATOAI or {}
 ---- this makes coming close pay only when the unit expects to drop who it walks up to.
 ---- End-turn pass only: OptLoc tiles have no AP and no planned attacks.
 ---------------------------------------------------------------------------------------------------
-const.RATOAI.CloseNoKillPenalty = -200
-const.RATOAI.CloseRangeTiles = false ---- false = const.Weapons.PointBlankRange
-const.RATOAI.CloseNoKillMaxEnemies = 2
-const.RATOAI.CloseNoKillFloorDZ = false ---- false = 3 SlabSizeZ; a floor is 5
 
 ---- another floor and no LOS: the stairs, not the 3D distance, decide how close he is
 local function RATOAI_CloseAcrossFloor(context, enemy, dest, pos)

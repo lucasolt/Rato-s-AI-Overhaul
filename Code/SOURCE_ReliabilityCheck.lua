@@ -30,9 +30,6 @@ const.RATOAI = const.RATOAI or {}
 ----   permanente   -> `const.RATOAI.AIWeaponJam = false` antes deste arquivo carregar, ou remover
 ----                   a entrada dele do `metadata.lua`
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.AIWeaponJam == nil then
-    const.RATOAI.AIWeaponJam = true
-end
 
 ---- Atribuicao incondicional, e nao um `== nil`: o GBO3 ja definiu `WearAppliesToAI = false` como
 ---- default dele (carrega antes, por ser dependencia), entao um guard de nil aqui nunca dispararia.

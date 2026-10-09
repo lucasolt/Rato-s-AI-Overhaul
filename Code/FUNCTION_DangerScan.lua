@@ -66,9 +66,6 @@ const.RATOAI = const.RATOAI or {}
 ---- de tabela por TURNO, nao por destino -- o snapshot e resolvido uma vez e guardado no context.
 ---------------------------------------------------------------------------------------------------
 
----- Liga/desliga o mecanismo inteiro. Valvula mestra para A/B no console.
-const.RATOAI.PathDanger = true
-
 ---------------------------------------------------------------------------------------------------
 ---- EM QUAL PASSE O PERIGO CONTA  ("endturn" | "optloc" | "both")
 ----
@@ -96,32 +93,26 @@ const.RATOAI.PathDanger = true
 ---- de fato acontece.
 ---- "both" restaura o comportamento de 28/08 (o que voce viu no painel). "optloc" existe so para
 ---- fechar a matriz de teste.
-const.RATOAI.PathDangerScope = "endturn"
 
 ---- Idem para o explosivo timed. Default "both" -- este NAO foi medido como problematico, e nao
 ---- mudo comportamento que nao foi questionado. Parar em cima de bomba armada e ruim nos dois
 ---- passes; se o descarte no OptLoc incomodar, ponha "endturn" aqui tambem.
-const.RATOAI.TimedDangerScope = "both"
 
 ---- Penalidades, em pontos de score. Positivas aqui, SUBTRAIDAS na conta -- ler
 ---- "quanto vale evitar" e mais facil que ler um monte de negativo empilhado.
 ---- Referencia de escala: `const.AIAvoidFireWeigth` = -200 e o que o jogo cobra para PARAR
 ---- dentro do fogo. Um tile de caminho vale menos que isso de proposito -- passar nao e parar.
-const.RATOAI.PathGasPenalty = 60 ---- por VOXEL de gas nocivo atravessado
-const.RATOAI.PathFirePenalty = 60 ---- por VOXEL em alcance de fogo atravessado
 ---- Por CONE cruzado, e agora e o valor NO PIOR PONTO do trajeto -- a rampa de distancia (abaixo)
 ---- multiplica isto por 0..100%. Subiu de 130 para 170 junto com a rampa, e a razao merece
 ---- registro: com valor fixo, 130 valia em qualquer lugar do cone; com rampa, 130 passaria a valer
 ---- so colado no atirador e TODO o resto do cone ficaria mais barato que antes -- a rampa sozinha
 ---- so enfraquece o mecanismo. 170 mantem o cruzamento de perto decisivo e deixa a rampa fazer o
 ---- trabalho dela na cauda. CALIBRAGEM POR RACIOCINIO, nao medida -- ajuste em campo.
-const.RATOAI.PathOverwatchPenalty = 100
 
 ---- Teto do total. Sem ele um caminho longo dentro da fumaca somaria centenas de pontos e
 ---- esmagaria todas as policies -- que e exatamente o erro que o `ScalePerDistance` antigo
 ---- cometia (ver o cabecalho da AIPolicyThreatExposure). Com teto, "ruim" e "pessimo" convergem,
 ---- que e o comportamento certo: os dois devem perder para qualquer caminho limpo.
-const.RATOAI.PathDangerMax = 400
 
 ---------------------------------------------------------------------------------------------------
 ---- QUAIS GASES MACHUCAM  (lista BRANCA, e nao lista negra)
@@ -140,7 +131,6 @@ const.RATOAI.PathDangerMax = 400
 ---- (`table.insert_unique(obj.zones, self)`, Grenade.lua:2077) e o `GetGasType` so olha a
 ---- PRIMEIRA. Fumaca comum sobreposta a lacrimogeneo pode se declarar "smoke" e passar batido.
 ---- Vale o mesmo para o aviso do jogador, entao a IA erra igual ao jogador -- e nao pior.
-const.RATOAI.PathHarmfulGas = {teargas = true, toxicgas = true}
 
 ---------------------------------------------------------------------------------------------------
 ---- RAMPA DE DISTANCIA DO OVERWATCH
@@ -158,8 +148,6 @@ const.RATOAI.PathHarmfulGas = {teargas = true, toxicgas = true}
 ----
 ---- Por CONE conta o PIOR ponto do trajeto (a maior rampa), nao a soma: cruzar dispara a
 ---- interrupcao uma vez, e o que importa e de onde o tiro sai melhor para o inimigo.
-const.RATOAI.PathOverwatchPlateau = 6 ---- tiles de penalidade cheia. 6 = const.Weapons.PointBlankRange
-const.RATOAI.PathOverwatchCurve = 0 ---- 0 = queda linear; 100 = quadratica (afunda a cauda longa)
 
 ---------------------------------------------------------------------------------------------------
 ---- QUEM A IA ENXERGA PARA EFEITO DE CONE  ("team" | "self" | "all")
@@ -181,13 +169,11 @@ const.RATOAI.PathOverwatchCurve = 0 ---- 0 = queda linear; 100 = quadratica (afu
 ---- constante do TURNO e nao varia por destino -- nenhum deles responde "o que eu enxergaria de
 ---- la". Visibilidade liga/desliga o inimigo inteiro da conta, nunca cria gradiente entre tiles.
 ---------------------------------------------------------------------------------------------------
-const.RATOAI.PathOverwatchVisibility = "team"
 
 ---- PISO: cruzar nunca e de graca. Sem ele, um cone cruzado exatamente na borda contribui ZERO --
 ---- e o inimigo ainda leva o tiro, so que com CTH ruim. E a diferenca entre "pouco perigoso" e
 ---- "inofensivo", e a rampa sozinha nao sabe expressar a primeira.
 ---- Em % da PathOverwatchPenalty. 0 desliga o piso e devolve a rampa crua.
-const.RATOAI.PathOverwatchMinPct = 15 --15
 
 ---------------------------------------------------------------------------------------------------
 ---- EXPLOSIVO TIMED NO TILE FINAL
@@ -202,12 +188,10 @@ const.RATOAI.PathOverwatchMinPct = 15 --15
 ----
 ---- Penalidade no CENTRO, caindo linearmente ate 0 na borda do `AreaOfEffect`. Acima do
 ---- AIAvoidFireWeigth (-200) de proposito: fogo se atravessa e se apaga, bomba armada nao.
-const.RATOAI.DestTimedPenalty = 250
 
 ---- Diagnostico. `const.RATOAI.PathDangerDebug = true` no console faz cada destino guardar o
 ---- passo a passo em context.dest_path_danger_debug[dest], que o DEBUG.lua mostra no rollover.
 ---- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
-const.RATOAI.PathDangerDebug = false
 
 local SLAB = const.SlabSizeX
 

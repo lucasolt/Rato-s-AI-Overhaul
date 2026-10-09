@@ -12,20 +12,6 @@
 ---------------------------------------------------------------------------------------------------
 const.RATOAI = const.RATOAI or {}
 
-if const.RATOAI.BurstChooser == nil then
-    const.RATOAI.BurstChooser = true
-end
----- stationed MG spends leftover AP on a shorter burst after its full-length ones
-if const.RATOAI.BurstTail == nil then
-    const.RATOAI.BurstTail = true
-end
-
-const.RATOAI.BurstMinShots = 3
-const.RATOAI.BurstMaxShots = 12
----- expected hits x100 each extra round must add; without it the 5% ladder floor always wins
-const.RATOAI.BurstMarginalHits = 10
-const.RATOAI.BurstTailMinShots = 3
-
 ---------------------------------------------------------------------------------------------------
 ---- Ladder prefix cache. A ladder costs ~6 ms per round and is only ~5% off as a prefix of a
 ---- longer one, so while choosing, RATOAI_ExpectedFor reuses the longest ladder already built.

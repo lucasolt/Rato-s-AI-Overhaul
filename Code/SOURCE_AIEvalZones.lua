@@ -12,9 +12,6 @@ const.RATOAI = const.RATOAI or {}
 ---- Lembre ao ler: os pontos candidatos saem SO de posicoes de inimigo (e pontos medios
 ---- entre elas) -- ver AICalcAOETargetPoints. Nenhuma zona nasce centrada num aliado.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ZoneDebug == nil then
-    const.RATOAI.ZoneDebug = false
-end
 
 function AIActionBaseZoneAttack:EvalZones(context, zones)
     return AIEvalZones(context, zones, self.min_score, self.enemy_score, self.team_score,

@@ -62,15 +62,6 @@ local RATOAI_StayPutBonus = 0
 ---- the best finalist is still unrefined, up to `RefineRounds`, so a demoted leader can't hand the
 ---- pick to an unverified runner-up. The threshold cut is redone on the refined scores.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.RefineFinalists == nil then
-    const.RATOAI.RefineFinalists = true
-end
-if const.RATOAI.RefineMaxDests == nil then
-    const.RATOAI.RefineMaxDests = 5
-end
-if const.RATOAI.RefineRounds == nil then
-    const.RATOAI.RefineRounds = 2
-end
 
 local function RATOAI_RefineFinalists(context, policies, potential_dests, dest_scores, base_scores,
                                       grid_voxels, unit_voxels)

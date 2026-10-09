@@ -1,6 +1,4 @@
 const.RATOAI = const.RATOAI or {}
----- weight % a non-attacking action keeps when the attack here is an expected kill (linear below it)
-const.RATOAI.LethalOtherPct = 0
 
 local LethalClasses = {"AIActionSingleTargetShot", "AIActionMobileShot", "AIActionCharge",
                        "AIActionHyenaCharge", "AIActionBasicAttack"}

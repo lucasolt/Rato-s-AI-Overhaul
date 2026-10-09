@@ -140,9 +140,6 @@ local medium_range_penalty_mul = 40
 ---- que fecha a conta. Agora e uma global lida por avaliacao, default desligada.
 ---- Ligue, passe o mouse no tile, leia, desligue -- constroi string para TODO destino.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.SeekCoverDebug == nil then
-    const.RATOAI.SeekCoverDebug = false
-end
 
 ---- distancia em tiles, para o overlay
 local function dbg_tiles(d)

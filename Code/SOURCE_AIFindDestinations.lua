@@ -42,7 +42,6 @@ const.RATOAI = const.RATOAI or {}
 ----  a reserva existe so no orcamento do planejamento. Fechar essa folga exige sobrescrever
 ----  AIBehavior:EndMovement; ver o relatorio CROUCH_REPORT.md.)
 ---------------------------------------------------------------------------------------------------
-const.RATOAI.CrouchTrigger = const.RATOAI.CrouchTrigger or "any_cover"
 
 ---------------------------------------------------------------------------------------------------
 ---- Empacotar o destino na PrefStance quando ela e Prone -- ver o bloco BUGFIX (B25) abaixo.

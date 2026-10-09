@@ -24,6 +24,15 @@
 ---- reordenacao do metadata (o CONSTANTS_AI_source ja a cria, mas nao dependemos disso).
 const.RATOAI = const.RATOAI or {}
 
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 1. SHOT DECISION
+---- read by: AICalcAttacksAndAim, AIPlayCombatAction, AIGetAttackTargetingOptions, UTIL
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+
 -- const.AIDecisionThreshold = 80 -- targets/locations up to this percent of max scored target/location can be selected
 -- const.AIPointBlankTargetMod = 50 -- targets in point-blank range get +50% score
 -- const.AIFallbackWeight_OpenDoor = 100
@@ -44,112 +53,24 @@ const.AIShootAboveCTH = 2 -- due to aCTH
 ---- first-shot CTH floor for firearm attacks; the sum gate above lets 3 shots at 1% through
 ---- (telemetry: 37% of AI attacks were under 10%, 0.10 hits each). Per-archetype: AIArchetype.MinShotCTH
 const.RATOAI.MinShotCTH = 10
----------------------------------------------------------------------------------------------------
----- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
-----
----- O JOGADOR ESCOLHE, A IA NAO. Medido no processo vivo, dois cones ativos no mesmo combate:
-----     Grizzly (merc)      dist ate target_pos = 15481  (~13 tiles, escolha do jogador)
-----     LegionGunner:412    dist ate target_pos = 45600  (= max_range exato)
----- O `AIPrecalcConeTargetZones` monta o alvo do cone com
-----     target_pos = attack_pos + SetLen(dir, max_range)
----- e `max_range` para MachineGun e o WeaponRange INTEIRO (as outras classes usam 75% dele,
----- Firearm:GetOverwatchConeParam). A IA sempre planta no maximo; o jogador planta onde quer.
----- Isso e o contrario da regra da casa -- e aqui a regra a mais e do jogador.
-----
----- POR QUE ENCURTAR AJUDA. O numero de interrupcoes e limitado (`GetNumMGInterruptAttacks`;
----- medido, o LegionGunner:412 tinha **uma**). Um cone de 38 tiles gasta essa unica interrupcao
----- no primeiro inimigo que pisar na borda -- e na borda o tiro nao vale nada. Rampa do
----- HipshotPenalty medida ao vivo (MG42, interrupcao de MG, aim 1):
-----
-----     tiles     4     8    12    16    20    24    28    32    36
-----     penal   -10   -14   -21   -29   -33   -36   -40   -45   -47
-----
----- Nao ha joelho: e ~1,2 ponto por tile. Entao o corte e escolha de projeto, nao um otimo que
----- da para derivar -- por isso e parametro, e por isso o default nao muda nada.
-----
-----   const.RATOAI.MGConeRangePct    -- % do max_range do cone. 100 = comportamento de hoje.
-----                               60 no MG42 da ~23 tiles e derruba o teto de penalidade de
-----                               -47 para -36, ainda cobrindo mais que o dobro do cone que o
-----                               Grizzly plantou.
-----   const.RATOAI.MGConeRangeTiles  -- teto ABSOLUTO em tiles, aplicado depois da porcentagem.
-----                               0 = sem teto. Util para nivelar armas de WeaponRange
-----                               diferente (RPD_1 = 44, MG42 = 38) num mesmo alcance de
-----                               engajamento.
-----
----- Piso fixo de 8 tiles, para nenhum ajuste transformar o cone em nada.
-----
----- Os dois sao globais de propriedade: `const.RATOAI.MGConeRangePct = 60` no console vale na hora,
----- sem recarregar mod, que e como se afina numero desse tipo.
-----
----- >>> O LADO DA ACAO SO VALE COM O SOURCE_AIPrecalcConeTargetZones.lua REGISTRADO. <<<
----- Ele ESTA na lista `code` do metadata.lua desde a v4151. Antes disso nao estava, e o que
----- rodava era o `AIPrecalcConeTargetZones` do vanilla (`@Lua/Tactical/CombatAI.lua`) -- o
----- parametro mudava so a NOTA dos tiles (AIPolicyMGSetupPosScore) e o cone continuava sendo
----- plantado no maximo. O B26 e o B35 estavam no mesmo barco e acordaram junto com ele.
----------------------------------------------------------------------------------------------------
 
-const.RATOAI.MGConeRangePct = 70
+const.RATOAI.ShotVeto = true ---- skip a planned shot whose real CTH turns out hopeless
+const.RATOAI.ShotVetoMaxCTH = 0 ---- veto at or below this real CTH (0 = only impossible shots)
+const.RATOAI.ShotStanceFix = true ---- stand up before shooting when the muzzle ring is blocked in the current stance
+const.RATOAI.ShotStanceMinClear = 50 ---- % of the muzzle ring that must clear for a stance to count as open
+const.RATOAI.HipfireMaxDist = 4 ---- tiles; hipfire instead of preparing up to here (0 = always prepare)
+---- was const.Weapons.PointBlankRange, but this mod loads before GBO3 sets it to 6, so it always read vanilla 4
+const.RATOAI.HeadAimWithTorso = true ---- a torso single shot also weighs the head when the geometry favors it
+const.RATOAI.LoFExposure = true ---- target exposure from the LoF already paid for (off = A.CoverAIFallback)
+const.RATOAI.FullGeometry = true ---- full-geometry CTH for end-turn finalists and the shooting-tile precalc
 
-const.RATOAI.MGConeRangeTiles = 0
 
 ---------------------------------------------------------------------------------------------------
----- DE ONDE O CONE E AVALIADO (BUGFIX B35, SOURCE_AIPrecalcConeTargetZones.lua)
-----
----- true (default): quando a unidade ainda vai ANDAR, o cone e medido do DESTINO -- linha,
----- alcance, LOF e CTH saem todos de la. E a unica leitura util antes do movimento: saber o
----- que a unidade enxerga de onde ela esta prestes a sair nao decide nada.
-----
----- false: volta ao vanilla, tudo medido da posicao atual. Serve para A/B no console sem
----- recarregar mod -- ligue junto com `const.RATOAI.ZoneDebug` para ver a composicao das zonas
----- dos dois jeitos.
-----
----- Nao afeta a MG ja montada nem o ataque de abertura do UnitAwareness: esses dois nunca
----- recebem posicao hipotetica. Ver o cabecalho do B35.
 ---------------------------------------------------------------------------------------------------
-
-const.RATOAI.ConeFromDest = true
-
+---- 2. ACTION CHOICE BY EXPECTED RESULT
+---- read by: FUNCTION_ScoreAttacksDetailed, SignaturesCustomScoring, AISelectAction
 ---------------------------------------------------------------------------------------------------
----- Alcance efetivo do cone da MG. Fonte UNICA para os dois lados -- a policy que pontua o tile
----- e a funcao que planta o cone -- porque discordancia entre eles e exatamente o bug B29.
-----
----- Devolve `min_range, max_range` em unidades do mundo, ja com:
-----   * a guarda `min >= max` do vanilla (AIFilterTargetPoints): min == max quer dizer "sem
-----     minimo", nao "so a casca do circulo". Vale para a BrowningM2HMG, que continua assim;
-----   * o teto de `Min(sight, weapon:GetMaxRange())`, que e o segundo CheckLOS da acao;
-----   * os parametros de encurtamento acima.
 ---------------------------------------------------------------------------------------------------
-function RATOAI_MGConeRange(unit, weapon, params)
-    if not params then
-        return 0, 0
-    end
-
-    local min_r = (params.min_range or 0) * const.SlabSizeX
-    local max_r = (params.max_range or 0) * const.SlabSizeX
-    if min_r >= max_r then
-        min_r = 0
-    end
-
-    if unit and weapon then
-        max_r = Min(max_r, Min(unit:GetSightRadius(), weapon:GetMaxRange()))
-    end
-
-    local pct = const.RATOAI.MGConeRangePct or 100
-    if pct > 0 and pct < 100 then
-        max_r = MulDivRound(max_r, pct, 100)
-    end
-
-    local cap = (const.RATOAI.MGConeRangeTiles or 0) * const.SlabSizeX
-    if cap > 0 then
-        max_r = Min(max_r, cap)
-    end
-
-    ---- Piso: nem o encurtamento nem o teto podem descer abaixo de 8 tiles, nem abaixo do
-    ---- minimo do proprio cone (senao o anel fica vazio por construcao).
-    max_r = Max(max_r, Max(min_r, 8 * const.SlabSizeX))
-
-    return min_r, max_r
-end
 
 ---------------------------------------------------------------------------------------------------
 ---- ESCOLHA DE ACAO POR RESULTADO ESPERADO
@@ -163,6 +84,23 @@ end
 ---- dano -- supressao, interrupcao no turno inimigo, debuff de membro -- e acertos esperados
 ---- sozinho ordena mal essas tres. Ver a ressalva no cabecalho do RATOAI_ExpectedFor.
 ---------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------
+---- TETO DA RAZAO DE RESULTADO ESPERADO (const.RATOAI.ExpectedRatioMax)
+----
+---- A razao multiplica o `Weight` do preset, entao ela e um FATOR e nao uma nota -- sem teto, um
+---- denominador pequeno vira peso arbitrariamente grande. Duas situacoes reais:
+----   base = 0  -- ataque padrao nao rende nada (alvo longe demais, unidade ruim, CTH no chao).
+----                A acao especial vira a unica coisa util, e recebe o teto.
+----   base ~ 0  -- base 5 com hits 150 daria razao 3000; um preset de 200 viraria 6000 e
+----                dominaria o sorteio inteiro.
+----
+---- 300 = "vale ate tres vezes o ataque padrao". Acima disso a diferenca deixa de ser quantitativa
+---- (a acao e melhor) e passa a ser qualitativa (a outra nao funciona) -- e vantagem qualitativa
+---- nao deve virar numero grande, so o maior numero.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.ExpectedRatioMax = 300
 
 ---------------------------------------------------------------------------------------------------
 ---- REPLANEJAMENTO DE MIRA POR RESULTADO (const.RATOAI.AimReplanThreshold)
@@ -273,23 +211,6 @@ const.RATOAI.SnipeStuckBonus = 25 ---- % por condicao de "nao consegue escapar"
 ---------------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------------------------------
----- TETO DA RAZAO DE RESULTADO ESPERADO (const.RATOAI.ExpectedRatioMax)
-----
----- A razao multiplica o `Weight` do preset, entao ela e um FATOR e nao uma nota -- sem teto, um
----- denominador pequeno vira peso arbitrariamente grande. Duas situacoes reais:
-----   base = 0  -- ataque padrao nao rende nada (alvo longe demais, unidade ruim, CTH no chao).
-----                A acao especial vira a unica coisa util, e recebe o teto.
-----   base ~ 0  -- base 5 com hits 150 daria razao 3000; um preset de 200 viraria 6000 e
-----                dominaria o sorteio inteiro.
-----
----- 300 = "vale ate tres vezes o ataque padrao". Acima disso a diferenca deixa de ser quantitativa
----- (a acao e melhor) e passa a ser qualitativa (a outra nao funciona) -- e vantagem qualitativa
----- nao deve virar numero grande, so o maior numero.
----------------------------------------------------------------------------------------------------
-
-const.RATOAI.ExpectedRatioMax = 300
-
----------------------------------------------------------------------------------------------------
 ---- PREPARAR ARMA EM VEZ DE ATIRAR MAL (RATOAI_PrepareWeapon*)
 ----
 ---- Situacao: sobra AP para UM tiro de quadril e mais nada. O tiro sai com mira 0, a penalidade de
@@ -356,6 +277,114 @@ const.RATOAI.MGSetupBonus = 150
 
 const.RATOAI.MGSetupMalus = 80
 
+---- weight % a non-attacking action keeps when the attack here is an expected kill (linear below it)
+const.RATOAI.LethalOtherPct = 0
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 3. BURST LENGTH
+---- read by: FUNCTION_BurstLength
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.BurstChooser = true ---- pick the autofire length that maximizes the turn's expected hits
+const.RATOAI.BurstTail = true ---- stationed MG spends leftover AP on a shorter burst after its full-length ones
+const.RATOAI.BurstMinShots = 3
+const.RATOAI.BurstMaxShots = 12
+const.RATOAI.BurstMarginalHits = 10 ---- expected hits x100 each extra round must add
+const.RATOAI.BurstTailMinShots = 3
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 4. OVERWATCH AND MG CONE
+---- read by: AIACTION_ScoutSearch, SOURCE_UnitOverwatch, SOURCE_AIPrecalcConeTargetZones
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.OverwatchSnapRef = 100 ---- snapshot multiplier % at which overwatch costs nothing
+const.RATOAI.OverwatchFullAttacks = 2 ---- interrupts for a full-quality overwatch
+const.RATOAI.OverwatchMinQuality = 10 ---- blind overwatch below this quality (0-100) is skipped
+const.RATOAI.OverwatchOvershoot = 2 ---- tiles a spot overwatch cone reaches past the aim point
+const.RATOAI.OverwatchMinTiles = 7 ---- shortest AI overwatch cone, flat for every weapon
+
+---------------------------------------------------------------------------------------------------
+---- COMPRIMENTO DO CONE QUE A IA PLANTA NO MGSetup
+----
+---- O JOGADOR ESCOLHE, A IA NAO. Medido no processo vivo, dois cones ativos no mesmo combate:
+----     Grizzly (merc)      dist ate target_pos = 15481  (~13 tiles, escolha do jogador)
+----     LegionGunner:412    dist ate target_pos = 45600  (= max_range exato)
+---- O `AIPrecalcConeTargetZones` monta o alvo do cone com
+----     target_pos = attack_pos + SetLen(dir, max_range)
+---- e `max_range` para MachineGun e o WeaponRange INTEIRO (as outras classes usam 75% dele,
+---- Firearm:GetOverwatchConeParam). A IA sempre planta no maximo; o jogador planta onde quer.
+---- Isso e o contrario da regra da casa -- e aqui a regra a mais e do jogador.
+----
+---- POR QUE ENCURTAR AJUDA. O numero de interrupcoes e limitado (`GetNumMGInterruptAttacks`;
+---- medido, o LegionGunner:412 tinha **uma**). Um cone de 38 tiles gasta essa unica interrupcao
+---- no primeiro inimigo que pisar na borda -- e na borda o tiro nao vale nada. Rampa do
+---- HipshotPenalty medida ao vivo (MG42, interrupcao de MG, aim 1):
+----
+----     tiles     4     8    12    16    20    24    28    32    36
+----     penal   -10   -14   -21   -29   -33   -36   -40   -45   -47
+----
+---- Nao ha joelho: e ~1,2 ponto por tile. Entao o corte e escolha de projeto, nao um otimo que
+---- da para derivar -- por isso e parametro, e por isso o default nao muda nada.
+----
+----   const.RATOAI.MGConeRangePct    -- % do max_range do cone. 100 = comportamento de hoje.
+----                               60 no MG42 da ~23 tiles e derruba o teto de penalidade de
+----                               -47 para -36, ainda cobrindo mais que o dobro do cone que o
+----                               Grizzly plantou.
+----   const.RATOAI.MGConeRangeTiles  -- teto ABSOLUTO em tiles, aplicado depois da porcentagem.
+----                               0 = sem teto. Util para nivelar armas de WeaponRange
+----                               diferente (RPD_1 = 44, MG42 = 38) num mesmo alcance de
+----                               engajamento.
+----
+---- Piso fixo de 8 tiles, para nenhum ajuste transformar o cone em nada.
+----
+---- Os dois sao globais de propriedade: `const.RATOAI.MGConeRangePct = 60` no console vale na hora,
+---- sem recarregar mod, que e como se afina numero desse tipo.
+----
+---- >>> O LADO DA ACAO SO VALE COM O SOURCE_AIPrecalcConeTargetZones.lua REGISTRADO. <<<
+---- Ele ESTA na lista `code` do metadata.lua desde a v4151. Antes disso nao estava, e o que
+---- rodava era o `AIPrecalcConeTargetZones` do vanilla (`@Lua/Tactical/CombatAI.lua`) -- o
+---- parametro mudava so a NOTA dos tiles (AIPolicyMGSetupPosScore) e o cone continuava sendo
+---- plantado no maximo. O B26 e o B35 estavam no mesmo barco e acordaram junto com ele.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.MGConeRangePct = 70
+
+const.RATOAI.MGConeRangeTiles = 0
+
+---------------------------------------------------------------------------------------------------
+---- DE ONDE O CONE E AVALIADO (BUGFIX B35, SOURCE_AIPrecalcConeTargetZones.lua)
+----
+---- true (default): quando a unidade ainda vai ANDAR, o cone e medido do DESTINO -- linha,
+---- alcance, LOF e CTH saem todos de la. E a unica leitura util antes do movimento: saber o
+---- que a unidade enxerga de onde ela esta prestes a sair nao decide nada.
+----
+---- false: volta ao vanilla, tudo medido da posicao atual. Serve para A/B no console sem
+---- recarregar mod -- ligue junto com `const.RATOAI.ZoneDebug` para ver a composicao das zonas
+---- dos dois jeitos.
+----
+---- Nao afeta a MG ja montada nem o ataque de abertura do UnitAwareness: esses dois nunca
+---- recebem posicao hipotetica. Ver o cabecalho do B35.
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.ConeFromDest = true
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 5. DESTINATIONS, STANCE AND END-TURN PICK
+---- read by: AIFindDestinations, CustomWeaponRange, AIScoreDest, AIScoreReachableVoxels
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+---- which destinations pack Crouch: "low" (vanilla) | "any_cover" | "always"
+const.RATOAI.CrouchTrigger = "any_cover"
+
 ---------------------------------------------------------------------------------------------------
 ---- ATE ONDE VALE CHEGAR DEITADO (BUGFIX B36, SOURCE_AIFindDestinations.lua)
 ----
@@ -405,6 +434,30 @@ const.RATOAI.PronePackTiles = 26
 ---------------------------------------------------------------------------------------------------
 
 const.RATOAI.ExposedProne = true
+
+---- "Weapon" CustomWeaponRange instances use the Accuracy band until the presets are switched
+const.RATOAI.AccuracyRange = true
+const.RATOAI.AccRangeAim = 2 ---- aim levels assumed when estimating the band (capped by the action's max aim)
+const.RATOAI.AccRangeStance = "Crouch" ---- target silhouette the band is measured against
+
+---- CLOSE WITHOUT A KILL: end-turn penalty inside close range of an enemy the unit doesn't expect to drop
+const.RATOAI.CloseNoKillPenalty = -200
+const.RATOAI.CloseRangeTiles = false ---- false = const.Weapons.PointBlankRange
+const.RATOAI.CloseNoKillMaxEnemies = 2
+const.RATOAI.CloseNoKillFloorDZ = false ---- false = 3 SlabSizeZ; a floor is 5
+
+---- re-score the best end-turn tiles with full geometry before the pick
+const.RATOAI.RefineFinalists = true
+const.RATOAI.RefineMaxDests = 5 ---- finalists refined per round
+const.RATOAI.RefineRounds = 2 ---- rounds while the best finalist is still unrefined
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 6. THREAT EXPOSURE
+---- read by: AIPOLICYPOS_ThreatExposure, SOURCE_ScoutSearch
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 
 
 const.RATOAI.ThreatSaturation = 2
@@ -478,9 +531,143 @@ const.RATOAI.ThreatSetupBias = true
 ---- pior que esquecer. O envelhecimento e LINEAR ate la, entao "sumiu agora" e "sumiu ha um
 ---- turno" nao pesam igual.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ThreatMemoryPct == nil then
-    const.RATOAI.ThreatMemoryPct = 85
-end
-if const.RATOAI.ThreatMemoryTurns == nil then
-    const.RATOAI.ThreatMemoryTurns = 2
+const.RATOAI.ThreatMemoryPct = 85
+const.RATOAI.ThreatMemoryTurns = 2
+
+---- lost enemies placed at the suspected spot, at this % of a seen enemy's threat
+const.RATOAI.ThreatSuspectPct = 70
+const.RATOAI.ThreatSuspectArmedPct = 50 ---- kept on a tile that still has AP for an attack: arriving there it shoots first
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 7. PATH DANGER
+---- read by: FUNCTION_DangerScan
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.PathDanger = true ---- master switch
+const.RATOAI.PathDangerScope = "endturn" ---- pass the path danger counts in: "endturn" | "optloc" | "both"
+const.RATOAI.TimedDangerScope = "both" ---- same for a timed explosive on the final tile
+const.RATOAI.PathGasPenalty = 60 ---- per harmful gas voxel crossed
+const.RATOAI.PathFirePenalty = 60 ---- per voxel in fire range crossed
+const.RATOAI.PathOverwatchPenalty = 100 ---- per overwatch cone crossed, at the worst point of the path
+const.RATOAI.PathDangerMax = 400 ---- cap on the path total
+const.RATOAI.PathHarmfulGas = {teargas = true, toxicgas = true} ---- whitelist; smoke is good to cross
+const.RATOAI.PathOverwatchPlateau = 6 ---- tiles of full overwatch penalty from the shooter
+const.RATOAI.PathOverwatchCurve = 0 ---- 0 = linear falloff; 100 = quadratic
+const.RATOAI.PathOverwatchVisibility = "team" ---- cones avoided: "team" | "self" | "all" (all cheats)
+const.RATOAI.PathOverwatchMinPct = 15 ---- floor at the cone's edge, % of PathOverwatchPenalty
+const.RATOAI.DestTimedPenalty = 250 ---- timed explosive on the final tile, at the center
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 8. SCOUT SEARCH
+---- read by: SOURCE_ScoutSearch
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+---- observe the suspected spot from a standoff ring instead of walking onto it
+const.RATOAI.ScoutStandoffMinTiles = 4
+const.RATOAI.ScoutStandoffMaxTiles = 14
+const.RATOAI.ScoutContactTiles = 20 ---- within this of the spot, a tile in its view with no AP to shoot is a trap
+const.RATOAI.ScoutWalkFloodTiles = 24 ---- walking flood from the spot; tiles beyond it count as this far
+---- threat from unseen enemies decays per consecutive search turn, so a blocked seeker edges forward
+const.RATOAI.ScoutBoldStepPct = 25
+const.RATOAI.ScoutBoldMinPct = 25
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 9. RELOAD AND WEAPON WEAR
+---- read by: SOURCE_AIReloadWeapons, SOURCE_ReliabilityCheck
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.ReloadThresholdPct = 50 ---- reload below this % of the magazine
+const.RATOAI.ReloadAPSource = "weapon" ---- reload cost: "weapon" (ReloadAP) | "action" | "max"
+const.RATOAI.ReloadCostsAP = true ---- false restores the old AP budget, where reloading was free
+const.RATOAI.UnjamCostsAP = true
+const.RATOAI.AIWeaponJam = true ---- AI weapons wear and jam (read once at load)
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 10. ENEMY LOOT
+---- read by: FEATURE_EnemyLoot
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+---- EnemyDropCondition choice -> condition points lost, rolled in [min, max]
+const.RATOAI.DropConditionLoss = {
+    Light = {min = 5, max = 15},
+    Moderate = {min = 10, max = 30},
+    Heavy = {min = 20, max = 45}
+}
+const.RATOAI.DropConditionFloor = 10 ---- wear never takes a dropped item below this condition
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 11. DEBUG SWITCHES
+---- read by: the policies and DEBUG.lua; turn on in the console
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.FlankDebug = false
+const.RATOAI.SeekCoverDebug = false
+const.RATOAI.EncircleDebug = false
+const.RATOAI.ThreatDebug = false
+const.RATOAI.ZoneDebug = false
+const.RATOAI.PathDangerDebug = false ---- builds a string for every destination: turn on, read, turn off
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+---- 12. HELPERS
+---- read by: MGSetupPosScore and AIPrecalcConeTargetZones (kept here: loads first)
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------
+---- Alcance efetivo do cone da MG. Fonte UNICA para os dois lados -- a policy que pontua o tile
+---- e a funcao que planta o cone -- porque discordancia entre eles e exatamente o bug B29.
+----
+---- Devolve `min_range, max_range` em unidades do mundo, ja com:
+----   * a guarda `min >= max` do vanilla (AIFilterTargetPoints): min == max quer dizer "sem
+----     minimo", nao "so a casca do circulo". Vale para a BrowningM2HMG, que continua assim;
+----   * o teto de `Min(sight, weapon:GetMaxRange())`, que e o segundo CheckLOS da acao;
+----   * os parametros de encurtamento acima.
+---------------------------------------------------------------------------------------------------
+function RATOAI_MGConeRange(unit, weapon, params)
+    if not params then
+        return 0, 0
+    end
+
+    local min_r = (params.min_range or 0) * const.SlabSizeX
+    local max_r = (params.max_range or 0) * const.SlabSizeX
+    if min_r >= max_r then
+        min_r = 0
+    end
+
+    if unit and weapon then
+        max_r = Min(max_r, Min(unit:GetSightRadius(), weapon:GetMaxRange()))
+    end
+
+    local pct = const.RATOAI.MGConeRangePct or 100
+    if pct > 0 and pct < 100 then
+        max_r = MulDivRound(max_r, pct, 100)
+    end
+
+    local cap = (const.RATOAI.MGConeRangeTiles or 0) * const.SlabSizeX
+    if cap > 0 then
+        max_r = Min(max_r, cap)
+    end
+
+    ---- Piso: nem o encurtamento nem o teto podem descer abaixo de 8 tiles, nem abaixo do
+    ---- minimo do proprio cone (senao o anel fica vazio por construcao).
+    max_r = Max(max_r, Max(min_r, 8 * const.SlabSizeX))
+
+    return min_r, max_r
 end

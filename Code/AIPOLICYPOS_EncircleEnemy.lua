@@ -559,9 +559,6 @@ end
 ---- -- util depois de mover unidades pelo editor -- `RATOAI_RecalcEncirclePlan()` no
 ---- console. Redesenha o overlay sozinho.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.EncircleDebug == nil then
-    const.RATOAI.EncircleDebug = false
-end
 
 function AIPolicyEncircleEnemy:EvalDest(context, dest, grid_voxel)
     if not dest then

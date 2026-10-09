@@ -266,9 +266,6 @@ end
 ---- voxel. Substitui o `local debug = false` do topo do arquivo antigo, que nao dava
 ---- para ligar sem reeditar o codigo -- e cujo `debug_data` era montado mesmo desligado.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.FlankDebug == nil then
-    const.RATOAI.FlankDebug = false
-end
 
 ---- Cobertura do inimigo, em % de cobertura cheia, vista de um lado so.
 ---- `nil` NAO e zero: na origem significa "nem enxergo ele daqui", no destino significa

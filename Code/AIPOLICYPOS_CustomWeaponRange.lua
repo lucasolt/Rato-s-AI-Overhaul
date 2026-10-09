@@ -52,12 +52,6 @@
 ---- esta perto demais pontua 0 pelo RangeMin, o tile no meio da pinca cai sozinho.
 ---------------------------------------------------------------------------------------------------
 const.RATOAI = const.RATOAI or {}
----- "Weapon" instances use the Accuracy band until the presets are switched in the editor
-const.RATOAI.AccuracyRange = true
----- aim levels assumed when estimating the band (capped by the action's max aim)
-const.RATOAI.AccRangeAim = 2
----- target silhouette the band is measured against (mercs fight crouched)
-const.RATOAI.AccRangeStance = "Crouch"
 
 DefineClass.AIPolicyCustomWeaponRange = {
     __parents = {"AIPositioningPolicy"},

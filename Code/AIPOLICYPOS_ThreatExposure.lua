@@ -917,11 +917,6 @@ function RATOAI_ThreatEnemyFactor(enemy, context)
     return factor
 end
 
----- Chave do diagnostico; o cabecalho completo esta junto do EvalDest, la embaixo.
-if const.RATOAI.ThreatDebug == nil then
-    const.RATOAI.ThreatDebug = false
-end
-
 local function tiles(d)
     return d and (MulDivRound(d, 1, const.SlabSizeX)) or "?"
 end
@@ -1239,13 +1234,6 @@ end
 ---- hidden mercs added up to half an enemy. Each one the team has seen and lost track of is now
 ---- placed at the unit's last_known_enemy_pos, at reduced trust. Never-seen enemies don't count.
 ---------------------------------------------------------------------------------------------------
-if const.RATOAI.ThreatSuspectPct == nil then
-    const.RATOAI.ThreatSuspectPct = 70
-end
----- Threat kept on a tile that still has AP for an attack: arriving there it shoots first.
-if const.RATOAI.ThreatSuspectArmedPct == nil then
-    const.RATOAI.ThreatSuspectArmedPct = 50
-end
 
 ---- Returns false or a list of {enemy, ppos, pct, key}: each enemy evaluated at the suspected spot.
 function AIPolicyThreatExposure:SuspectStandin(context)

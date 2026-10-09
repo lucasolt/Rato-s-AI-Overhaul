@@ -27,9 +27,6 @@
 ---- the ladder climbs off a head.
 ---------------------------------------------------------------------------------------------------
 const.RATOAI = const.RATOAI or {}
-if const.RATOAI.HeadAimWithTorso == nil then
-    const.RATOAI.HeadAimWithTorso = true
-end
 
 local TORSO_ONLY = {Torso = true}
 
