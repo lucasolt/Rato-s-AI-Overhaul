@@ -10,6 +10,14 @@ const.RATOAI = const.RATOAI or {}
 const.RATOAI.CloseNoKillPenalty = -200
 const.RATOAI.CloseRangeTiles = false ---- false = const.Weapons.PointBlankRange
 const.RATOAI.CloseNoKillMaxEnemies = 2
+const.RATOAI.CloseNoKillFloorDZ = false ---- false = 3 SlabSizeZ; a floor is 5
+
+---- another floor and no LOS: the stairs, not the 3D distance, decide how close he is
+local function RATOAI_CloseAcrossFloor(context, enemy, dest, pos)
+    local epos = RATOAI_ValidatePosZ(enemy:GetPos())
+    local dz = const.RATOAI.CloseNoKillFloorDZ or 3 * const.SlabSizeZ
+    return abs(epos:z() - pos:z()) >= dz and RATOAI_ThreatEnemyLOS(context, enemy, dest) == false
+end
 
 function RATOAI_CloseNoKillPenalty(context, dest, x, y, z)
     local pen = const.RATOAI.CloseNoKillPenalty or 0
@@ -27,7 +35,7 @@ function RATOAI_CloseNoKillPenalty(context, dest, x, y, z)
         if IsValidTarget(enemy) and not enemy:IsDowned() and
             RATOAI_EnemyVisible(context, enemy, "team") then
             local d = enemy:GetDist(pos)
-            if d < reach then
+            if d < reach and not RATOAI_CloseAcrossFloor(context, enemy, dest, pos) then
                 local near = MulDivRound(pen, Min(reach - d, reach - slab), reach - slab)
                 local kill = Clamp(RATOAI_DestKillPct(context, dest, enemy) or 0, 0, 100)
                 total = total + MulDivRound(near, 100 - kill, 100)
