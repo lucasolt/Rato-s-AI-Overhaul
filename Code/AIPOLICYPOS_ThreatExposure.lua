@@ -982,11 +982,12 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
                 srcs[i] = dests[i]
                 tgts[i] = ppos
             end
-            local _, data = CheckLOS(tgts, srcs, enemy:GetSightRadius())
-            if data then
+            ---- BUGFIX (B58): no target visible returns (false, nil), not a table of falses
+            local any, data = CheckLOS(tgts, srcs, enemy:GetSightRadius())
+            if data or any == false then
                 per = {}
                 for i = 1, #dests do
-                    per[dests[i]] = not not data[i]
+                    per[dests[i]] = not not (data and data[i])
                 end
             end
         end
