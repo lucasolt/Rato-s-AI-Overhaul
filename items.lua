@@ -296,6 +296,10 @@ return {
 		'name', "FEATURE_EnemyLoot",
 		'CodeFileName', "Code/FEATURE_EnemyLoot.lua",
 	}),
+	PlaceObj('ModItemCode', {
+		'name', "SOURCE_UnitOverwatch",
+		'CodeFileName', "Code/SOURCE_UnitOverwatch.lua",
+	}),
 	PlaceObj('ModItemOptionChoice', {
 		'name', "BoostStatsDifficulty",
 		'DisplayName', "<color AmmoAPColor>Difficulty (Boost Stats)</color>",

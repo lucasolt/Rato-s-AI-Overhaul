@@ -99,6 +99,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_ReliabilityCheck.lua",
 		"Code/FEATURE_WeaponShipment.lua",
 		"Code/FEATURE_EnemyLoot.lua",
+		"Code/SOURCE_UnitOverwatch.lua",
 	},
 	'default_options', {
 		AddHWStoGunners = true,
