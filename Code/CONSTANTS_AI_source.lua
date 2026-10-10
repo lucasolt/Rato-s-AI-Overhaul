@@ -578,9 +578,11 @@ const.RATOAI.ScoutWalkFloodTiles = 24 ---- walking flood from the spot; tiles be
 ---- threat from unseen enemies decays per consecutive search turn, so a blocked seeker edges forward
 const.RATOAI.ScoutBoldStepPct = 25
 const.RATOAI.ScoutBoldMinPct = 25
----- engine fallback spot (reads real positions): only when every merc is this far, as a rough pull
-const.RATOAI.ScoutApproxMinTiles = 30
-const.RATOAI.ScoutApproxRadiusTiles = 5 ---- the spot lands anywhere this close to a random merc, on his floor
+---- engine fallback spot (reads real positions, stands in for heard gunfire): a rough pull to the nearest merc
+const.RATOAI.ScoutApproxMinTiles = 30 ---- closer than this, the spot uses the near (fuzzier) radius
+const.RATOAI.ScoutApproxRadiusTiles = 5 ---- far: the spot lands anywhere this close to the merc, on his floor
+const.RATOAI.ScoutApproxNearRadiusTiles = 8 ---- near: wider, so the pull isn't a wallhack
+const.RATOAI.ScoutApproxTries = 12 ---- random tiles tested for being out of the team's view
 
 
 ---------------------------------------------------------------------------------------------------

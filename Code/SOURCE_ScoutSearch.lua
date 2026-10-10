@@ -267,24 +267,26 @@ function RATOAI_PickRememberedScoutPos(unit)
 end
 
 ---------------------------------------------------------------------------------------------------
----- The engine's pick reads the REAL position of a random enemy. Kept only as a rough pull for a unit
----- lost far from every merc (ScoutApproxMinTiles), where a few tiles of slop can't act as a wallhack.
+---- The engine's pick reads the REAL position of a random enemy. Kept as a rough pull toward the
+---- nearest merc, standing in for heard gunfire: fuzzier when close (ScoutApproxMinTiles), where a
+---- tight spot would be a wallhack, and never a tile the team already sees empty.
 ---- It also matched floors in voxel units against a world radius, so any floor passed; now the
 ---- spot is on the enemy's own floor.
 ---------------------------------------------------------------------------------------------------
 local function EnginePickScoutLocation(unit)
-    local enemies = GetAllEnemyUnits(unit)
-    if #enemies == 0 then
-        return
-    end
-    local far = const.RATOAI.ScoutApproxMinTiles * const.SlabSizeX
-    for _, enemy in ipairs(enemies) do
-        if unit:GetDist(enemy) < far then
-            return
+    local enemy, enemy_dist
+    for _, e in ipairs(GetAllEnemyUnits(unit)) do
+        local d = unit:GetDist(e)
+        if not enemy or d < enemy_dist then
+            enemy, enemy_dist = e, d
         end
     end
-    local enemy = table.interaction_rand(enemies, "Combat")
-    local r = const.RATOAI.ScoutApproxRadiusTiles * const.SlabSizeX
+    if not enemy then
+        return
+    end
+    local near = enemy_dist < const.RATOAI.ScoutApproxMinTiles * const.SlabSizeX
+    local r = (near and const.RATOAI.ScoutApproxNearRadiusTiles or const.RATOAI.ScoutApproxRadiusTiles) *
+                  const.SlabSizeX
     local ex, ey, ez = RATOAI_ValidatePosZ(enemy:GetPos()):xyz()
     local floor_dz = 2 * const.SlabSizeZ
     local bbox = box(ex - r, ey - r, 0, ex + r + 1, ey + r + 1, MapSlabsBBox_MaxZ)
@@ -299,9 +301,15 @@ local function EnginePickScoutLocation(unit)
             end
         end
     end)
-    if #dests > 0 then
-        ---- parenthesized: interaction_rand's 2nd return (the index) is point_unpack's scale argument
-        return point(point_unpack((table.interaction_rand(dests, "Combat"))))
+    ---- random tries, not a full scan: SpotInView casts one ray per teammate
+    for _ = 1, Min(#dests, const.RATOAI.ScoutApproxTries) do
+        local v, idx = table.interaction_rand(dests, "Combat")
+        local pt = point(point_unpack(v))
+        if not SpotInView(unit.team, pt) then
+            return pt
+        end
+        dests[idx] = dests[#dests]
+        dests[#dests] = nil
     end
 end
 
@@ -440,6 +448,14 @@ end
 ---- on UnitProperties: mod code loads before ClassesBuilt, so Unit hasn't inherited it yet
 local RATOAI_SelectArchetype_orig = UnitProperties.SelectArchetype
 function UnitProperties:SelectArchetype(proto_context)
+    ---- a spot in view is already disproven; nil makes the engine ask AIPickScoutLocation instead
+    local lk = self.last_known_enemy_pos
+    if lk and IsKindOf(self, "Unit") then
+        local pos = RATOAI_ValidatePosZ(lk)
+        if IsValidPos(pos) and CheckLOS(pos, self, self:GetSightRadius()) then
+            self.last_known_enemy_pos = false
+        end
+    end
     RATOAI_SelectArchetype_orig(self, proto_context)
     if self.current_archetype == "Scout_LastLocation" and Archetypes.RATOAI_Scout_Hold and
         not RATOAI_IsScoutSeeker(self) then
