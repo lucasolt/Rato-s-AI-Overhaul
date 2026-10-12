@@ -5,7 +5,7 @@ const.RATOAI = const.RATOAI or {}
 ---- The engine scores a throw by GetActionResults, i.e. the REAL units in the blast; aimed at a
 ---- hidden merc's spot that is knowing what the AI can't. Here enemies come only from
 ---- RATOAI_BelievedEnemies and the zone is scaled by their trust. Own units do come from the real
----- results: the AI knows where its team is.
+---- results: the AI knows where its team is. The plain grenade hands off to the same scoring.
 ---------------------------------------------------------------------------------------------------
 DefineClass.AIActionThrowGrenadeBlind = {
     __parents = {"AIActionThrowGrenade"},
@@ -32,11 +32,19 @@ local function OwnUnitHit(hit, team)
     return false
 end
 
-function AIActionThrowGrenadeBlind:PrecalcAction(context, action_state)
-    if RATOAI_TeamSeesEnemy(context) then
-        return
+---- {enemy, pos, pct}: enemies the team sees, at full trust; with none in view, the believed ones.
+function RATOAI_KnownEnemies(context)
+    local known = {}
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if context.enemy_visible_by_team[enemy] and IsValidTarget(enemy) then
+            known[#known + 1] = {enemy = enemy, pos = context.enemy_pos[enemy], pct = 100}
+        end
     end
-    local believed = RATOAI_BelievedEnemies(context)
+    return #known > 0 and known or RATOAI_BelievedEnemies(context)
+end
+
+---- Throw scored only against `believed` ({enemy, pos, pct}); shared with the plain grenade's handoff.
+function RATOAI_PrecalcGrenadeAtBelieved(self, context, action_state, believed)
     if #believed == 0 then
         return
     end
@@ -108,6 +116,12 @@ function AIActionThrowGrenadeBlind:PrecalcAction(context, action_state)
         action_state.action_id = action_id
         action_state.target_pos = zone.target_pos
         action_state.score = score
+    end
+end
+
+function AIActionThrowGrenadeBlind:PrecalcAction(context, action_state)
+    if not RATOAI_TeamSeesEnemy(context) then
+        RATOAI_PrecalcGrenadeAtBelieved(self, context, action_state, RATOAI_BelievedEnemies(context))
     end
 end
 

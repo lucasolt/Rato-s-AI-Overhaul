@@ -51,5 +51,12 @@ function AIActionThrowGrenade:PrecalcAction(context, action_state)
         action_state.action_id = action_id
         action_state.target_pos = zone.target_pos
         action_state.score = score
+    elseif not context.target_locked then
+        ---- the zones above only aim at enemies this unit sees itself (AICalcAOETargetPoints); hand off
+        ---- to the ones a teammate sees, or with none in view, to where the team believes they are
+        local known = table.ifilter(RATOAI_KnownEnemies(context), function(_, k)
+            return not context.enemy_visible[k.enemy]
+        end)
+        RATOAI_PrecalcGrenadeAtBelieved(self, context, action_state, known)
     end
 end
