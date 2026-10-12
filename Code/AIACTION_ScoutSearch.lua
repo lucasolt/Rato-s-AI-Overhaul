@@ -300,3 +300,54 @@ function AIActionOverwatchSuspect:Execute(context, action_state)
         return "done"
     end
 end
+
+---------------------------------------------------------------------------------------------------
+---- AIActionOverwatchIdle -- for the regular archetypes: a unit with no shot from where it ended up
+---- covers the approach of the nearest enemy its team sees or believes in. Upstairs raiders held a
+---- good tile 22 tiles out with nothing to do (G8). Signature actions run after the move
+---- (CombatAI.lua:232), so "no shot" is judged at the destination.
+---------------------------------------------------------------------------------------------------
+DefineClass.AIActionOverwatchIdle = {
+    __parents = {"AISignatureAction"},
+    hidden = false,
+    voice_response = "AIOverwatch"
+}
+
+function AIActionOverwatchIdle:GetEditorView()
+    return "Overwatch the nearest known enemy when there is no shot"
+end
+
+local function NearestKnownEnemyPos(context)
+    local unit = context.unit
+    local best, best_dist
+    local function consider(pos)
+        local d = pos and unit:GetDist(pos)
+        if d and (not best or d < best_dist) then
+            best, best_dist = pos, d
+        end
+    end
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if context.enemy_visible_by_team[enemy] and IsValidTarget(enemy) then
+            consider(context.enemy_pos[enemy])
+        end
+    end
+    for _, b in ipairs(RATOAI_BelievedEnemies(context)) do
+        consider(b.pos)
+    end
+    return best
+end
+
+function AIActionOverwatchIdle:PrecalcAction(context, action_state)
+    local dest = context.ai_destination or GetPackedPosAndStance(context.unit)
+    ---- same "no shot" test as the base-attack roll in AISelectAction
+    if IsValidTarget(context.dest_target and context.dest_target[dest]) then
+        return
+    end
+    action_state.args = RATOAI_OverwatchArgsAt(context, NearestKnownEnemyPos(context))
+end
+
+function AIActionOverwatchIdle:IsAvailable(context, action_state)
+    return not not action_state.args
+end
+
+AIActionOverwatchIdle.Execute = AIActionOverwatchSuspect.Execute

@@ -1,5 +1,31 @@
 local extra_max_attacks_arg = 2
 
+---------------------------------------------------------------------------------------------------
+---- LOS AGAINST WHAT THE TEAM BELIEVES. With no enemy in the team's view, `enemies` falls back to
+---- every merc (below), so the LOS cache read their REAL positions: "Have LOS" walked units to the
+---- edge facing a hidden merc. Blind, it is cast at the believed spots instead (memory projected
+---- along the heading, else the suspect spot); with no belief, no tile has LOS.
+---------------------------------------------------------------------------------------------------
+function RATOAI_UpdateDestLosCache(unit, context)
+    local enemies = context.enemies
+    for _, enemy in ipairs(enemies) do
+        if context.enemy_visible_by_team[enemy] then
+            return AIUpdateDestLosCache(unit, context)
+        end
+    end
+    local believed, ppos = {}, {}
+    for _, b in ipairs(RATOAI_BelievedEnemies(context)) do
+        if not ppos[b.enemy] then
+            believed[#believed + 1] = b.enemy
+            ppos[b.enemy] = stance_pos_pack(b.pos, StancesList.Crouch)
+        end
+    end
+    local real_ppos = context.enemy_pack_pos_stance
+    context.enemies, context.enemy_pack_pos_stance = believed, ppos
+    AIUpdateDestLosCache(unit, context)
+    context.enemies, context.enemy_pack_pos_stance = enemies, real_ppos
+end
+
 function AICreateContext(unit, context)
     local gx, gy, gz = unit:GetGridCoords()
     local weapon = unit:GetActiveWeapons()
@@ -229,7 +255,7 @@ function AICreateContext(unit, context)
     else
         AIFindDestinations(unit, context)
     end
-    AIUpdateDestLosCache(unit, context)
+    RATOAI_UpdateDestLosCache(unit, context)
 
     for i, ally in ipairs(context.allies) do
         local x, y, z = ally:GetGridCoords()
