@@ -13,8 +13,9 @@ function AIActionThrowGrenade:PrecalcAction(context, action_state)
             local triggerType = weapon.TriggerType or "Contact"
             ----
 
-            if IsKindOf(weapon, "Grenade") and self.AllowedAoeTypes[aoetype] and
-                self.AllowedTriggerTypes[triggerType] then
+            ---- flares belong to AIActionThrowFlare; picking one here also hid a real grenade behind it
+            if IsKindOf(weapon, "Grenade") and not IsKindOfClasses(weapon, "FlareStick", "GlowStick") and
+                self.AllowedAoeTypes[aoetype] and self.AllowedTriggerTypes[triggerType] then
                 grenade = weapon
                 break
             end

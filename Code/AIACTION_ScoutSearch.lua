@@ -56,7 +56,9 @@ function RATOAI_PrecalcGrenadeAtBelieved(self, context, action_state, believed)
         local cost = caction and caction:GetAPCost(unit) or -1
         if cost > 0 and unit:HasAP(cost) then
             local weapon = caction:GetAttackWeapons(unit)
-            if IsKindOf(weapon, "Grenade") and self.AllowedAoeTypes[weapon.aoeType or "none"] and
+            ---- flares pass the "none"/Contact filter, and the scoring below counts any enemy in radius
+            if IsKindOf(weapon, "Grenade") and not IsKindOfClasses(weapon, "FlareStick", "GlowStick") and
+                self.AllowedAoeTypes[weapon.aoeType or "none"] and
                 self.AllowedTriggerTypes[weapon.TriggerType or "Contact"] then
                 action_id, grenade = id, weapon
                 break
