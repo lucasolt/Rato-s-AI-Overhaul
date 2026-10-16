@@ -55,6 +55,11 @@ function AISelectAction(context, actions, base_weight, dbg_available_actions)
                 --------------------------------------------
                 -- local action_weight = MulDivRound(action.Weight, weight_mod, 100)
                 local action_weight = MulDivRound(c_action_weight, weight_mod, 100)
+                ---- set by precalcs whose worth is only known after them (smoke screen)
+                local weight_pct = context.action_states[action].weight_pct
+                if weight_pct then
+                    action_weight = MulDivRound(action_weight, weight_pct, 100)
+                end
 
                 -- priority = priority or action.Priority
                 priority = priority or action_priority

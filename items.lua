@@ -108,6 +108,10 @@ return {
 		'CodeFileName', "Code/AIACTION_ScoutSearch.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "AIACTION_SmokeScreen",
+		'CodeFileName', "Code/AIACTION_SmokeScreen.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "UTIL",
 		'CodeFileName', "Code/UTIL.lua",
 	}),

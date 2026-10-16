@@ -587,6 +587,25 @@ const.RATOAI.ScoutApproxTries = 12 ---- random tiles tested for being out of the
 
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
+---- 8b. SMOKE SCREEN
+---- read by: AIACTION_SmokeScreen
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
+
+const.RATOAI.SmokeScreen = true ---- false: smoke goes back to the plain zone scoring
+const.RATOAI.SmokeMinScore = 60 ---- below this the throw is not worth it; 100 = one ready enemy fully cut off one exposed ally
+const.RATOAI.SmokeRefScore = 150 ---- score that keeps the preset Weight at 100%
+const.RATOAI.SmokeWeightCapPct = 200 ---- ceiling on that weight scaling
+const.RATOAI.SmokeCostlyPct = 40 ---- threat of a shooter who still has to pay full setup, % of a ready one
+const.RATOAI.SmokeOverwatchPct = 150 ---- threat of an overwatch/pindown aimed at the ally, % of a ready shot
+const.RATOAI.SmokeOwnFirePct = 100 ---- how much cutting our own good lines of fire costs
+const.RATOAI.SmokeCoverTrust = 60 ---- full cover removes this % of a line's threat
+const.RATOAI.SmokeLines = 6 ---- worst lines that seed candidate landing points
+const.RATOAI.SmokeMaxCandidates = 12 ---- landing points simulated (each costs a trajectory + propagation)
+
+
+---------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------
 ---- 9. RELOAD AND WEAPON WEAR
 ---- read by: SOURCE_AIReloadWeapons, SOURCE_ReliabilityCheck
 ---------------------------------------------------------------------------------------------------

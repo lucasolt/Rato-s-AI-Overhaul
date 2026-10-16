@@ -52,6 +52,7 @@ return PlaceObj('ModDef', {
 		"Code/AIACTION_ThrowFlare.lua",
 		"Code/AIACTION_PrepareWeapon.lua",
 		"Code/AIACTION_ScoutSearch.lua",
+		"Code/AIACTION_SmokeScreen.lua",
 		"Code/UTIL.lua",
 		"Code/FUNCTION_DangerScan.lua",
 		"Code/CUAE_options.lua",

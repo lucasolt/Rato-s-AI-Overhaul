@@ -27,6 +27,9 @@ function AIActionThrowGrenade:PrecalcAction(context, action_state)
     end
 
     local max_range = Min(self.MaxDist, grenade:GetMaxAimRange(context.unit) * const.SlabSizeX)
+    if grenade.aoeType == "smoke" and const.RATOAI.SmokeScreen then
+        return RATOAI_PrecalcSmokeScreen(self, context, action_state, action_id, max_range)
+    end
     local blast_radius = grenade.AreaOfEffect * const.SlabSizeX
     local target_pts
     if self.TargetLastAttackPos then
