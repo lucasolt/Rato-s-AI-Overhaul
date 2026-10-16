@@ -631,6 +631,9 @@ return {
 				'MaxTargetRange', 35,
 			}),
 			PlaceObj('AIActionOverwatchSuspect', nil),
+			PlaceObj('AIActionOverwatchIdle', {
+				'Weight', 50,
+			}),
 		},
 		TargetScoreRandomization = 10,
 		TargetingPolicies = {
@@ -1018,6 +1021,9 @@ return {
 				'MinDist', 5000,
 			}),
 			PlaceObj('AIActionOverwatchSuspect', {
+				'Weight', 50,
+			}),
+			PlaceObj('AIActionOverwatchIdle', {
 				'Weight', 50,
 			}),
 		},
@@ -1481,6 +1487,9 @@ return {
 				'cur_zone_mod', 140,
 			}),
 			PlaceObj('AIActionOverwatchSuspect', nil),
+			PlaceObj('AIActionOverwatchIdle', {
+				'Weight', 50,
+			}),
 		},
 		TargetScoreRandomization = 10,
 		TargetingPolicies = {

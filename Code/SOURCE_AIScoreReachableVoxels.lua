@@ -285,9 +285,14 @@ function AIScoreReachableVoxels(context, policies, opt_loc_weight, dest_score_de
         total_dist = Max(total_dist or 0, dest_dist[dest] or 0)
     end
 
-    ---- far scout: normalized by the trip, one turn's progress (+21 of 150) let "stay" pass the 80% cut
+    ---- far scout: normalized by the trip, one turn's progress (+21 of 150) let "stay" pass the 80% cut.
+    ---- Same for any unit with no shot here and its optimal out of reach: Grenadier:531 drifted 13
+    ---- turns among cover tiles 33+ tiles out, twice back to where it started (H9).
     local rush_from, rush_span
-    if total_dist and total_dist > 0 and RATOAI_ScoutRushing(context) then
+    local travelling = const.RATOAI.TravelRush and context.best_dest and
+                           not (context.dest_ap and context.dest_ap[context.best_dest]) and
+                           not IsValidTarget(context.dest_target and context.dest_target[curr_dest])
+    if total_dist and total_dist > 0 and (travelling or RATOAI_ScoutRushing(context)) then
         local cur = dest_dist[curr_dest] or total_dist
         local near = cur
         for _, dest in ipairs(context.destinations) do

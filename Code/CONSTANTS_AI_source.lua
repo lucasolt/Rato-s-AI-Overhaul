@@ -451,6 +451,9 @@ const.RATOAI.RefineFinalists = true
 const.RATOAI.RefineMaxDests = 5 ---- finalists refined per round
 const.RATOAI.RefineRounds = 2 ---- rounds while the best finalist is still unrefined
 
+---- no shot here and optimal out of reach: OptLoc pull measured by this turn's progress, as for scouts
+const.RATOAI.TravelRush = true
+
 
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
