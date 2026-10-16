@@ -560,6 +560,27 @@ return {
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
 			}),
+			PlaceObj('AIActionThrowGrenade', {
+				'BiasId', "SmokeGrenade",
+				'Weight', 200,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Effect', "disable",
+					}),
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Value', -50,
+						'Period', 0,
+						'ApplyTo', "Team",
+					}),
+				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
+				'MinDist', 0,
+				'AllowedAoeTypes', set( "smoke" ),
+			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
 				'OnActivationBiases', {
@@ -774,6 +795,27 @@ return {
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "teargas", "toxicgas" ),
 			}),
+			PlaceObj('AIActionThrowGrenade', {
+				'BiasId', "SmokeGrenade",
+				'Weight', 200,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Effect', "disable",
+					}),
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Value', -50,
+						'Period', 0,
+						'ApplyTo', "Team",
+					}),
+				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
+				'MinDist', 0,
+				'AllowedAoeTypes', set( "smoke" ),
+			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
 				'OnActivationBiases', {
@@ -930,6 +972,27 @@ return {
 				'EnemyPreparedAttackScore', 100,
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
+			}),
+			PlaceObj('AIActionThrowGrenade', {
+				'BiasId', "SmokeGrenade",
+				'Weight', 200,
+				'OnActivationBiases', {
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Effect', "disable",
+					}),
+					PlaceObj('AIBiasModification', {
+						'BiasId', "SmokeGrenade",
+						'Value', -50,
+						'Period', 0,
+						'ApplyTo', "Team",
+					}),
+				},
+				'CustomScoring', function (self, context)
+					return DemolitionCustomScoring(self, context)
+				end,
+				'MinDist', 0,
+				'AllowedAoeTypes', set( "smoke" ),
 			}),
 			PlaceObj('AIActionThrowFlare', {
 				'BiasId', "FlareThrow",
