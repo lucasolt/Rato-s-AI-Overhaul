@@ -261,9 +261,10 @@ function RATOAI_OrdnanceLeft(unit, firearm)
         return budget[kind]
     end
     local range = const.RATOAI.OrdnanceRounds[kind]
-    local pct = const.RATOAI.OrdnanceAffiliationPct[unit.Affiliation or ""] or 100
-    local left = InteractionRandRange(MulDivRound(range[1], pct, 100),
-                                      MulDivRound(range[2], pct, 100), "RATOAI_ordnance")
+    local pct = kind ~= "underslung" and const.RATOAI.OrdnanceAffiliationPct[unit.Affiliation or ""]
+    local lo = pct and MulDivRound(range[1], pct[1], 100) or range[1]
+    local hi = pct and MulDivRound(range[2], pct[2], 100) or range[2]
+    local left = InteractionRandRange(lo, Max(lo, hi), "RATOAI_ordnance")
     local loaded = firearm.ammo and firearm.ammo.Amount or 0
     if loaded > left then
         firearm.ammo.Amount = left
