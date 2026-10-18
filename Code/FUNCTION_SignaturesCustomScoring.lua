@@ -64,17 +64,15 @@ end
 
 ---------------------------------------------------------------------------------------------------
 ---- In aCTH a head-aimed CTH is P(hit ANY part), cone centered on the head; only `head_share`%
----- of those hits land on the head (GBO3 args.rat_head_share). The rest are off-part hits, paid at
----- OffPartDamagePct on a torso-valued part. Without the share (old CTH) the aimed part is hit.
+---- of those hits land on the head (GBO3 args.rat_head_share). The rest are off-part hits on a
+---- torso-valued part, which has no bonus for OffPartBonusPct to shrink. Without the share (old
+---- CTH) the aimed part is hit.
 ---------------------------------------------------------------------------------------------------
 function RATOAI_AimedPartMul(body_part, head_share)
     if body_part ~= "Head" or not head_share then
         return RATOAI_BodyPartMul(body_part)
     end
-    local a = const.Combat.Aperture
-    local off = (a and a.OffPartStray and a.OffPartDamagePct) or 100
-    return MulDivRound(head_share, RATOAI_BodyPartMul("Head"), 100) +
-               MulDivRound(100 - head_share, off, 100)
+    return MulDivRound(head_share, RATOAI_BodyPartMul("Head"), 100) + 100 - head_share
 end
 
 ---------------------------------------------------------------------------------------------------
