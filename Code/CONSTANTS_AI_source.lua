@@ -625,7 +625,7 @@ const.RATOAI.AIWeaponJam = true ---- AI weapons wear and jam (read once at load)
 ---- launcher rounds per unit {min, max}, loaded ones included, never replenished
 const.RATOAI.OrdnanceRounds = {
     rocket = {3, 6},
-    grenade = {6, 10}, ---- dedicated grenade launchers (MGL, M79)
+    grenade = {5, 8}, ---- dedicated grenade launchers (MGL, M79)
     underslung = {1, 2},
 }
 ---- Affiliation -> % on the {min, max} of OrdnanceRounds; unlisted = 100, underslung exempt
