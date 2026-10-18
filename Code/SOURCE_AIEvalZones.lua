@@ -20,6 +20,25 @@ function AIActionBaseZoneAttack:EvalZones(context, zones)
     --- addition of "self.enemy_cover_mod" and "enemy_height_mod"
 end
 
+---- the zone precalc predicts a perfect hit; scale each zone by how much of the hit chance the
+---- launcher keeps given who observes the point (EO: spotter, blind, darkness)
+function AIActionHeavyWeaponAttack:EvalZones(context, zones)
+    if self.action_id ~= "Bombard" and IsMod_loaded("RATONADE") then
+        local weapon = CombatActions[self.action_id]:GetAttackWeapons(context.unit)
+        local hit_radius = weapon and weapon.ammo and weapon.ammo.AreaOfEffect * 1000
+        if hit_radius then
+            for _, zone in ipairs(zones) do
+                local chance, chance_seen = EO_DeviationHitChance(weapon, context.unit,
+                                                                  zone.target_pos, hit_radius)
+                if chance_seen > 0 and chance < chance_seen then
+                    zone.score_mod = MulDivRound(zone.score_mod or 100, chance, chance_seen)
+                end
+            end
+        end
+    end
+    return AIActionBaseZoneAttack.EvalZones(self, context, zones)
+end
+
 function AIEvalZones(context, zones, min_score, enemy_score, team_score, self_score_mod,
                      enemy_cover_score, enemy_prepared_attack_score, ally_threatened_score) -- , heigth_score)
     local best_target, best_score = nil, (min_score or 0) - 1
