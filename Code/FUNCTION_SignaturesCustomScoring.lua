@@ -834,10 +834,18 @@ function MGSetup_CustomScoring(self, context)
     if not mult then
         return weight, disable, priority ---- limiar desligado pela constante: nada a dizer
     end
+    ---- aCTH: prone already drops the not-prone penalties, so setup can't rescue a bad prone shot
+    local _, _, _, stance_idx = stance_pos_unpack(upos)
+    local prone_acth = stance_idx == StancesList.Prone and
+                           IsACHTActive(context.weapon, context.default_attack, unit)
+    if prone_acth and mult > 0 then
+        mult = MulDivRound(mult, const.RATOAI.MGSetupProneBonusPct, 100)
+    end
     local peso_final = Max(0, MulDivRound(weight, 100 + mult, 100))
 
     RegistrarExpectedMG(context, "MGSetup", hits, limiar, weight, peso_final, target, dist,
-                        string.format("tiro de pe rende %d.%02d, limiar %d.%02d -- %s %d%%",
+                        string.format("tiro %s rende %d.%02d, limiar %d.%02d -- %s %d%%",
+                                      prone_acth and "deitado (aCTH)" or "de pe",
                                       hits / 100, hits % 100, limiar / 100, limiar % 100,
                                       mult >= 0 and "inflado" or "reduzido",
                                       mult >= 0 and mult or -mult))

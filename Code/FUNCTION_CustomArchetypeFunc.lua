@@ -74,7 +74,7 @@ function CloseRangeArchetypeSelection(self, context)
 
     local weapon_classes = args.main_w_classes
 
-    ---- launcher out of its per-fight rounds (SOURCE_AIReloadWeapons): fight on with the secondary
+    ---- launcher out of rounds (SOURCE_AIReloadWeapons): fight on with the secondary
     local spent = args.spent_archetype and RATOAI_OrdnanceSpent(self)
     if spent then
         weapon_classes = args.close_w_classes

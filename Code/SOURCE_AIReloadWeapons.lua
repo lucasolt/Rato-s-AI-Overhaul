@@ -223,9 +223,10 @@ function RATOAI_AIUnjamWeapons(unit)
 end
 
 ---------------------------------------------------------------------------------------------------
----- Per-fight ordnance budget: launchers (OrdnanceCapClasses) get OrdnancePerFightMin..Max rounds
----- per fight, the loaded ones included. The reload below conjures ammo, so the cap lives here;
----- once spent, CloseRangeArchetypeSelection swaps the unit to its secondary weapon.
+---- Ordnance budget: launchers (OrdnanceCapClasses) get OrdnanceRoundsMin..Max rounds once per
+---- unit, the loaded ones included, never replenished between fights. The reload below conjures
+---- ammo, so the cap lives here; once spent, CloseRangeArchetypeSelection swaps to the secondary.
+---- Stored in the Unit property `RATOAI_ordnance_left` (PATCH_AppendClass_source_classes.lua).
 ---------------------------------------------------------------------------------------------------
 
 function RATOAI_IsOrdnanceCapped(weapon)
@@ -235,10 +236,10 @@ end
 ---- rounds this unit may still load; rolled on first use, which also trims an oversized magazine
 function RATOAI_OrdnanceLeft(unit, firearm)
     local left = unit.RATOAI_ordnance_left
-    if left then
+    if left >= 0 then
         return left
     end
-    left = InteractionRandRange(const.RATOAI.OrdnancePerFightMin, const.RATOAI.OrdnancePerFightMax,
+    left = InteractionRandRange(const.RATOAI.OrdnanceRoundsMin, const.RATOAI.OrdnanceRoundsMax,
                                 "RATOAI_ordnance")
     local loaded = firearm.ammo and firearm.ammo.Amount or 0
     if loaded > left then
@@ -278,8 +279,20 @@ local function RATOAI_SpendOrdnance(unit, firearm, before, cap)
     unit.RATOAI_ordnance_left = cap - Max(0, added)
 end
 
+---- units are saved field by field, so a property alone would not persist
+local RATOAI_OrigUnitGetDynamicData = Unit.GetDynamicData
+function Unit:GetDynamicData(data)
+    RATOAI_OrigUnitGetDynamicData(self, data)
+    data.RATOAI_ordnance_left = self.RATOAI_ordnance_left >= 0 and self.RATOAI_ordnance_left or nil
+end
+
+local RATOAI_OrigUnitSetDynamicData = Unit.SetDynamicData
+function Unit:SetDynamicData(data)
+    RATOAI_OrigUnitSetDynamicData(self, data)
+    self.RATOAI_ordnance_left = data.RATOAI_ordnance_left or -1
+end
+
 function OnMsg.UnitEnterCombat(unit)
-    unit.RATOAI_ordnance_left = nil
     if not R_IsAI(unit) then
         return
     end

@@ -277,6 +277,9 @@ const.RATOAI.MGSetupBonus = 150
 
 const.RATOAI.MGSetupMalus = 80
 
+---- % of MGSetupBonus kept under aCTH when the shot estimate is already prone (setup adds one aim level + the cone)
+const.RATOAI.MGSetupProneBonusPct = 25
+
 ---- weight % a non-attacking action keeps when the attack here is an expected kill (linear below it)
 const.RATOAI.LethalOtherPct = 0
 
@@ -619,9 +622,9 @@ const.RATOAI.ReloadAPSource = "weapon" ---- reload cost: "weapon" (ReloadAP) | "
 const.RATOAI.ReloadCostsAP = true ---- false restores the old AP budget, where reloading was free
 const.RATOAI.UnjamCostsAP = true
 const.RATOAI.AIWeaponJam = true ---- AI weapons wear and jam (read once at load)
-const.RATOAI.OrdnanceCapClasses = {"RocketLauncher", "GrenadeLauncher"} ---- launchers with a per-fight round budget
-const.RATOAI.OrdnancePerFightMin = 3 ---- rounds per fight, loaded ones included
-const.RATOAI.OrdnancePerFightMax = 6
+const.RATOAI.OrdnanceCapClasses = {"RocketLauncher", "GrenadeLauncher"} ---- launchers with a finite round budget
+const.RATOAI.OrdnanceRoundsMin = 3 ---- rounds per unit, loaded ones included, never replenished
+const.RATOAI.OrdnanceRoundsMax = 6
 
 
 ---------------------------------------------------------------------------------------------------
