@@ -302,13 +302,13 @@ function OnMsg.ClassesGenerate(classdefs)
         }
     }
 
-    ---- launcher rounds left to load (SOURCE_AIReloadWeapons); -1 = not rolled yet
+    ---- launcher rounds left to load per kind (SOURCE_AIReloadWeapons); false = none rolled yet
     AppendClass.Unit = {
         properties = {
             {
                 id = "RATOAI_ordnance_left",
-                editor = "number",
-                default = -1,
+                editor = "prop_table",
+                default = false,
                 no_edit = true
             }
         }

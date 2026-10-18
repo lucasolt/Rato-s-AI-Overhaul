@@ -223,47 +223,72 @@ function RATOAI_AIUnjamWeapons(unit)
 end
 
 ---------------------------------------------------------------------------------------------------
----- Ordnance budget: launchers (OrdnanceCapClasses) get OrdnanceRoundsMin..Max rounds once per
----- unit, the loaded ones included, never replenished between fights. The reload below conjures
----- ammo, so the cap lives here; once spent, CloseRangeArchetypeSelection swaps to the secondary.
----- Stored in the Unit property `RATOAI_ordnance_left` (PATCH_AppendClass_source_classes.lua).
+---- Ordnance budget: launchers get a finite number of rounds per kind (const.RATOAI.OrdnanceRounds),
+---- loaded ones included, rolled once per unit and never replenished between fights. The reload
+---- below conjures ammo, so the cap lives here; once the dedicated launcher is spent,
+---- CloseRangeArchetypeSelection swaps to the secondary. Stored in the Unit property
+---- `RATOAI_ordnance_left` (PATCH_AppendClass_source_classes.lua) as {kind = rounds}.
 ---------------------------------------------------------------------------------------------------
 
-function RATOAI_IsOrdnanceCapped(weapon)
-    return IsKindOfClasses(weapon, const.RATOAI.OrdnanceCapClasses)
+---- budget kind of a launcher, nil when uncapped (mortars, non-launchers)
+function RATOAI_OrdnanceKind(weapon)
+    if IsKindOf(weapon, "GrenadeLauncher") then
+        return weapon.parent_weapon and "underslung" or "grenade"
+    elseif IsKindOf(weapon, "RocketLauncher") then
+        return "rocket"
+    end
 end
 
----- rounds this unit may still load; rolled on first use, which also trims an oversized magazine
-function RATOAI_OrdnanceLeft(unit, firearm)
-    local left = unit.RATOAI_ordnance_left
-    if left >= 0 then
-        return left
+---- equipped weapons of both sets, underslung subweapons included
+local function RATOAI_ForEachLauncher(unit, fn)
+    for _, slot in ipairs {"Handheld A", "Handheld B"} do
+        for _, w in ipairs(unit:GetEquippedWeapons(slot)) do
+            fn(w)
+            for _, sub in sorted_pairs(w.subweapons or empty_table) do
+                fn(sub)
+            end
+        end
     end
-    left = InteractionRandRange(const.RATOAI.OrdnanceRoundsMin, const.RATOAI.OrdnanceRoundsMax,
-                                "RATOAI_ordnance")
+end
+
+---- rounds this unit may still load for this launcher's kind; rolled on first use, which also
+---- trims an oversized magazine
+function RATOAI_OrdnanceLeft(unit, firearm)
+    local kind = RATOAI_OrdnanceKind(firearm)
+    local budget = unit.RATOAI_ordnance_left or {}
+    unit.RATOAI_ordnance_left = budget
+    if budget[kind] then
+        return budget[kind]
+    end
+    local range = const.RATOAI.OrdnanceRounds[kind]
+    local pct = const.RATOAI.OrdnanceAffiliationPct[unit.Affiliation or ""] or 100
+    local left = InteractionRandRange(MulDivRound(range[1], pct, 100),
+                                      MulDivRound(range[2], pct, 100), "RATOAI_ordnance")
     local loaded = firearm.ammo and firearm.ammo.Amount or 0
     if loaded > left then
         firearm.ammo.Amount = left
         loaded = left
     end
     left = left - loaded
-    unit.RATOAI_ordnance_left = left
+    budget[kind] = left
     return left
 end
 
----- no loaded capped launcher left and nothing left to load
+---- dedicated launcher (not underslung) out of rounds: none loaded and nothing left to load
 function RATOAI_OrdnanceSpent(unit)
-    if unit.RATOAI_ordnance_left ~= 0 then
+    local budget = unit.RATOAI_ordnance_left
+    if not budget or not (budget.rocket or budget.grenade) or (budget.rocket or 0) > 0 or
+        (budget.grenade or 0) > 0 then
         return false
     end
-    for _, slot in ipairs {"Handheld A", "Handheld B"} do
-        for _, w in ipairs(unit:GetEquippedWeapons(slot)) do
-            if RATOAI_IsOrdnanceCapped(w) and w.ammo and w.ammo.Amount > 0 then
-                return false
-            end
+    local loaded = false
+    RATOAI_ForEachLauncher(unit, function(w)
+        local kind = RATOAI_OrdnanceKind(w)
+        if (kind == "rocket" or kind == "grenade") and w.ammo and w.ammo.Amount > 0 then
+            loaded = true
         end
-    end
-    return true
+    end)
+    return not loaded
 end
 
 ---- trims what the reload added to the budget and spends it
@@ -276,20 +301,22 @@ local function RATOAI_SpendOrdnance(unit, firearm, before, cap)
         firearm.ammo.Amount = before + cap
         added = cap
     end
-    unit.RATOAI_ordnance_left = cap - Max(0, added)
+    unit.RATOAI_ordnance_left[RATOAI_OrdnanceKind(firearm)] = cap - Max(0, added)
 end
 
 ---- units are saved field by field, so a property alone would not persist
 local RATOAI_OrigUnitGetDynamicData = Unit.GetDynamicData
 function Unit:GetDynamicData(data)
     RATOAI_OrigUnitGetDynamicData(self, data)
-    data.RATOAI_ordnance_left = self.RATOAI_ordnance_left >= 0 and self.RATOAI_ordnance_left or nil
+    data.RATOAI_ordnance_left = self.RATOAI_ordnance_left or nil
 end
 
 local RATOAI_OrigUnitSetDynamicData = Unit.SetDynamicData
 function Unit:SetDynamicData(data)
     RATOAI_OrigUnitSetDynamicData(self, data)
-    self.RATOAI_ordnance_left = data.RATOAI_ordnance_left or -1
+    ---- type check: saves from 65a7912 stored a plain number
+    local budget = data.RATOAI_ordnance_left
+    self.RATOAI_ordnance_left = type(budget) == "table" and budget or false
 end
 
 function OnMsg.UnitEnterCombat(unit)
@@ -297,13 +324,11 @@ function OnMsg.UnitEnterCombat(unit)
         return
     end
     ---- roll now: an overwatch shot before the unit's first turn must already count
-    for _, slot in ipairs {"Handheld A", "Handheld B"} do
-        for _, w in ipairs(unit:GetEquippedWeapons(slot)) do
-            if RATOAI_IsOrdnanceCapped(w) then
-                RATOAI_OrdnanceLeft(unit, w)
-            end
+    RATOAI_ForEachLauncher(unit, function(w)
+        if RATOAI_OrdnanceKind(w) then
+            RATOAI_OrdnanceLeft(unit, w)
         end
-    end
+    end)
 end
 
 function AIReloadWeapons(unit)
@@ -314,7 +339,7 @@ function AIReloadWeapons(unit)
     local firearms = select(3, unit:GetActiveWeapons("Firearm"))
     table.iappend(firearms, select(3, unit:GetActiveWeapons("HeavyWeapon")))
     for _, firearm in ipairs(firearms) do
-        local cap = RATOAI_IsOrdnanceCapped(firearm) and RATOAI_OrdnanceLeft(unit, firearm) or nil
+        local cap = RATOAI_OrdnanceKind(firearm) and RATOAI_OrdnanceLeft(unit, firearm) or nil
         if cap == 0 then
             ---- budget spent: leave the launcher as it is
         elseif not firearm.ammo then
