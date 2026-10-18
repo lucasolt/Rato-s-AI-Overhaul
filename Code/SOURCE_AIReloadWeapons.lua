@@ -222,6 +222,77 @@ function RATOAI_AIUnjamWeapons(unit)
     end
 end
 
+---------------------------------------------------------------------------------------------------
+---- Per-fight ordnance budget: launchers (OrdnanceCapClasses) get OrdnancePerFightMin..Max rounds
+---- per fight, the loaded ones included. The reload below conjures ammo, so the cap lives here;
+---- once spent, CloseRangeArchetypeSelection swaps the unit to its secondary weapon.
+---------------------------------------------------------------------------------------------------
+
+function RATOAI_IsOrdnanceCapped(weapon)
+    return IsKindOfClasses(weapon, const.RATOAI.OrdnanceCapClasses)
+end
+
+---- rounds this unit may still load; rolled on first use, which also trims an oversized magazine
+function RATOAI_OrdnanceLeft(unit, firearm)
+    local left = unit.RATOAI_ordnance_left
+    if left then
+        return left
+    end
+    left = InteractionRandRange(const.RATOAI.OrdnancePerFightMin, const.RATOAI.OrdnancePerFightMax,
+                                "RATOAI_ordnance")
+    local loaded = firearm.ammo and firearm.ammo.Amount or 0
+    if loaded > left then
+        firearm.ammo.Amount = left
+        loaded = left
+    end
+    left = left - loaded
+    unit.RATOAI_ordnance_left = left
+    return left
+end
+
+---- no loaded capped launcher left and nothing left to load
+function RATOAI_OrdnanceSpent(unit)
+    if unit.RATOAI_ordnance_left ~= 0 then
+        return false
+    end
+    for _, slot in ipairs {"Handheld A", "Handheld B"} do
+        for _, w in ipairs(unit:GetEquippedWeapons(slot)) do
+            if RATOAI_IsOrdnanceCapped(w) and w.ammo and w.ammo.Amount > 0 then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+---- trims what the reload added to the budget and spends it
+local function RATOAI_SpendOrdnance(unit, firearm, before, cap)
+    if not cap then
+        return
+    end
+    local added = (firearm.ammo and firearm.ammo.Amount or 0) - before
+    if added > cap then
+        firearm.ammo.Amount = before + cap
+        added = cap
+    end
+    unit.RATOAI_ordnance_left = cap - Max(0, added)
+end
+
+function OnMsg.UnitEnterCombat(unit)
+    unit.RATOAI_ordnance_left = nil
+    if not R_IsAI(unit) then
+        return
+    end
+    ---- roll now: an overwatch shot before the unit's first turn must already count
+    for _, slot in ipairs {"Handheld A", "Handheld B"} do
+        for _, w in ipairs(unit:GetEquippedWeapons(slot)) do
+            if RATOAI_IsOrdnanceCapped(w) then
+                RATOAI_OrdnanceLeft(unit, w)
+            end
+        end
+    end
+end
+
 function AIReloadWeapons(unit)
     ---- R_IsAI instead of vanilla IsMerc: mercs driven by the AI (arena) must reload too
     if not R_IsAI(unit) then return end
@@ -230,7 +301,10 @@ function AIReloadWeapons(unit)
     local firearms = select(3, unit:GetActiveWeapons("Firearm"))
     table.iappend(firearms, select(3, unit:GetActiveWeapons("HeavyWeapon")))
     for _, firearm in ipairs(firearms) do
-        if not firearm.ammo then
+        local cap = RATOAI_IsOrdnanceCapped(firearm) and RATOAI_OrdnanceLeft(unit, firearm) or nil
+        if cap == 0 then
+            ---- budget spent: leave the launcher as it is
+        elseif not firearm.ammo then
             local ammos = unit:GetAvailableAmmos(firearm) or empty_table
             local ammo
             if #ammos > 0 then
@@ -238,6 +312,7 @@ function AIReloadWeapons(unit)
                     ammo = ammos[1]
                     ammo.Amount = Max(ammo.Amount, firearm.MagazineSize)
                     unit:ReloadWeapon(firearm, ammo, "delay fx", "ai")
+                    RATOAI_SpendOrdnance(unit, firearm, 0, cap)
                     CreateFloatingText(unit, T(160472488023, "Reload"))
                     ObjModified(unit)
                 end
@@ -247,6 +322,7 @@ function AIReloadWeapons(unit)
                     ammo = PlaceInventoryItem(ammos[1].id)
                     ammo.Amount = firearm.MagazineSize
                     unit:ReloadWeapon(firearm, ammo, "delay fx", "ai")
+                    RATOAI_SpendOrdnance(unit, firearm, 0, cap)
                     CreateFloatingText(unit, T(160472488023, "Reload"))
                     DoneObject(ammo)
                     ObjModified(unit)
@@ -259,8 +335,10 @@ function AIReloadWeapons(unit)
             ---- divisao inteira truncada neste engine).
             if RATOAI_PayReload(unit, firearm) then
                 local ammo = firearm.ammo
+                local before = ammo.Amount
                 ammo.Amount = firearm.MagazineSize
                 unit:ReloadWeapon(firearm, ammo, "delay fx", "ai")
+                RATOAI_SpendOrdnance(unit, firearm, before, cap)
                 CreateFloatingText(unit, T(160472488023, "Reload"))
                 ObjModified(unit)
             end

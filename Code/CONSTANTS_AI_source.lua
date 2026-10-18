@@ -610,7 +610,7 @@ const.RATOAI.SmokeMaxCandidates = 12 ---- landing points simulated (each costs a
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
 ---- 9. RELOAD AND WEAPON WEAR
----- read by: SOURCE_AIReloadWeapons, SOURCE_ReliabilityCheck
+---- read by: SOURCE_AIReloadWeapons, SOURCE_ReliabilityCheck, FUNCTION_CustomArchetypeFunc
 ---------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------
 
@@ -619,6 +619,9 @@ const.RATOAI.ReloadAPSource = "weapon" ---- reload cost: "weapon" (ReloadAP) | "
 const.RATOAI.ReloadCostsAP = true ---- false restores the old AP budget, where reloading was free
 const.RATOAI.UnjamCostsAP = true
 const.RATOAI.AIWeaponJam = true ---- AI weapons wear and jam (read once at load)
+const.RATOAI.OrdnanceCapClasses = {"RocketLauncher", "GrenadeLauncher"} ---- launchers with a per-fight round budget
+const.RATOAI.OrdnancePerFightMin = 3 ---- rounds per fight, loaded ones included
+const.RATOAI.OrdnancePerFightMax = 6
 
 
 ---------------------------------------------------------------------------------------------------

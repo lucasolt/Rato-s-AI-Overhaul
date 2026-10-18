@@ -19,6 +19,7 @@ local ROLE_ARGS = {
         main_w_classes = {"Artillery", "GrenadeLauncher"},
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
         close_archetype = "RATOAI_RetreatingMarksman",
+        spent_archetype = "Soldier",
         vr = "AIArchetypeScared",
         dist = 8
     },
@@ -26,6 +27,7 @@ local ROLE_ARGS = {
         main_w_classes = {"Artillery", "RocketLauncher"},
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
         close_archetype = "RATOAI_RetreatingMarksman",
+        spent_archetype = "Soldier",
         vr = "AIArchetypeScared",
         dist = 6
     },
@@ -70,16 +72,23 @@ function CloseRangeArchetypeSelection(self, context)
 
     local enemy, dist = GetNearestEnemy(self)
 
+    local weapon_classes = args.main_w_classes
+
+    ---- launcher out of its per-fight rounds (SOURCE_AIReloadWeapons): fight on with the secondary
+    local spent = args.spent_archetype and RATOAI_OrdnanceSpent(self)
+    if spent then
+        weapon_classes = args.close_w_classes
+        archetype = args.spent_archetype
+    end
+
     ----- This is wrong, it should then look at the next closer enemy, but ok.
-    if not enemy or enemy:IsIncapacitated() then
+    if not spent and (not enemy or enemy:IsIncapacitated()) then
         return archetype
     end
 
-    local weapon_classes = args.main_w_classes
-
     local check_dist = args.dist or const.Weapons.PointBlankRange
 
-    if enemy and dist <= check_dist * const.SlabSizeX then
+    if enemy and not enemy:IsIncapacitated() and dist <= check_dist * const.SlabSizeX then
         weapon_classes = args.close_w_classes
         archetype = args.close_archetype or archetype
         if args.vr then
