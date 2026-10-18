@@ -628,11 +628,11 @@ const.RATOAI.OrdnanceRounds = {
     grenade = {5, 8}, ---- dedicated grenade launchers (MGL, M79)
     underslung = {1, 2},
 }
----- Affiliation -> % on the {min, max} of OrdnanceRounds; unlisted = 100, underslung exempt
+---- Affiliation -> % on the {min, max} of OrdnanceRounds; a kind key overrides it; unlisted = 100
 const.RATOAI.OrdnanceAffiliationPct = {
-    Army = {150, 120},
-    Adonis = {150, 120},
-    SuperSoldiers = {200, 140},
+    Army = {150, 120, underslung = {150, 150}},
+    Adonis = {150, 120, underslung = {150, 150}},
+    SuperSoldiers = {200, 140, underslung = {200, 200}},
 }
 
 
