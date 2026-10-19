@@ -106,7 +106,7 @@ local function CollectLines(context)
             ---- all blocked returns (false, nil)
             local _, data = CheckLOS(allies, srcs, enemy:GetSightRadius())
             for i, ally in ipairs(allies) do
-                if data and data[i] then
+                if data and data[i] and IsCloser(enemy, ally, enemy:GetSightRadius(ally) + 1) then
                     local v = Threat(context, enemy, ally, AimedAt(enemy, ally)) -
                                   MulDivRound(Threat(context, ally, enemy), own_pct, 100)
                     local vox = LineVoxels(enemy, ally)

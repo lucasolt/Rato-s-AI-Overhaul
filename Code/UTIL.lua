@@ -165,6 +165,66 @@ function RATOAI_ValidatePosZ(point)
     return IsValidZ(point) and point or point:SetTerrainZ()
 end
 
+---------------------------------------------------------------------------------------------------
+---- NIGHT SIGHT TO A SPOT. Unit:GetSightRadius() applies the darkness penalty only toward a target
+---- (Unit.lua:6052), so every "would anyone see this tile" check measured daylight range at night.
+---------------------------------------------------------------------------------------------------
+
+---- night or underground and no light on the voxel; `pos` is a point or a packed stance pos
+function RATOAI_IsSpotDark(pos)
+    if not (GameState.Night or GameState.Underground) or not pos then
+        return false
+    end
+    if type(pos) == "number" then
+        pos = RATOAI_UnpackPos(pos)
+    end
+    return band(GetVoxelStealthParams(pos) or 0, const.vsFlagIlluminated) == 0
+end
+
+---- same darkness term and night-vision reduction as Unit:GetSightRadius, applied to the no-target radius
+function RATOAI_DarkSightRadius(observer)
+    local mod = const.EnvEffects.DarknessSightMod or 0
+    if observer:HasNightVision() then
+        mod = MulDivRound(mod, CharacterEffectDefs.NightOps:ResolveValue(
+                              "night_vision_penalty_reduction"), 100)
+    end
+    return MulDivRound(observer:GetSightRadius(), Max(const.Combat.SightModMinValue, 100 + mod), 100)
+end
+
+function RATOAI_SightRadiusAt(observer, pos)
+    if RATOAI_IsSpotDark(pos) then
+        return RATOAI_DarkSightRadius(observer)
+    end
+    return observer:GetSightRadius()
+end
+
+---- per-turn memo of RATOAI_IsSpotDark over packed destinations
+function RATOAI_DarkDestCache(context)
+    local cache = context.__ratoai_dark_dest
+    if not cache then
+        cache = {}
+        context.__ratoai_dark_dest = cache
+    end
+    return cache
+end
+
+---- batched CheckLOS runs at the daylight radius; this drops a hit on a dark spot beyond night range
+function RATOAI_SeenInDark(from, spot, dark_r, dark_cache)
+    local dark = dark_cache and dark_cache[spot]
+    if dark == nil then
+        dark = RATOAI_IsSpotDark(spot)
+        if dark_cache then
+            dark_cache[spot] = dark
+        end
+    end
+    if not dark then
+        return true
+    end
+    local a = type(from) == "number" and RATOAI_UnpackPos(from) or from
+    local b = type(spot) == "number" and RATOAI_UnpackPos(spot) or spot
+    return IsCloser(a, b, dark_r + 1)
+end
+
 function RATOAI_GetCloseRange()
     return rat_close_range() or (((const.Weapons.PointBlankRange * 2) + (1)) * const.SlabSizeX)
 end

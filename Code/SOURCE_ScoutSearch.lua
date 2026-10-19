@@ -39,7 +39,7 @@ function RATOAI_SuspectPos(context)
     local ppos = false
     if lk then
         local pos = RATOAI_ValidatePosZ(lk)
-        if IsValidPos(pos) and not CheckLOS(pos, unit, unit:GetSightRadius()) then
+        if IsValidPos(pos) and not CheckLOS(pos, unit, RATOAI_SightRadiusAt(unit, pos)) then
             ppos = stance_pos_pack(pos, StancesList.Crouch)
         end
     end
@@ -66,7 +66,7 @@ local function ScoutBand(context, lk)
         maxr = maxr,
         ---- normalizer of the approach gradient: dests as far as the unit score ~0
         ref = Max(unit:GetDist(pos) - maxr, maxr),
-        radius = unit:GetSightRadius(),
+        radius = RATOAI_SightRadiusAt(unit, pos),
         contact = const.RATOAI.ScoutContactTiles * slab,
         need = context.default_attack_cost or 0
     }
@@ -227,7 +227,7 @@ end
 ---------------------------------------------------------------------------------------------------
 local function SpotInView(team, pos)
     for _, ally in ipairs(team and team.units or empty_table) do
-        if IsValid(ally) and not ally:IsDead() and CheckLOS(pos, ally, ally:GetSightRadius()) then
+        if IsValid(ally) and not ally:IsDead() and CheckLOS(pos, ally, RATOAI_SightRadiusAt(ally, pos)) then
             return true
         end
     end
@@ -364,7 +364,7 @@ function RATOAI_RefreshScoutTarget(unit, context)
     end
     ---- the engine drops a seen spot only after moving (CombatAI.lua:2488); drop it before planning
     local pos = RATOAI_ValidatePosZ(lk)
-    if IsValidPos(pos) and CheckLOS(pos, unit, unit:GetSightRadius()) then
+    if IsValidPos(pos) and CheckLOS(pos, unit, RATOAI_SightRadiusAt(unit, pos)) then
         lk = EnginePickScoutLocation(unit) or lk
     end
     unit.last_known_enemy_pos = lk
@@ -452,7 +452,7 @@ function UnitProperties:SelectArchetype(proto_context)
     local lk = self.last_known_enemy_pos
     if lk and IsKindOf(self, "Unit") then
         local pos = RATOAI_ValidatePosZ(lk)
-        if IsValidPos(pos) and CheckLOS(pos, self, self:GetSightRadius()) then
+        if IsValidPos(pos) and CheckLOS(pos, self, RATOAI_SightRadiusAt(self, pos)) then
             self.last_known_enemy_pos = false
         end
     end

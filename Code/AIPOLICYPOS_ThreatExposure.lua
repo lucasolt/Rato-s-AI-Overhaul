@@ -981,8 +981,11 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
             local any, data = CheckLOS(tgts, srcs, enemy:GetSightRadius())
             if data or any == false then
                 per = {}
+                local dark_r = RATOAI_DarkSightRadius(enemy)
+                local dark = RATOAI_DarkDestCache(context)
                 for i = 1, #dests do
-                    per[dests[i]] = not not (data and data[i])
+                    per[dests[i]] = not not (data and data[i]) and
+                                        RATOAI_SeenInDark(ppos, dests[i], dark_r, dark)
                 end
             end
         end
@@ -1002,7 +1005,7 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
     if not ppos then
         return nil
     end
-    local _, data = CheckLOS({ppos}, {dest}, enemy:GetSightRadius())
+    local _, data = CheckLOS({ppos}, {dest}, RATOAI_SightRadiusAt(enemy, dest))
     hit = not not (data and data[1])
     per[dest] = hit
     return hit
@@ -1074,6 +1077,7 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
                          (IsValid(enemy) and enemy:GetPos())
         if IsValidPos(epos) then
             rec.radius = enemy:GetSightRadius()
+            rec.dark_r = RATOAI_DarkSightRadius(enemy)
             rec.probes = RATOAI_LOSProbePositions(epos, dirs)
             rec.tested = #rec.probes
 
@@ -1098,8 +1102,9 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
                 end
                 local _, data = CheckLOS(pts, srcs, rec.radius)
                 if data then
+                    local dark = RATOAI_DarkDestCache(context)
                     for i = 1, #blind do
-                        if data[i] then
+                        if data[i] and RATOAI_SeenInDark(from, blind[i], rec.dark_r, dark) then
                             rec.votes[blind[i]] = rec.votes[blind[i]] + 1
                         end
                     end
@@ -1119,7 +1124,7 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
         if IsValidPos(tgt) then
             for _, from in ipairs(rec.probes) do
                 local _, data = CheckLOS({tgt}, {from}, rec.radius)
-                if data and data[1] then
+                if data and data[1] and RATOAI_SeenInDark(from, dest, rec.dark_r) then
                     votes = votes + 1
                 end
             end
@@ -1160,10 +1165,9 @@ function RATOAI_MemoryBelief(context, enemy, ppos)
     end
     local hit = cache[enemy]
     if hit == nil then
-        local sight = unit:GetSightRadius()
         local _, _, heading = RATOAI_LastSeenPos(unit, enemy)
         hit = RATOAI_ProjectMemory(ppos, heading, function(pos)
-            return CheckLOS(pos, unit, sight)
+            return CheckLOS(pos, unit, RATOAI_SightRadiusAt(unit, pos))
         end) or false
         cache[enemy] = hit
     end

@@ -287,9 +287,13 @@ local function RATOAI_MGVerifyLOS(context, key, packed, budget, tag)
     end
 
     local any, vals = CheckLOS(packed, srcs, sight)
+    local dark_r = context.__mg_dark_sight or RATOAI_DarkSightRadius(context.unit)
+    context.__mg_dark_sight = dark_r
+    local dark = RATOAI_DarkDestCache(context)
     row = {}
     for i = 1, need do
-        row[i] = (any and vals and vals[i]) and true or false
+        row[i] = (any and vals and vals[i] and RATOAI_SeenInDark(key, packed[i], dark_r, dark)) and
+                     true or false
     end
     memo[key] = row
     return row

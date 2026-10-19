@@ -46,7 +46,8 @@ function AIPrepareWeapon:PrecalcAction(context, action_state)
         if ok and los_any then
             local melhor_dist
             for i, enemy in ipairs(enemies) do
-                if los_targets[i] and IsValidTarget(enemy) then
+                if los_targets[i] and IsValidTarget(enemy) and
+                    IsCloser(unit, enemy, unit:GetSightRadius(enemy) + 1) then
                     local d = new_pos:Dist(enemy:GetPos())
                     if not melhor_dist or d < melhor_dist then
                         melhor_dist, target = d, enemy

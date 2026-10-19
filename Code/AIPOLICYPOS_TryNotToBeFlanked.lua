@@ -144,12 +144,12 @@ function Unit:RATOAI_CanSurround(other, check_pos, custom_other_pos)
     -- visibility
     if check_pos then
         -- checking from another position, use CheckLOS
-        if not CheckLOS(other, self, self:GetSightRadius()) then
+        if not CheckLOS(other, self, self:GetSightRadius(other)) then
             return false
         end
         ------------------------------------------------------------
     elseif custom_other_pos then
-        if not CheckLOS(custom_other_pos, self, self:GetSightRadius()) then
+        if not CheckLOS(custom_other_pos, self, self:GetSightRadius(other, nil, custom_other_pos)) then
             return false
         end
         ------------------------------------------------------------

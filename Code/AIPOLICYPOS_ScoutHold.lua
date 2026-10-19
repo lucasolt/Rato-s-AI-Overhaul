@@ -50,7 +50,7 @@ local function HoldBand(self, context, ppos)
         pos = RATOAI_UnpackPos(ppos),
         minr = minr,
         maxr = Clamp((context.EffectiveRange or 0) * slab, minr + 2 * slab, self.MaxTiles * slab),
-        radius = context.unit:GetSightRadius(),
+        radius = RATOAI_SightRadiusAt(context.unit, ppos),
         los = {}
     }
     context.__ratoai_hold_band = band
