@@ -630,9 +630,9 @@ const.RATOAI.OrdnanceRounds = {
 }
 ---- Affiliation -> % on the {min, max} of OrdnanceRounds; a kind key overrides it; unlisted = 100
 const.RATOAI.OrdnanceAffiliationPct = {
-    Army = {150, 120, underslung = {150, 150}},
-    Adonis = {150, 120, underslung = {150, 150}},
-    SuperSoldiers = {200, 140, underslung = {200, 200}},
+    Army = {125, 110, underslung = {150, 150}},
+    Adonis = {125, 110, underslung = {150, 150}},
+    SuperSoldiers = {150,120, underslung = {200, 200}},
 }
 
 

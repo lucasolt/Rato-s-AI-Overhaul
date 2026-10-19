@@ -1,27 +1,6 @@
 ---------------------------------------------------------------------------------------------------
 ---- AIPolicyMGSetupAP -- "da para montar a MG neste tile?"
-----
----- Portao binario, usado com `Required = true` no PositioningAI "MG Setup". Required quer dizer
----- que nota 0 DESQUALIFICA o destino, entao cada erro aqui nao dilui: elimina.
-----
----- BUGFIX (B29d/e) -- tres coisas estavam medindo o tile errado:
-----
-----   1. CUSTO NA POSTURA ERRADA. Desde a mudanca no GBO3 (`rat_MGSetup_getap`), o custo do
-----      MGSetup inclui a mudanca de postura para Prone, e o `GetAPCost` a mede a partir da
-----      postura ATUAL da unidade. O que vale aqui e a postura EMPACOTADA no dest -- e onde ela
-----      vai estar quando montar. Sem a troca, o destino que o passe B25 do AIFindDestinations
-----      ja empacotou Prone (e do qual ja descontou a mudanca do `dest_ap`) pagava a postura
-----      duas vezes, e o filtro cortava tiles que a unidade alcanca de sobra.
-----
-----   2. CHAVE DO CACHE DE LOS SEM POSTURA. `g_AIDestEnemyLOSCache` e chaveado pelo destino
-----      EMPACOTADO, entao consultar o `dest` cru mede a postura que ele por acaso tem. O
-----      MGSetup deita por definicao; a consulta tem que ser pela chave Prone, como na
-----      AIPolicyMGSetupPosScore e na AIPolicyThreatExposure.
-----
-----   3. `nil` TRATADO COMO "SEM LINHA". `not g_AIDestEnemyLOSCache[dest]` nao distingue
-----      "checado e nao tem linha" (false) de "nunca checado" (nil). Tile fora da batelada do
-----      AIUpdateDestLosCache era eliminado por falta de dado, nao por falta de linha.
----------------------------------------------------------------------------------------------------
+
 DefineClass.AIPolicyMGSetupAP = {
     __parents = {"AIPositioningPolicy"},
     __generated_by_class = "ClassDef",

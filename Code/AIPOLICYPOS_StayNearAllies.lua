@@ -1,26 +1,5 @@
 ---------------------------------------------------------------------------------------------------
 ---- AIPolicyStayNearAllies -- coesao de esquadrao: premia estar PERTO dos aliados.
-----
----- Por que nao usar AIPolicyProximity com Weight negativo:
-----   * o score dela e a distancia crua em tiles, ilimitada -- em mapa grande vira
-----     centenas de pontos e esmaga as policies normalizadas;
-----   * com Weight negativo o tile pode ficar com score total negativo, e
-----     AIFindOptimalLocation descarta tile com score <= 0, entao a policy passaria
-----     a APAGAR candidatos em vez de ordena-los;
-----   * o MinScore dela e um piso que zera o resultado, o que com peso negativo
-----     inverte o sentido do gate.
-----
----- Aqui a saida e 0..100, como toda policy bem comportada: 100 quando ja se esta
----- colado (<= MinDist), 0 a partir de MaxDist, linear no meio. O Weight vira o
----- unico botao, e a escala e comparavel a LosToEnemy, WeaponRange etc.
-----
----- Nao le dest_ap nem dest_target, entao e seguro em OptLocPolicies (esses campos
----- ainda nao existem quando AIFindOptimalLocation roda).
-----
----- Aviso de projeto: esta e uma policy QUALIFICANTE -- a unidade normalmente ja
----- esta perto de algum aliado, entao ela pontua alto tambem no tile atual. Use
----- peso de desempate (30-80), nao de pilar; peso alto aqui empurra a Best Pos para
----- cima da posicao atual.
 ---------------------------------------------------------------------------------------------------
 
 DefineClass.AIPolicyStayNearAllies = {
