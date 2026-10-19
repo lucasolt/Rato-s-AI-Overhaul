@@ -254,7 +254,7 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     ---- recebendo `unit[weapon.base_skill]` (a Marksmanship crua), porque a linha
     ---- `local base_mod = mod` do source -- que sombreava a variavel externa com a
     ---- CTH calculada -- desapareceu quando este bloco substituiu o do vanilla.
-    local first_cth
+    local first_cth, first_hits
 
     ---- BUGFIX (B21): balas por ataque. Uma rajada e UM ataque no laco abaixo, mas N
     ---- balas na resolucao -- ver RATOAI_BurstHits.
@@ -392,6 +392,9 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
         local expanded = RATOAI_BurstHits(eff_cth, burst_shots, recoil_cth, RATOAI_AimBonus(
                                               aim_cth_by_level, aim_i, unit, target, action, weapon),
                                           ratios or nil)
+        if i == 1 then
+            first_hits = expanded ---- before pellets: the shot floor counts bullets, not pellets
+        end
         if pellet_mul then
             expanded = MulDivRound(expanded, pellet_mul, 100)
         end
@@ -423,7 +426,7 @@ function RATOAI_ScoreAttacksDetailed(mod, target, target_dist, upos, tpos, uz, k
     target_los[target] = targets_attack_data and targets_attack_data[k] and
                              targets_attack_data[k].los
 
-    return mod, target_covers, target_los, first_cth
+    return mod, target_covers, target_los, first_cth, first_hits
 end
 
 function RATOAI_ScoreAttacks_Simple(hit_mod, target, target_dist, upos, tpos, uz, k, dist, ap,

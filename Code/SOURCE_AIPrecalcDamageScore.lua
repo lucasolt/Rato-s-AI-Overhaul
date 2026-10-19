@@ -398,7 +398,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                     ---- penalidades comparadas contra ela (recoil, hipfire, tiro
                     ---- localizado) sao todas por disparo. Somar N diluiria a razao
                     ---- pelo numero de ataques que cabem no AP.
-                    local shot_cth
+                    local shot_cth, first_hits
 
                     if CurrentModOptions.UseSimpleAttacksScoring then
                         ------ Old logic
@@ -408,7 +408,7 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                                                        targets_attack_data, target_covers,
                                                        target_los, attacker_pos)
                     else
-                        mod, target_covers, target_los, shot_cth =
+                        mod, target_covers, target_los, shot_cth, first_hits =
                             RATOAI_ScoreAttacksDetailed(mod, target, dist, upos, tpos, uz, k, ap,
                                                         context, action, weapon,
                                                         targets_attack_data, target_covers,
@@ -416,6 +416,8 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                     end
 
                     shot_cth = shot_cth or 0
+                    ---- a burst is gated on its expected hits, not its lead bullet (MG42 at night: 12% lead, 0.62 hits)
+                    local floor_cth = Max(shot_cth, first_hits or 0)
 
                     ---- DEBUG (D1)
                     if dbg_dest then
@@ -434,13 +436,13 @@ function AIPrecalcDamageScore(context, destinations, preferred_target, debug_dat
                         if not (mod > const.AIShootAboveCTH) then
                             row.reject = string.format("soma de CTH %d <= %d", mod,
                                                        const.AIShootAboveCTH)
-                        elseif shot_cth < min_shot_cth then
-                            row.reject = string.format("first-shot CTH %d < %d", shot_cth,
+                        elseif floor_cth < min_shot_cth then
+                            row.reject = string.format("first-attack CTH/hits %d < %d", floor_cth,
                                                        min_shot_cth)
                         end
                     end
 
-                    if mod > const.AIShootAboveCTH and shot_cth >= min_shot_cth then
+                    if mod > const.AIShootAboveCTH and floor_cth >= min_shot_cth then
                         ---- BUGFIX (B10): neste ponto `mod` ainda e a soma pura de CTH
                         ---- devolvida por RATOAI_ScoreAttacks*. Tudo abaixo mistura
                         ---- unidades diferentes no mesmo numero.

@@ -225,7 +225,8 @@ function OnMsg.ClassesGenerate(classdefs)
                 id = "MinShotCTH",
                 name = "Min First-Shot CTH",
                 help = "Firearm attacks whose FIRST shot is below this CTH are not taken; the " ..
-                    "unit repositions instead. Assault roles (Skirmisher) want this high so " ..
+                    "unit repositions instead. A burst passes if its expected hits x100 reach " ..
+                    "this value. Assault roles (Skirmisher) want this high so " ..
                     "they close in before shooting.\n-1 = const.RATOAI.MinShotCTH (global default).",
                 editor = "number",
                 default = -1,

@@ -50,7 +50,7 @@ const.RATOAI = const.RATOAI or {}
 -- const.AIShootAboveCTH = 0
 
 const.AIShootAboveCTH = 2 -- due to aCTH
----- first-shot CTH floor for firearm attacks; the sum gate above lets 3 shots at 1% through
+---- per-attack floor (single shot CTH, or a burst's expected hits x100); the sum gate above lets 3 shots at 1% through
 ---- (telemetry: 37% of AI attacks were under 10%, 0.10 hits each). Per-archetype: AIArchetype.MinShotCTH
 const.RATOAI.MinShotCTH = 10
 
