@@ -4,6 +4,19 @@ local function AddStartingPerk(class, perk_id)
     class.StartingPerks = starting_perks
 end
 
+local function ReplaceStartingPerk(class, old_id, new_id)
+    local starting_perks = table.copy(class.StartingPerks or {})
+    table.remove_value(starting_perks, old_id)
+    table.insert_unique(starting_perks, new_id)
+    class.StartingPerks = starting_perks
+end
+
+---- GBO3 split Beaten Zone (MG interrupt ladder + accuracy) out of Collateral Damage
+function RATOAI_GiveBeatenZone()
+    ReplaceStartingPerk(AdonisDedicatedGunner_Elite, "CollateralDamage", "BeatenZone")
+    ReplaceStartingPerk(SuperSoldier_EmplacementGunner, "CollateralDamage", "BeatenZone")
+end
+
 local stats = {
     "Health", "Agility", "Dexterity", "Strength", "Wisdom", "Leadership", "Marksmanship",
     "Mechanical", "Explosives", "Medical"
