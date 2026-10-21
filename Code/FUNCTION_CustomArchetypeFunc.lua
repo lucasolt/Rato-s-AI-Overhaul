@@ -16,7 +16,7 @@ local ROLE_ARGS = {
         dist = 8
     },
     Artillery = {
-        main_w_classes = {"Artillery", "GrenadeLauncher"},
+        main_w_classes = {"Mortar", "GrenadeLauncher"},
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
         close_archetype = "RATOAI_RetreatingMarksman",
         spent_archetype = "Soldier",
@@ -24,7 +24,7 @@ local ROLE_ARGS = {
         dist = 8
     },
     Rocketeer = {
-        main_w_classes = {"Artillery", "RocketLauncher"},
+        main_w_classes = {"Mortar", "RocketLauncher"},
         close_w_classes = {"SubmachineGun", "Revolver", "Pistol", "AssaultRifle"},
         close_archetype = "RATOAI_RetreatingMarksman",
         spent_archetype = "Soldier",

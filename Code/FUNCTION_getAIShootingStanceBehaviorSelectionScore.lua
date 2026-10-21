@@ -35,7 +35,7 @@ function getAIShootingStanceBehaviorSelectionScore(unit, proto_context)
         return 0
     end
 
-    if IsKindOfClasses(weapon, "RocketLauncher", "GrenadeLauncher", "Artillery") then
+    if IsKindOfClasses(weapon, "RocketLauncher", "GrenadeLauncher", "Mortar") then
         return 0
     end
 
