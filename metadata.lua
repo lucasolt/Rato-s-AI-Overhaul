@@ -83,6 +83,7 @@ return PlaceObj('ModDef', {
 		"Code/SOURCE_AITakeCover.lua",
 		"Code/SOURCE_AIPolicyIndoorsOutdoors_EvalDest.lua",
 		"Code/SOURCE_AIActionThrowGrenade_PrecalcAction.lua",
+		"Code/SOURCE_AIActionHeavyWeaponAttack_PrecalcAction.lua",
 		"Code/SOURCE_AIActionPinDown_PrecalcAction.lua",
 		"Code/SOURCE_AIActionMobileShot_PrecalcAction.lua",
 		"Code/SOURCE_AIScoreDest.lua",

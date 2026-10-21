@@ -1,11 +1,18 @@
-function AICalcAOETargetPoints(context, min_range, max_range, max_radius, pos_override)
+---- by_team: aim at enemies any teammate sees (indirect fire), not only the ones this unit sees
+function AICalcAOETargetPoints(context, min_range, max_range, max_radius, pos_override, by_team)
     local target_pts = {}
     local unit = context.unit
     local enemies = context.enemies
 
     -- add enemy positions
     for i, enemy in ipairs(enemies) do
-        if VisibilityCheckAll(unit, enemy, nil, const.uvVisible) then
+        local seen
+        if by_team then
+            seen = context.enemy_visible_by_team[enemy]
+        else
+            seen = VisibilityCheckAll(unit, enemy, nil, const.uvVisible)
+        end
+        if seen then
             target_pts[#target_pts + 1] = context.enemy_pos[enemy]
         end
     end

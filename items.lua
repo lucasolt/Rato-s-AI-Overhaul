@@ -233,6 +233,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIActionThrowGrenade_PrecalcAction.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIActionHeavyWeaponAttack_PrecalcAction",
+		'CodeFileName', "Code/SOURCE_AIActionHeavyWeaponAttack_PrecalcAction.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIActionPinDown_PrecalcAction",
 		'CodeFileName', "Code/SOURCE_AIActionPinDown_PrecalcAction.lua",
 	}),
