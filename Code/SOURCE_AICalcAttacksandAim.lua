@@ -144,7 +144,8 @@ local function RATOAI_RecoilAimSurcharge(context, stacks, level, action)
     if v <= 0 then
         return 0
     end
-    return cRoundDown(v * level) * const.Scale.AP
+    ---- GBO3 owns the rounding and the once-per-shot cycling discount; same call as the OnCalcAPCost
+    return Rat_RecoilAimSurcharge(context.unit, context.weapon, v, level)
 end
 
 ---- custo marginal de subir a mira de `from` para `from + 1`, com `stacks` de recoil
