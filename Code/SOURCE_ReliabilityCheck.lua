@@ -31,6 +31,5 @@ const.RATOAI = const.RATOAI or {}
 ----                   a entrada dele do `metadata.lua`
 ---------------------------------------------------------------------------------------------------
 
----- Atribuicao incondicional, e nao um `== nil`: o GBO3 ja definiu `WearAppliesToAI = false` como
----- default dele (carrega antes, por ser dependencia), entao um guard de nil aqui nunca dispararia.
+-- GBO3 leaves the flag unset (nil = off): mod code doesn't load in dependency order, so it can't own a default here.
 const.Weapons.WearAppliesToAI = const.RATOAI.AIWeaponJam and true or false
