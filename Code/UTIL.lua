@@ -181,14 +181,9 @@ function RATOAI_IsSpotDark(pos)
     return band(GetVoxelStealthParams(pos) or 0, const.vsFlagIlluminated) == 0
 end
 
----- same darkness term and night-vision reduction as Unit:GetSightRadius, applied to the no-target radius
+---- GBO's night base sight (Aware scaled by NightSightReduction, night vision included) as the no-target radius
 function RATOAI_DarkSightRadius(observer)
-    local mod = const.EnvEffects.DarknessSightMod or 0
-    if observer:HasNightVision() then
-        mod = MulDivRound(mod, CharacterEffectDefs.NightOps:ResolveValue(
-                              "night_vision_penalty_reduction"), 100)
-    end
-    return MulDivRound(observer:GetSightRadius(), Max(const.Combat.SightModMinValue, 100 + mod), 100)
+    return GBO_NightBaseSight(observer, nil, not observer:IsAware()) * const.SlabSizeX
 end
 
 function RATOAI_SightRadiusAt(observer, pos)
