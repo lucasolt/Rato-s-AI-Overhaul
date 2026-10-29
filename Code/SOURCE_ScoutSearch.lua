@@ -539,8 +539,11 @@ end
 ---------------------------------------------------------------------------------------------------
 local function ScoutNearVisibleEnemy(unit)
     local id = unit.current_archetype
-    if (id ~= "Scout_LastLocation" and id ~= "RATOAI_Scout_Hold") or not unit.ai_context or
-        unit:IsIncapacitated() then
+    if not RATOAI_IsScoutArchetype(id) or not unit.ai_context or unit:IsIncapacitated() then
+        return false
+    end
+    ---- a blind search this turn would be picked again anyway (SelectArchetype)
+    if g_Combat and unit.ratoai_blind_search_turn == g_Combat.current_turn then
         return false
     end
     local contact = const.RATOAI.ScoutContactTiles * const.SlabSizeX
@@ -560,7 +563,13 @@ function AIGetNextPhaseUnits(units, max)
                 printf("[RATOAI] %s: merc revealed mid-turn, re-picking archetype (was %s)",
                        tostring(unit.session_id), tostring(unit.current_archetype))
             end
+            ---- StartAI returns at once while ai_context is set (Unit.lua:8909)
+            local context = unit.ai_context
+            unit.ai_context = nil
             unit:StartAI()
+            if not unit.ai_context then
+                unit.ai_context = context
+            end
         end
     end
     return const.RATOAI.OrigAIGetNextPhaseUnits(units, max)
