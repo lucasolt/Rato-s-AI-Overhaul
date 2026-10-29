@@ -445,6 +445,68 @@ function RATOAI_IsScoutSeeker(unit)
     return true
 end
 
+---- forced states SelectArchetype picks before scouting; a blind search never replaces them
+local BlindSearchKeeps = {
+    Deserter = true,
+    Panicked = true,
+    Berserk = true,
+    EmplacementGunner = true,
+    PinnedDown = true,
+    Scout_LastLocation = true,
+    RATOAI_Scout_Hold = true
+}
+
+---------------------------------------------------------------------------------------------------
+---- BLIND UNIT, SEEING TEAM. The scout pick reads the team's view (GetVisibleEnemies), the engine's
+---- revert (CombatAI.lua:388) the unit's own: a Soldier with no shot that held its tile went Unaware
+---- while its team fought (night, I3). It re-thinks as a scout instead (SOURCE_AIPlayAttacks.lua).
+---------------------------------------------------------------------------------------------------
+function RATOAI_BlindSearchTarget(unit, context)
+    local best, best_dist
+    for _, enemy in ipairs(context.enemies or empty_table) do
+        if IsValidTarget(enemy) and context.enemy_visible_by_team and context.enemy_visible_by_team[enemy] then
+            local d = unit:GetDist(enemy)
+            if not best or d < best_dist then
+                best, best_dist = enemy:GetPos(), d
+            end
+        end
+    end
+    return best or RATOAI_PickRememberedScoutPos(unit) or unit.last_known_enemy_pos or nil
+end
+
+function RATOAI_IsScoutArchetype(id)
+    return id == "Scout_LastLocation" or id == "RATOAI_Scout_Hold"
+end
+
+---------------------------------------------------------------------------------------------------
+---- BLIND COMBAT END. Vanilla ends combat after 3 rounds where nobody sees anybody and makes every
+---- aware enemy Unaware (Combat.lua:541), cutting the scouts off mid-search. Combat stays on while an
+---- aware enemy is left to search, up to BlindSearchMaxRounds blind rounds, then reverts as vanilla.
+---- Chains with GBO3's FIX_NoVisibilityReload in either load order.
+---------------------------------------------------------------------------------------------------
+local function EnemyCanSearch()
+    local pov = GetPoVTeam()
+    for _, team in ipairs(g_Teams) do
+        if pov and team ~= pov and not team.player_team and team:IsEnemySide(pov) then
+            for _, u in ipairs(team.units) do
+                if not u:IsDead() and not u:IsIncapacitated() and u:IsAware() then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local RATOAI_ShouldEndDueToNoVisibility_orig = Combat.ShouldEndDueToNoVisibility
+function Combat:ShouldEndDueToNoVisibility()
+    if not RATOAI_ShouldEndDueToNoVisibility_orig(self) then
+        return false
+    end
+    local rounds = self.turns_no_visibility / Max(1, #g_Teams)
+    return rounds >= const.RATOAI.BlindSearchMaxRounds or not EnemyCanSearch()
+end
+
 ---- on UnitProperties: mod code loads before ClassesBuilt, so Unit hasn't inherited it yet
 local RATOAI_SelectArchetype_orig = UnitProperties.SelectArchetype
 function UnitProperties:SelectArchetype(proto_context)
@@ -457,6 +519,11 @@ function UnitProperties:SelectArchetype(proto_context)
         end
     end
     RATOAI_SelectArchetype_orig(self, proto_context)
+    if IsKindOf(self, "Unit") and self.last_known_enemy_pos and g_Combat and
+        self.ratoai_blind_search_turn == g_Combat.current_turn and
+        not BlindSearchKeeps[self.current_archetype or false] then
+        self.current_archetype = "Scout_LastLocation"
+    end
     if self.current_archetype == "Scout_LastLocation" and Archetypes.RATOAI_Scout_Hold and
         not RATOAI_IsScoutSeeker(self) then
         self.current_archetype = "RATOAI_Scout_Hold"

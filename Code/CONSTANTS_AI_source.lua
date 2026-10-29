@@ -589,6 +589,8 @@ const.RATOAI.ScoutApproxMinTiles = 30 ---- closer than this, the spot uses the n
 const.RATOAI.ScoutApproxRadiusTiles = 5 ---- far: the spot lands anywhere this close to the merc, on his floor
 const.RATOAI.ScoutApproxNearRadiusTiles = 8 ---- near: wider, so the pull isn't a wallhack
 const.RATOAI.ScoutApproxTries = 12 ---- random tiles tested for being out of the team's view
+---- blind rounds (nobody sees anybody) before combat ends and the enemy reverts to Unaware; vanilla is 3
+const.RATOAI.BlindSearchMaxRounds = 6
 
 
 ---------------------------------------------------------------------------------------------------

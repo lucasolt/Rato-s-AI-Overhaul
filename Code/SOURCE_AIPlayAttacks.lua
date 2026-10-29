@@ -48,10 +48,48 @@ local function RATOAI_LeftoverOverwatch(unit, context)
     end
 end
 
+---- The engine queued this unit for Unaware (CombatAI.lua:388). With something to look for it holds,
+---- and once per turn re-thinks as a scout; only the blind combat end reverts it then.
+local function RATOAI_BlindInsteadOfRevert(unit, context)
+    if not g_Combat or not table.find(g_UnawareQueue, unit) then
+        return
+    end
+    local target = RATOAI_BlindSearchTarget(unit, context)
+    if not target then
+        return
+    end
+    table.remove_value(g_UnawareQueue, unit)
+    local turn = g_Combat.current_turn
+    if RATOAI_IsScoutArchetype(context.archetype and context.archetype.id) or
+        unit.ratoai_blind_search_turn == turn or unit.ActionPoints < 2 * const.Scale.AP then
+        return
+    end
+    unit.ratoai_blind_search_turn = turn
+    unit.last_known_enemy_pos = target
+    unit.ai_context = nil
+    unit:StartAI()
+    if not unit.ai_context then
+        unit.ai_context = context
+        return
+    end
+    if RATOAI_Debug then
+        printf("[RATOAI] %s: blind, searching as %s instead of reverting", tostring(unit.session_id),
+               tostring(unit.current_archetype))
+    end
+    return "restart"
+end
+
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
     local status = RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     if not status and not IsSetpiecePlaying() then
+        local ok, res = pcall(RATOAI_BlindInsteadOfRevert, unit, context)
+        if not ok then
+            print("[RATOAI] RATOAI_BlindInsteadOfRevert failed --", res)
+        elseif res then
+            context.AIisPlayingAttacks = false
+            return res
+        end
         local ok, err = pcall(RATOAI_FireTailBurst, unit, context, force_or_skip_action)
         if not ok then
             print("[RATOAI] RATOAI_FireTailBurst failed --", err)
