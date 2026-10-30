@@ -282,7 +282,8 @@ local function build_hazards(context)
     ---- Quem tem o perk atravessa cone de graca e nao deve pagar vies nenhum.
     ---------------------------------------------------------------------------------------------
     local ow = {}
-    if not HasPerk(unit, "LightStep") then
+    ---- animals don't understand overwatch cones
+    if unit.species == "Human" and not HasPerk(unit, "LightStep") then
         local vis_mode = const.RATOAI.PathOverwatchVisibility
         for _, enemy in ipairs(context.enemies or empty_table) do
             local data = g_Overwatch[enemy]
