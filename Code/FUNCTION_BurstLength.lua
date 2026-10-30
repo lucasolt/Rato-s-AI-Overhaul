@@ -9,7 +9,6 @@
 ----   close    -> the cone ladder stays high, so extra rounds keep paying;
 ----   far      -> late rounds fall to the ladder floor and stop clearing BurstMarginalHits.
 ---- SuppressiveFire starts at SuppressMinShots: the minimum that still suppresses.
----- AutoFire starts at AILongShots: below that it is the default attack's short autofire.
 ---------------------------------------------------------------------------------------------------
 const.RATOAI = const.RATOAI or {}
 
@@ -86,13 +85,8 @@ local function TurnHits(context, view, upos, target, attacker_pos, sustained)
 end
 
 local function Choose(signature, context, weapon, id, upos, target, ap)
-    local lo = const.RATOAI.BurstMinShots
-    if signature.BiasId == "SuppressiveFire" then
-        lo = const.Combat.Autofire.SuppressMinShots
-    elseif id == "AutoFire" then
-        ---- the default attack is already the short autofire; the signature is the long burst
-        lo = Max(lo, const.Combat.Autofire.AILongShots)
-    end
+    local lo = signature.BiasId == "SuppressiveFire" and const.Combat.Autofire.SuppressMinShots or
+                   const.RATOAI.BurstMinShots
     local ammo = weapon.ammo and weapon.ammo.Amount or 0
     local hi = Min(Max(const.RATOAI.BurstMaxShots, weapon:GetAutofireShots(CombatActions[id]) or 0),
                    ammo)
