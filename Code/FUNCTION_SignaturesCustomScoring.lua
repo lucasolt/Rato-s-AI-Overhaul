@@ -131,8 +131,9 @@ local function ExpectedWeight(self, context, weight, upos, action, target, attac
         return weight, false
     end
 
-    local _, has_ap = AIGetAttackArgs(context, action, body_part or "Torso", self.Aiming or "None",
-                                      target)
+    local planned = RATOAI_SignatureAimPlan(context, action, upos, target, attacker_pos, body_part)
+    local _, has_ap = AIGetAttackArgs(context, action, body_part or "Torso",
+                                      planned or self.Aiming or "None", target)
     if not has_ap then
         return 0, true
     end

@@ -164,7 +164,9 @@ function RATOAI_SustainFiringMode(action, context)
         context.burst_shots = Max(1, context.weapon:GetAutofireShots(caction) or 1)
     end
 
-    context.__ratoai_aim_force = nil
+    ---- the rest of the string keeps the signature's planned aim, when it differs from the heuristic
+    local level, forced = RATOAI_SignatureAimPlanned(context, caction, "Torso")
+    context.__ratoai_aim_force = forced and level or nil
     context.__ratoai_aim_plan = nil
 
     if RATOAI_Debug then
@@ -225,7 +227,11 @@ function AIActionSingleTargetShot:PrecalcAction(context, action_state)
         targeting = pick and pick.id or nil
     end
 
-    local args, has_ap = AIGetAttackArgs(context, action, targeting or "Torso", self.Aiming)
+    ---- the aim the score assumed; the static Aiming param is only the fallback when no plan exists
+    local ux, uy, uz = stance_pos_unpack(upos)
+    local attacker_pos = point(ux, uy, uz)
+    local planned = RATOAI_SignatureAimPlan(context, action, upos, target, attacker_pos, targeting)
+    local args, has_ap = AIGetAttackArgs(context, action, targeting or "Torso", planned or self.Aiming)
     args.num_shots = action.rat_num_shots
     action_state.args = args
     action_state.has_ap = has_ap

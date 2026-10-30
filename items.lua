@@ -2153,6 +2153,9 @@ return {
 				'BiasId', "Autofire",
 				'Weight', 200,
 				'NotificationText', "",
+				'CustomScoring', function (self, context)
+					return AutoFire_CustomScoring(self, context)
+				end,
 				'action_id', "AutoFire",
 				'AttackTargeting', set( "Torso" ),
 			}),
@@ -2162,7 +2165,7 @@ return {
 			}),
 		},
 		group = "Default",
-		id = "Beserk",
+		id = "Berserk",
 	}),
 	PlaceObj('ModItemAIArchetype', {
 		BaseMovementWeight = 10,

@@ -393,7 +393,7 @@ function AICalcAttacksAndAim(context, ap, target_dist, action_override, cost_ove
     ---- MESMO ataque, nao acoes diferentes.
     ---------------------------------------------------------------------------------------
     local aim_force = context.__ratoai_aim_force
-    if aim_force and action == context.default_attack then
+    if aim_force and (action == context.default_attack or RATOAI_IsAimForceAction(context, action)) then
         desired_aim_level = Clamp(aim_force, min_aim, max_aim)
     end
     ---- PERF (C11.2): removido `local aims = {}` morto aqui -- era redeclarado

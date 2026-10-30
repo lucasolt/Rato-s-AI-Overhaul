@@ -59,7 +59,8 @@ function AIGetAttackArgs(context, action, target_spot_group, aim_type, override_
     local unit_pos = dest_pos or context.unit:GetPos()
 
     ------------------
-    if unit_pos and target then
+    ---- a number is a planned aim level (RATOAI_SignatureAimPlan), kept as is at point blank
+    if unit_pos and target and type(aim_type) ~= "number" then
         local dist = unit_pos:Dist(target)
         if dist <= const.Weapons.PointBlankRange * const.SlabSizeX then
             aim_type = aim_type ~= "None" and "Remaining AP" or aim_type
@@ -77,6 +78,8 @@ function AIGetAttackArgs(context, action, target_spot_group, aim_type, override_
     elseif action.id == "PinDown" then
         args.aim = max_aim
         -----
+    elseif type(aim_type) == "number" then
+        args.aim = Clamp(aim_type, min_aim, max_aim)
     elseif aim_type ~= "None" then
         -- args.aim = context.weapon.MaxAimActions
         ---------

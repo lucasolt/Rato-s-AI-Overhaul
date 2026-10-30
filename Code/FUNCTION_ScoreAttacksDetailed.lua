@@ -629,7 +629,8 @@ RATOAI_LastExpected = {}
 local function RATOAI_ExpectedKey(context, action, body_part, ap)
     ---- rat_num_shots: GBO3's long AutoFire view shares the id with the short default autofire
     return tostring(action and action.id) .. "#" .. tostring(action and action.rat_num_shots) ..
-               "@" .. tostring(context.__ratoai_aim_force) .. "@" ..
+               "@" .. tostring(context.__ratoai_aim_force) ..
+               (RATOAI_IsAimForceAction(context, action) and "!sig" or "") .. "@" ..
                tostring(body_part or "Torso") .. "@" .. tostring(ap) .. "@" ..
                tostring(context.__ratoai_stance_paid) .. "@" ..
                tostring(RATOAI_FullGeometry(context)) .. ---- a planning-geometry entry is stale at the shot
@@ -1044,6 +1045,88 @@ function RATOAI_EnsureAimPlan(context, upos, target, attacker_pos)
     return best_level
 end
 
+---- Attack views are rebuilt per call, so match by id and length instead of identity.
+function RATOAI_IsAimForceAction(context, action)
+    local f = context.__ratoai_aim_force_action
+    return f and action and f.id == action.id and f.rat_num_shots == action.rat_num_shots
+end
+
+local function RATOAI_SigPlanKey(action, body_part)
+    return tostring(action.id) .. "#" .. tostring(action.rat_num_shots) .. "@" ..
+               tostring(body_part or "Torso")
+end
+
+---- Same replan as RATOAI_EnsureAimPlan, for a signature attack. Returns its first-shot aim level and
+---- whether that level differs from the distance heuristic (and so must be forced to be honored).
+function RATOAI_SignatureAimPlan(context, action, upos, target, attacker_pos, body_part)
+    if not (action and upos and target) or action == context.default_attack then
+        return
+    end
+    local plans = context.__ratoai_sig_aim_plans
+    if not plans or plans.upos ~= upos or plans.target ~= target then
+        plans = {upos = upos, target = target}
+        context.__ratoai_sig_aim_plans = plans
+    end
+    local key = RATOAI_SigPlanKey(action, body_part)
+    local plan = plans[key]
+    if plan then
+        return plan.level, plan.forced
+    end
+
+    plan = {}
+    plans[key] = plan
+    local base_hits, _, heur_level = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos,
+                                                        body_part)
+    if not (base_hits and heur_level) then
+        return
+    end
+
+    local margem = const.RATOAI.AimReplanThreshold or 15
+    local best_level, best_hits = heur_level, base_hits
+    local prev_force, prev_action = context.__ratoai_aim_force, context.__ratoai_aim_force_action
+    context.__ratoai_aim_force_action = action
+    for lvl = 0, 3 do
+        context.__ratoai_aim_force = lvl
+        local h, _, real_lvl = RATOAI_ExpectedFor(context, action, upos, target, attacker_pos,
+                                                  body_part)
+        if h and real_lvl then
+            local alvo_hits =
+                (real_lvl < heur_level) and MulDivRound(base_hits, 100 + margem, 100) or base_hits
+            if h > alvo_hits and h > best_hits then
+                best_level, best_hits = real_lvl, h
+            end
+        end
+    end
+    context.__ratoai_aim_force, context.__ratoai_aim_force_action = prev_force, prev_action
+
+    plan.level, plan.forced = best_level, best_level ~= heur_level
+    return plan.level, plan.forced
+end
+
+---- The plan already made for `action` at the current plan position; never computes.
+function RATOAI_SignatureAimPlanned(context, action, body_part)
+    local plans = context.__ratoai_sig_aim_plans
+    local plan = plans and action and plans[RATOAI_SigPlanKey(action, body_part)]
+    if plan then
+        return plan.level, plan.forced
+    end
+end
+
+---- RATOAI_ExpectedFor of a signature attack at its planned aim.
+function RATOAI_ExpectedForPlanned(context, action, upos, target, attacker_pos, body_part, ap_override)
+    local level, forced = RATOAI_SignatureAimPlan(context, action, upos, target, attacker_pos,
+                                                  body_part)
+    if not forced then
+        return RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part, ap_override)
+    end
+    local prev_force, prev_action = context.__ratoai_aim_force, context.__ratoai_aim_force_action
+    context.__ratoai_aim_force, context.__ratoai_aim_force_action = level, action
+    local r = table.pack(RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part,
+                                            ap_override))
+    context.__ratoai_aim_force, context.__ratoai_aim_force_action = prev_force, prev_action
+    return table.unpack(r, 1, r.n)
+end
+
 ---------------------------------------------------------------------------------------------------
 ---- A RAZAO, EM UM LUGAR SO
 ----
@@ -1152,7 +1235,7 @@ function RATOAI_ExpectedRatio(context, action, upos, target, attacker_pos, body_
         return ---- sem denominador nenhum: quem chamou volta ao caminho antigo
     end
     local hits, act_atks, _, act_stance, ap_left, hits_first =
-        RATOAI_ExpectedFor(context, action, upos, target, attacker_pos, body_part)
+        RATOAI_ExpectedForPlanned(context, action, upos, target, attacker_pos, body_part)
     if not hits then
         return
     end
