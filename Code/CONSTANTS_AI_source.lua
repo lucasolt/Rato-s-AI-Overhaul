@@ -541,6 +541,7 @@ const.RATOAI.ThreatMemoryPct = 85
 const.RATOAI.ThreatMemoryTurns = 2
 const.RATOAI.MemoryMoveSampleMs = 150 ---- how often a moving merc is checked against what each AI team sees
 const.RATOAI.MemoryProjectTiles = 3 ---- a lost merc whose last tile is in view is believed this far along his heading, at most
+const.RATOAI.MemoryHeardPreCombatMs = 5000 ---- a shot heard this long before CombatStart survives the new-combat memory wipe
 
 ---- lost enemies placed at the suspected spot, at this % of a seen enemy's threat
 const.RATOAI.ThreatSuspectPct = 70

@@ -441,11 +441,22 @@ function RATOAI_ForgetSeenPositions()
     RATOAI_LastSeen = {}
 end
 
+---- shots heard out of combat, {side, shooter, ppos, time}: the shot that opens a fight lands before the wipe
+local RATOAI_HeardPreCombat = {}
+
 ---- `dynamic_data` so vem preenchido quando o CombatStart e o de um save carregado (Combat.lua:313).
 function OnMsg.CombatStart(dynamic_data)
     if not dynamic_data then
         RATOAI_ForgetSeenPositions()
+        local turn = g_Combat and g_Combat.current_turn or 0
+        for _, h in ipairs(RATOAI_HeardPreCombat) do
+            if IsValid(h.shooter) and GameTime() - h.time <= const.RATOAI.MemoryHeardPreCombatMs then
+                RATOAI_LastSeen[h.side] = RATOAI_LastSeen[h.side] or {}
+                RATOAI_LastSeen[h.side][h.shooter] = {pos = h.ppos, turn = turn}
+            end
+        end
     end
+    table.iclear(RATOAI_HeardPreCombat)
 end
 OnMsg.CombatEnd = RATOAI_ForgetSeenPositions
 
@@ -503,6 +514,52 @@ function OnMsg.VisibilityUpdate()
                     end
                 end
             end
+        end
+    end
+end
+
+---------------------------------------------------------------------------------------------------
+---- HEARD SHOTS. Vanilla's gunshot noise (UnitActions.lua:369) sets last_known_enemy_pos only through
+---- SetPendingAwareState, which returns early for an Aware unit: once a fight starts, shots told the
+---- AI nothing. Same radius and Distracted rule as PushUnitAlert, so a suppressor still keeps the shooter.
+---------------------------------------------------------------------------------------------------
+local function HeardBy(team, shooter, radius)
+    for _, unit in ipairs(team.units) do
+        if unit ~= shooter and not unit:IsDead() and unit:IsValidPos() and IsCloser(unit, shooter, radius + 1) and
+            (not unit:HasStatusEffect("Distracted") or IsCloser(unit, shooter, MulDivRound(radius, 66, 100) + 1)) then
+            return true
+        end
+    end
+    return false
+end
+
+function OnMsg.OnAttack(shooter, action, target, results, attack_args)
+    local weapon = results and results.weapon or attack_args and attack_args.weapon
+    if not IsKindOf(shooter, "Unit") or not shooter.team or not shooter:IsValidPos() or
+        not IsKindOf(weapon, "Firearm") then
+        return
+    end
+    local radius = weapon.Noise or 0
+    if GameState.RainLight or GameState.RainHeavy then
+        radius = MulDivRound(radius, Max(0, 100 + const.EnvEffects.RainNoiseMod), 100)
+    end
+    if radius <= 0 then
+        return
+    end
+    radius = radius * const.SlabSizeX
+    local ppos = GetPackedPosAndStance(shooter)
+    local heard = RATOAI_HeardPreCombat
+    while heard[1] and GameTime() - heard[1].time > const.RATOAI.MemoryHeardPreCombatMs do
+        table.remove(heard, 1)
+    end
+    for _, team in ipairs(g_Teams or empty_table) do
+        if not team.player_team and team.side ~= "neutral" and team ~= shooter.team and
+            team:IsEnemySide(shooter.team) and HeardBy(team, shooter, radius) then
+            if g_Combat then
+                Remember(TeamMemory(team), shooter, ppos, g_Combat.current_turn or 0)
+            end
+            ---- also kept when g_Combat already exists: its CombatStart wipe may still be ahead
+            heard[#heard + 1] = {side = team.side, shooter = shooter, ppos = ppos, time = GameTime()}
         end
     end
 end
