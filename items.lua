@@ -229,6 +229,10 @@ return {
 		'CodeFileName', "Code/SOURCE_AIPolicyIndoorsOutdoors_EvalDest.lua",
 	}),
 	PlaceObj('ModItemCode', {
+		'name', "SOURCE_AIPolicyLosToEnemy",
+		'CodeFileName', "Code/SOURCE_AIPolicyLosToEnemy.lua",
+	}),
+	PlaceObj('ModItemCode', {
 		'name', "SOURCE_AIActionThrowGrenade_PrecalcAction",
 		'CodeFileName', "Code/SOURCE_AIActionThrowGrenade_PrecalcAction.lua",
 	}),

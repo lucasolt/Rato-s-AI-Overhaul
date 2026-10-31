@@ -203,6 +203,22 @@ function RATOAI_DarkDestCache(context)
     return cache
 end
 
+---- GBO's AI flashlight lights the wielder after any shot (shooting stance, or left on by hip fire)
+function RATOAI_SelfLitAt(context, dest)
+    local lit = context.__ratoai_self_lit
+    if lit == nil then
+        local unit = context.unit
+        lit = (GameState.Night or GameState.Underground) and Rat_FlashlightWeapon(unit) and
+                  (Rat_FlashlightLeftOn(unit) and "always" or "attack") or false
+        context.__ratoai_self_lit = lit
+    end
+    if lit == "always" then
+        return true
+    end
+    return lit == "attack" and dest and context.dest_target and context.dest_target[dest] and true or
+               false
+end
+
 ---- batched CheckLOS runs at the daylight radius; this drops a hit on a dark spot beyond night range
 function RATOAI_SeenInDark(from, spot, dark_r, dark_cache)
     local dark = dark_cache and dark_cache[spot]

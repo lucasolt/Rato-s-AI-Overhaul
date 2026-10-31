@@ -985,7 +985,8 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
                 local dark = RATOAI_DarkDestCache(context)
                 for i = 1, #dests do
                     per[dests[i]] = not not (data and data[i]) and
-                                        RATOAI_SeenInDark(ppos, dests[i], dark_r, dark)
+                                        (RATOAI_SelfLitAt(context, dests[i]) or
+                                            RATOAI_SeenInDark(ppos, dests[i], dark_r, dark))
                 end
             end
         end
@@ -1005,7 +1006,9 @@ function RATOAI_ThreatEnemyLOS(context, enemy, dest, ppos_override, key)
     if not ppos then
         return nil
     end
-    local _, data = CheckLOS({ppos}, {dest}, RATOAI_SightRadiusAt(enemy, dest))
+    local radius = RATOAI_SelfLitAt(context, dest) and enemy:GetSightRadius() or
+                       RATOAI_SightRadiusAt(enemy, dest)
+    local _, data = CheckLOS({ppos}, {dest}, radius)
     hit = not not (data and data[1])
     per[dest] = hit
     return hit
@@ -1104,7 +1107,8 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
                 if data then
                     local dark = RATOAI_DarkDestCache(context)
                     for i = 1, #blind do
-                        if data[i] and RATOAI_SeenInDark(from, blind[i], rec.dark_r, dark) then
+                        if data[i] and (RATOAI_SelfLitAt(context, blind[i]) or
+                            RATOAI_SeenInDark(from, blind[i], rec.dark_r, dark)) then
                             rec.votes[blind[i]] = rec.votes[blind[i]] + 1
                         end
                     end
@@ -1124,7 +1128,8 @@ function RATOAI_ThreatLOSSteps(context, enemy, dest, ppos_override, dirs, key)
         if IsValidPos(tgt) then
             for _, from in ipairs(rec.probes) do
                 local _, data = CheckLOS({tgt}, {from}, rec.radius)
-                if data and data[1] and RATOAI_SeenInDark(from, dest, rec.dark_r) then
+                if data and data[1] and
+                    (RATOAI_SelfLitAt(context, dest) or RATOAI_SeenInDark(from, dest, rec.dark_r)) then
                     votes = votes + 1
                 end
             end
