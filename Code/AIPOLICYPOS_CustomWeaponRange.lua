@@ -288,6 +288,34 @@ function AIPolicyCustomWeaponRange:EnemyWeight(dist, weight_ref)
     return w
 end
 
+---- night sight toward an unlit enemy, false when lit or by day; memoized per context like the band
+function AIPolicyCustomWeaponRange:DarkCap(context, enemy)
+    local caps = context.__ratoai_wr_dark
+    if not caps then
+        caps = {}
+        context.__ratoai_wr_dark = caps
+    end
+    local cap = caps[enemy]
+    if cap == nil then
+        cap = (GameState.Night or GameState.Underground) and not IsIlluminated(enemy) and
+                  RATOAI_DarkSightRadius(context.unit) or false
+        caps[enemy] = cap
+    end
+    return cap
+end
+
+---- past night sight the enemy can't be shot at all, so the band and its far falloff stop at the cap
+function AIPolicyCustomWeaponRange:EnemyScore(dist, rmin, rmax, falloff, cap)
+    if cap then
+        if dist > cap then
+            return 0
+        end
+        rmax = Min(rmax, cap)
+        rmin = Min(rmin, rmax)
+    end
+    return self:BandScore(dist, rmin, rmax, falloff)
+end
+
 function AIPolicyCustomWeaponRange:IsVisible(context, enemy)
     if self.visibility_mode == "self" then
         return context.enemy_visible[enemy]
@@ -333,7 +361,8 @@ function AIPolicyCustomWeaponRange:EvalDest(context, dest, grid_voxel)
         if IsValid(target) and not target:IsIncapacitated() then
             local tpos = RATOAI_ValidatePosZ(target:GetPos())
             if IsValidPos(tpos) then
-                return self:BandScore(self_pos:Dist(tpos), rmin, rmax, falloff)
+                return self:EnemyScore(self_pos:Dist(tpos), rmin, rmax, falloff,
+                    self:DarkCap(context, target))
             end
         end
     end
@@ -353,9 +382,12 @@ function AIPolicyCustomWeaponRange:EvalDest(context, dest, grid_voxel)
             local epos = RATOAI_ValidatePosZ(enemy:GetPos())
             if IsValidPos(epos) then
                 local dist = self_pos:Dist(epos)
-                local w = self:EnemyWeight(dist, weight_ref)
+                local cap = self:DarkCap(context, enemy)
+                ---- weight must reach 0 where the score does, so an unseen dark enemy doesn't drag the mean
+                local ref = cap and Min(weight_ref, cap + const.SlabSizeX) or weight_ref
+                local w = self:EnemyWeight(dist, ref)
                 if w > 0 then
-                    total = total + self:BandScore(dist, rmin, rmax, falloff) * w
+                    total = total + self:EnemyScore(dist, rmin, rmax, falloff, cap) * w
                     total_weight = total_weight + w
                 end
             end
