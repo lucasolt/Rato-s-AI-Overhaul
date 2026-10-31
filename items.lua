@@ -1627,6 +1627,9 @@ return {
 				'MinDist', 6000,
 				'AllowedAoeTypes', set( "fire", "none", "teargas", "toxicgas" ),
 			}),
+			PlaceObj('AIActionOverwatchSuspect', {
+				'Weight', 50,
+			}),
 		},
 		TargetScoreRandomization = 10,
 		group = "RatoAI",
