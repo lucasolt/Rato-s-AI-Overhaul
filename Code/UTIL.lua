@@ -523,14 +523,35 @@ end
 ---- SetPendingAwareState, which returns early for an Aware unit: once a fight starts, shots told the
 ---- AI nothing. Same radius and Distracted rule as PushUnitAlert, so a suppressor still keeps the shooter.
 ---------------------------------------------------------------------------------------------------
+---- distance from the shooter to the team's nearest listener, nil when nobody hears it
 local function HeardBy(team, shooter, radius)
+    local best
     for _, unit in ipairs(team.units) do
         if unit ~= shooter and not unit:IsDead() and unit:IsValidPos() and IsCloser(unit, shooter, radius + 1) and
             (not unit:HasStatusEffect("Distracted") or IsCloser(unit, shooter, MulDivRound(radius, 66, 100) + 1)) then
-            return true
+            local d = unit:GetDist(shooter)
+            best = (not best or d < best) and d or best
         end
     end
-    return false
+    return best
+end
+
+---- sound gives an area, not a tile: a random passable spot within MemoryHeardBlurPct of the listener's distance
+local function BlurHeard(shooter, dist)
+    local err = MulDivRound(dist, const.RATOAI.MemoryHeardBlurPct, 100)
+    if err < const.SlabSizeX then
+        return GetPackedPosAndStance(shooter)
+    end
+    local angle = InteractionRand(360 * 60, "RATOAI_HeardBlur", shooter)
+    local r = InteractionRand(err + 1, "RATOAI_HeardBlur", shooter)
+    ---- an impassable tile (wall, water) is retried a quarter turn on before giving up the blur
+    for i = 0, 3 do
+        local slab = SnapToPassSlab(RotateRadius(r, angle + i * 90 * 60, shooter:GetPos()):SetTerrainZ())
+        if slab then
+            return stance_pos_pack(slab, StancesList[shooter.stance])
+        end
+    end
+    return GetPackedPosAndStance(shooter)
 end
 
 function OnMsg.OnAttack(shooter, action, target, results, attack_args)
@@ -547,16 +568,28 @@ function OnMsg.OnAttack(shooter, action, target, results, attack_args)
         return
     end
     radius = radius * const.SlabSizeX
-    local ppos = GetPackedPosAndStance(shooter)
     local heard = RATOAI_HeardPreCombat
     while heard[1] and GameTime() - heard[1].time > const.RATOAI.MemoryHeardPreCombatMs do
         table.remove(heard, 1)
     end
     for _, team in ipairs(g_Teams or empty_table) do
-        if not team.player_team and team.side ~= "neutral" and team ~= shooter.team and
-            team:IsEnemySide(shooter.team) and HeardBy(team, shooter, radius) then
+        local dist = not team.player_team and team.side ~= "neutral" and team ~= shooter.team and
+                         team:IsEnemySide(shooter.team) and HeardBy(team, shooter, radius)
+        ---- a team that sees him already has the exact tile from VisibilityUpdate
+        local vis = g_Visibility and g_Visibility[team]
+        if dist and not (vis and (vis[shooter] or 0) >= const.uvVisible) then
+            local ppos = BlurHeard(shooter, dist)
             if g_Combat then
-                Remember(TeamMemory(team), shooter, ppos, g_Combat.current_turn or 0)
+                local mem, turn = TeamMemory(team), g_Combat.current_turn or 0
+                local rec = mem[shooter]
+                ---- a sighting this turn that the sound agrees with is sharper than the blur
+                local keep = rec and rec.turn == turn and rec.pos and
+                                 IsCloser(shooter, RATOAI_UnpackPos(rec.pos),
+                                     MulDivRound(dist, const.RATOAI.MemoryHeardBlurPct, 100) + 1)
+                if not keep then
+                    ---- no heading: a blurred spot minus the last seen one is not a direction he walked
+                    mem[shooter] = {pos = ppos, turn = turn}
+                end
             end
             ---- also kept when g_Combat already exists: its CombatStart wipe may still be ahead
             heard[#heard + 1] = {side = team.side, shooter = shooter, ppos = ppos, time = GameTime()}
