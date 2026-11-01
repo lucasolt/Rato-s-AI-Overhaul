@@ -91,6 +91,10 @@ local function RATOAI_LeftoverShot(unit, context, ap_before, planned)
     if not action or not IsKindOf(weapon, "Firearm") or IsKindOf(weapon, "HeavyWeapon") then
         return
     end
+    ---- bolt/lever/DASA: the shot leaves a cycling debt that the next turn pays
+    if rat_canBolt(weapon) then
+        return
+    end
     local function usable(t)
         return IsValidTarget(t) and not (IsKindOf(t, "Unit") and t:IsIncapacitated()) and
                    HasVisibilityTo(unit, t)
