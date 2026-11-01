@@ -79,8 +79,70 @@ local function RATOAI_BlindInsteadOfRevert(unit, context)
     return "restart"
 end
 
+---- Attack phase spent no AP but a hipfire fits (Stormer 517, H8 night: 30 AP idle beside a 97% target).
+local function RATOAI_LeftoverShot(unit, context, ap_before, planned)
+    if not const.RATOAI.LeftoverShot or not IsValid(unit) or unit:IsDead() or context.reposition then
+        return
+    end
+    if unit.ActionPoints < ap_before or unit:HasPreparedAttack() then
+        return
+    end
+    local action, weapon = context.default_attack, context.weapon
+    if not action or not IsKindOf(weapon, "Firearm") or IsKindOf(weapon, "HeavyWeapon") then
+        return
+    end
+    local function usable(t)
+        return IsValidTarget(t) and not (IsKindOf(t, "Unit") and t:IsIncapacitated()) and
+                   HasVisibilityTo(unit, t)
+    end
+    local target = usable(planned) and planned
+    if not target then
+        local best
+        for _, enemy in ipairs(context.enemies or empty_table) do
+            if usable(enemy) then
+                local d = unit:GetDist(enemy)
+                if not best or d < best then
+                    target, best = enemy, d
+                end
+            end
+        end
+    end
+    local tag = tostring(unit.session_id)
+    if not target then
+        if RATOAI_Debug and IsValid(planned) then
+            printf("[RATOAI] %s: leftover shot skipped, planned target %s not visible (%d AP)", tag,
+                   tostring(planned.session_id), unit.ActionPoints)
+        end
+        return
+    end
+    local args, has_ap = AIGetAttackArgs(context, action, "Torso", "None", target)
+    args.num_shots = action.rat_num_shots
+    if not has_ap then
+        if RATOAI_Debug then
+            printf("[RATOAI] %s: leftover shot skipped, %s costs %d, has %d AP", tag,
+                   tostring(action.id), action:GetAPCost(unit, args), unit.ActionPoints)
+        end
+        return
+    end
+    local cth_args = table.copy(args)
+    cth_args.prediction = true
+    cth_args.rat_full = true
+    local ok, cth = pcall(unit.CalcChanceToHit, unit, target, action, cth_args, "chance_only")
+    if not ok or type(cth) ~= "number" or cth < RATOAI_MinShotCTH(context, weapon) then
+        return
+    end
+    if RATOAI_Debug then
+        printf("[RATOAI] %s: leftover shot %s at %s, CTH %d, %d AP", tag, tostring(action.id),
+               tostring(target.session_id), cth, unit.ActionPoints)
+    end
+    AIPlayCombatAction(action.id, unit, nil, args)
+end
+
 function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     context.AIisPlayingAttacks = true
+    local ap_before = unit.ActionPoints
+    local dest = not force_or_skip_action and context.ai_destination or GetPackedPosAndStance(unit)
+    local planned = context.dest_target and context.dest_target[dest]
     local status = RATOAI_originalAIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
     if not status and not IsSetpiecePlaying() then
         local ok, res = pcall(RATOAI_BlindInsteadOfRevert, unit, context)
@@ -89,6 +151,12 @@ function AIPlayAttacks(unit, context, dbg_action, force_or_skip_action)
         elseif res then
             context.AIisPlayingAttacks = false
             return res
+        end
+        if not force_or_skip_action then
+            ok, res = pcall(RATOAI_LeftoverShot, unit, context, ap_before, planned)
+            if not ok then
+                print("[RATOAI] RATOAI_LeftoverShot failed --", res)
+            end
         end
         local ok, err = pcall(RATOAI_FireTailBurst, unit, context, force_or_skip_action)
         if not ok then

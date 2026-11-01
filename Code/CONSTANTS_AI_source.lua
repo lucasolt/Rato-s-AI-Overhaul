@@ -56,6 +56,7 @@ const.RATOAI.MinShotCTH = 10
 
 const.RATOAI.ShotVeto = true ---- skip a planned shot whose real CTH turns out hopeless
 const.RATOAI.ShotVetoMaxCTH = 0 ---- veto at or below this real CTH (0 = only impossible shots)
+const.RATOAI.LeftoverShot = true ---- an attack phase that spent no AP fires one hipfire shot if it fits
 const.RATOAI.ShotStanceFix = true ---- stand up before shooting when the muzzle ring is blocked in the current stance
 const.RATOAI.ShotStanceMinClear = 50 ---- % of the muzzle ring that must clear for a stance to count as open
 const.RATOAI.HipfireMaxDist = 4 ---- tiles; hipfire instead of preparing up to here (0 = always prepare)
